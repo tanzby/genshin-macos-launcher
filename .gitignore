@@ -1,0 +1,8 @@
+# XcodeGen output and build products
+/*.xcodeproj
+/.build
+/build
+/.swiftpm
+.DS_Store
+# per-change worktrees
+/.claude/worktrees

@@ -1,0 +1,6 @@
+# Local git hooks: `brew install lefthook && lefthook install`.
+# pre-push mirrors .github/workflows/ci.yaml.
+pre-push:
+  jobs:
+    - name: swift
+      run: scripts/dev/macos-check

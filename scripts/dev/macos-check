@@ -1,0 +1,9 @@
+#!/bin/sh
+# Checks shared by lefthook pre-push and CI: swift test, then generate the
+# Xcode project and build the app from the command line.
+set -eu
+cd "$(dirname "$0")/../.."
+swift test
+xcodegen generate
+xcodebuild -project Yaagl.xcodeproj -scheme Yaagl -configuration Debug \
+  -destination 'platform=macOS,arch=arm64' -derivedDataPath build/DerivedData build

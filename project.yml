@@ -1,0 +1,98 @@
+name: Yaagl
+options:
+  bundleIdPrefix: io.github.tanzby
+  deploymentTarget:
+    macOS: "26.0"
+  xcodeVersion: "26.0"
+  createIntermediateGroups: true
+  generateEmptyDirectories: true
+settings:
+  base:
+    SWIFT_VERSION: "6.0"
+    SWIFT_STRICT_CONCURRENCY: complete
+    MACOSX_DEPLOYMENT_TARGET: "26.0"
+    CODE_SIGN_STYLE: Manual
+    CODE_SIGN_IDENTITY: "-"
+    DEVELOPMENT_TEAM: ""
+packages:
+  YaaglKit:
+    path: .
+  Sparkle:
+    url: https://github.com/sparkle-project/Sparkle
+    from: 2.10.0
+targets:
+  Yaagl:
+    type: application
+    platform: macOS
+    sources:
+      - path: App
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: io.github.tanzby.yaagl
+        PRODUCT_NAME: Yaagl
+        ARCHS: arm64
+        ENABLE_HARDENED_RUNTIME: NO
+        GENERATE_INFOPLIST_FILE: YES
+        INFOPLIST_KEY_CFBundleDisplayName: Yaagl
+        INFOPLIST_KEY_LSApplicationCategoryType: public.app-category.games
+        INFOPLIST_KEY_LSMinimumSystemVersion: "26.0"
+        INFOPLIST_KEY_NSHumanReadableCopyright: ""
+        MARKETING_VERSION: 0.0.0
+        CURRENT_PROJECT_VERSION: 1
+    dependencies:
+      - package: YaaglKit
+        product: Launcher
+      - package: YaaglKit
+        product: GenshinCN
+      - package: Sparkle
+        product: Sparkle
+      - target: YaaglWineShim
+        embed: true
+        link: false
+        copy:
+          destination: wrapper
+          subpath: Contents/Helpers
+      - target: YaaglGameHost
+        embed: true
+        link: false
+        copy:
+          destination: wrapper
+          subpath: Contents/Helpers
+
+  # x86_64 helpers injected into Wine (Rosetta). Sources are the C files in Helpers/.
+  YaaglWineShim:
+    type: tool
+    platform: macOS
+    sources:
+      - path: Helpers/wine-shim.c
+    settings:
+      base:
+        PRODUCT_NAME: yaagl-wine-shim
+        ARCHS: x86_64
+        ONLY_ACTIVE_ARCH: NO
+        GCC_OPTIMIZATION_LEVEL: "2"
+        OTHER_CFLAGS: -Wall -Wextra
+        SKIP_INSTALL: YES
+
+  YaaglGameHost:
+    type: library.dynamic
+    platform: macOS
+    sources:
+      - path: Helpers/gamehost.c
+    settings:
+      base:
+        PRODUCT_NAME: yaagl-gamehost
+        EXECUTABLE_PREFIX: ""
+        ARCHS: x86_64
+        ONLY_ACTIVE_ARCH: NO
+        GCC_OPTIMIZATION_LEVEL: "2"
+        OTHER_CFLAGS: -Wall -Wextra
+        SKIP_INSTALL: YES
+
+schemes:
+  Yaagl:
+    build:
+      targets:
+        Yaagl: all
+    run:
+      config: Debug
