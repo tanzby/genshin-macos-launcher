@@ -72,6 +72,15 @@ jobs:
       - name: Install XcodeGen
         run: brew install xcodegen
 
+      - name: Parity coverage (strict for final versions)
+        run: |
+          # Release candidates (x.y.z-rc.N) only report; a final version needs
+          # every 照搬/改写 rule covered (docs/parity/hk4e-cn.md, gate 2).
+          case "$VERSION" in
+            *-*) scripts/dev/parity-coverage ;;
+            *) scripts/dev/parity-coverage --strict ;;
+          esac
+
       - name: Swift test
         run: swift test
 

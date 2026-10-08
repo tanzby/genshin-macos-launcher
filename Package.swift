@@ -5,7 +5,7 @@ import PackageDescription
 //   GenshinCN -> Launcher, Sophon, Wine, Platform
 //   Launcher  -> Platform, Wine
 //   Wine      -> Platform
-//   Sophon    -> swift-protobuf only
+//   Sophon    -> swift-protobuf, CZstd (vendored facebook/zstd, decompression only)
 // The SwiftUI app (project.yml) sits on top of Launcher and GenshinCN.
 let package = Package(
   name: "YaaglKit",
@@ -21,9 +21,16 @@ let package = Package(
     .package(url: "https://github.com/apple/swift-protobuf.git", from: "1.38.1")
   ],
   targets: [
+    // facebook/zstd v1.5.7, decompressor only. Assembly is disabled so the target builds without .S files.
+    .target(
+      name: "CZstd",
+      exclude: ["LICENSE"],
+      cSettings: [.define("ZSTD_DISABLE_ASM", to: "1"), .headerSearchPath("common")]
+    ),
     .target(
       name: "Sophon",
-      dependencies: [.product(name: "SwiftProtobuf", package: "swift-protobuf")]
+      dependencies: ["CZstd", .product(name: "SwiftProtobuf", package: "swift-protobuf")],
+      exclude: ["Proto/manifest.proto", "Proto/manifest_ldiff.proto"]
     ),
     .target(name: "Platform"),
     .target(name: "Wine", dependencies: ["Platform"]),
@@ -32,7 +39,8 @@ let package = Package(
 
     .testTarget(
       name: "SophonTests",
-      dependencies: ["Sophon", .product(name: "SwiftProtobuf", package: "swift-protobuf")]
+      dependencies: ["Sophon", .product(name: "SwiftProtobuf", package: "swift-protobuf")],
+      resources: [.copy("Fixtures")]
     ),
     .testTarget(name: "PlatformTests", dependencies: ["Platform"]),
     .testTarget(name: "WineTests", dependencies: ["Wine"]),
