@@ -51,11 +51,14 @@ grep -E '\|(照搬|改写)$' "$tmp/rows" | cut -d'|' -f1 | sort -u > "$tmp/requi
 # and another ID (APP_011_INS_002_status), so extract with awk, not grep -o.
 {
   find Tests -name '*.swift' 2>/dev/null | while read -r f; do
-    # Only real test declarations: a `@Test` line, the `func` line that follows a
-    # bare `@Test` attribute. Helpers don't count.
-    awk '/@Test/ { print; att = ($0 !~ /func /); next }
-         att && /func / { print; att = 0; next }
-         !/^[ \t]*$/ && !/^[ \t]*@/ { att = 0 }' "$f"
+    # Only real test declarations: a `@Test` line (carries its display name) or the
+    # `func` line it decorates; `.disabled` tests and plain helpers don't count.
+    # Attributes may span several lines.
+    awk '/@Test/ { att = 1; dis = 0 }
+         att && /\.disabled/ { dis = 1 }
+         att && /@Test/ && !/func / { print; next }
+         att && /func / { if (!dis && !/\.disabled/) print; att = 0; next }
+         att && /^[ \t]*(struct|class|extension|@Suite)/ { att = 0 }' "$f"
   done
   for d in Diag scripts/diag; do
     [ -d "$d" ] && find "$d" -type f ! -name '*.md' -exec cat {} + || true
