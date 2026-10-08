@@ -12,7 +12,7 @@ A native macOS launcher for Genshin Impact (CN server), written in Swift 6 and S
 
 - Keep the main checkout on a clean `main`. Make each change in its own worktree under `.claude/worktrees/<name>` (gitignored), branched from `origin/main`.
 - `main` is protected: changes land by PR with the `swift` check passing, squash-merged.
-- Review before merge. Run `/code-review` on the PR diff. Fix or reply with a reason to every inline comment from `chatgpt-codex-connector[bot]`, push, then comment `@codex review` and repeat until it raises nothing new. Workflow, YAML, `project.yml` and doc changes get the same review. A green `swift` check alone does not allow a merge.
+- Review before merge. Run `/code-review` on the PR diff. Fix or reply with a reason to every inline comment from `chatgpt-codex-connector[bot]`, push, then comment `@codex review` and repeat until it raises nothing new. Workflow, YAML, `project.yml` and doc changes get the same review. Merge only after review and a green `swift` check.
 - After a merge, clean up without being asked: remove the worktree and branch, fast-forward `main`, and delete temp files. A squash-merged branch is safe to delete when `git merge-tree --write-tree origin/main <branch>` equals `git rev-parse 'origin/main^{tree}'`.
 - Never use bare `git stash`; the stash stack is shared by all worktrees. Use a WIP commit instead.
 - Only one worktree may run the game at a time. All worktrees share the installed app, `~/Library/Application Support/Yaagl` and the game files.
