@@ -37,6 +37,12 @@ extension WineRuntime {
 
   func performInstall(progress: @escaping @Sendable (WineInstallProgress) -> Void) async throws {
     let fileManager = FileManager.default
+    // Scratch directories of installs that were killed mid-way.
+    if let stale = try? fileManager.contentsOfDirectory(atPath: layout.root.path) {
+      for name in stale where name.hasPrefix(".install-") {
+        try? fileManager.removeItem(at: layout.root.appending(path: name))
+      }
+    }
     let scratch = layout.root.appending(path: ".install-\(UUID().uuidString)", directoryHint: .isDirectory)
     try fileManager.createDirectory(at: scratch, withIntermediateDirectories: true)
     defer { try? fileManager.removeItem(at: scratch) }
@@ -58,6 +64,12 @@ extension WineRuntime {
     // 3. Replace the runtime and prefix (WIN-006). The stamp is gone with `wine/`, so an interruption
     //    from here on reads as `.interrupted`.
     progress(.extracting)
+    // An orphaned wineserver on the old prefix must not outlive the prefix it serves.
+    if fileManager.fileExists(atPath: layout.wineserver.path) {
+      _ = try? await runner.run(
+        layout.wineserver, arguments: ["-k"], environment: ["WINEPREFIX": layout.prefixDirectory.path],
+        workingDirectory: layout.root)
+    }
     try removeIfPresent(layout.runtimeDirectory)
     try removeIfPresent(layout.prefixDirectory)
     try fileManager.createDirectory(at: layout.runtimeDirectory, withIntermediateDirectories: true)

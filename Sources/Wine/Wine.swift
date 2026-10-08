@@ -69,7 +69,12 @@ public actor WineRuntime {
     let task = Task { try await performInstall(progress: progress) }
     installation = task
     defer { installation = nil }
-    try await task.value
+    // The install is its own Task so concurrent callers can share it; forward cancellation to it.
+    try await withTaskCancellationHandler {
+      try await task.value
+    } onCancel: {
+      task.cancel()
+    }
   }
 }
 
