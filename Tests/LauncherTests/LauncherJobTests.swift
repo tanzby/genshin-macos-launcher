@@ -613,6 +613,15 @@ private final class Queried: Sendable {
     #expect(h.fake.events.isEmpty)
   }
 
+  @Test func PRG_006_pauseDoesNotBlockOnARunningGame() async throws {
+    let h = await Harness(status: Status.installed)
+    try await h.beginLaunch()
+    await h.model.pause()  // must return at once; the game keeps running
+    #expect(h.model.phase == .launching)
+    h.fake.finishLaunch(.exited)
+    await h.model.waitUntilIdle()
+  }
+
   @Test func PRG_006_pauseCancelsPreDownload() async throws {
     let h = await Harness(status: Status.preDownloadable)
     let run = try await h.begin(.preDownload)

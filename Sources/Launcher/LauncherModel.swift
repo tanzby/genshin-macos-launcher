@@ -253,7 +253,9 @@ public final class LauncherModel {
 
   /// Cancels the running download job and waits until it has really stopped. `job.json` stays.
   public func pause() async {
-    guard let task = exclusiveTask ?? preDownloadTask else { return }
+    // Only download jobs are pausable; cancelling a launch Task alone would leave `await` hanging until the game exits.
+    let pausable: Set<LauncherPhase> = [.installing, .updating, .repairing]
+    guard let task = pausable.contains(exclusive) ? exclusiveTask : preDownloadTask else { return }
     isPausing = true
     task.cancel()
     await task.value
