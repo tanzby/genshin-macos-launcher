@@ -111,8 +111,12 @@ public struct SophonManifestRef: Sendable, Equatable, Decodable {
   public let manifestURLSuffix: String
   /// Where chunks are downloaded from (`getBuild` only).
   public let chunkURLPrefix: String?
+  /// Appended after the chunk id (empty today).
+  public let chunkURLSuffix: String
   /// Where ldiff files are downloaded from (`getPatchBuild` only).
   public let diffURLPrefix: String?
+  /// Appended after the ldiff id (empty today).
+  public let diffURLSuffix: String
   /// Totals for a full install (`getBuild`); `nil` for patch builds.
   public let stats: SophonStats?
   /// Totals per old version (`getPatchBuild`); empty for plain builds.
@@ -120,7 +124,8 @@ public struct SophonManifestRef: Sendable, Equatable, Decodable {
 
   public init(
     categoryID: String, matchingField: String, manifestID: String, manifestURLPrefix: String,
-    manifestURLSuffix: String = "", chunkURLPrefix: String? = nil, diffURLPrefix: String? = nil,
+    manifestURLSuffix: String = "", chunkURLPrefix: String? = nil, chunkURLSuffix: String = "",
+    diffURLPrefix: String? = nil, diffURLSuffix: String = "",
     stats: SophonStats? = nil, patchStats: [String: SophonStats] = [:]
   ) {
     self.categoryID = categoryID
@@ -129,7 +134,9 @@ public struct SophonManifestRef: Sendable, Equatable, Decodable {
     self.manifestURLPrefix = manifestURLPrefix
     self.manifestURLSuffix = manifestURLSuffix
     self.chunkURLPrefix = chunkURLPrefix
+    self.chunkURLSuffix = chunkURLSuffix
     self.diffURLPrefix = diffURLPrefix
+    self.diffURLSuffix = diffURLSuffix
     self.stats = stats
     self.patchStats = patchStats
   }
@@ -161,21 +168,30 @@ public struct SophonManifestRef: Sendable, Equatable, Decodable {
     let manifestDownload = try c.decode(Download.self, forKey: .manifestDownload)
     manifestURLPrefix = manifestDownload.urlPrefix
     manifestURLSuffix = manifestDownload.urlSuffix ?? ""
-    chunkURLPrefix = try c.decodeIfPresent(Download.self, forKey: .chunkDownload)?.urlPrefix
-    diffURLPrefix = try c.decodeIfPresent(Download.self, forKey: .diffDownload)?.urlPrefix
+    let chunk = try c.decodeIfPresent(Download.self, forKey: .chunkDownload)
+    chunkURLPrefix = chunk?.urlPrefix
+    chunkURLSuffix = chunk?.urlSuffix ?? ""
+    let diff = try c.decodeIfPresent(Download.self, forKey: .diffDownload)
+    diffURLPrefix = diff?.urlPrefix
+    diffURLSuffix = diff?.urlSuffix ?? ""
     // `stats` is flat in getBuild and keyed by old version in getPatchBuild.
-    if let flat = try? c.decode(SophonStats.self, forKey: .stats) {
+    if !c.contains(.stats) {
+      stats = nil
+      patchStats = [:]
+    } else if let flat = try? c.decode(SophonStats.self, forKey: .stats) {
       stats = flat
       patchStats = [:]
     } else {
       stats = nil
-      patchStats = (try? c.decode([String: SophonStats].self, forKey: .stats)) ?? [:]
+      patchStats = try c.decode([String: SophonStats].self, forKey: .stats)
     }
   }
 
   /// Picks the category for `field`: exact match first, then a single substring match.
   static func select(_ refs: [SophonManifestRef], matching field: String) throws -> SophonManifestRef {
     if let exact = refs.first(where: { $0.matchingField == field }) { return exact }
+    // The "main" category is never fuzzy-matched, and neither is an empty name.
+    guard field != "main", !field.isEmpty else { throw SophonError.noMatchingCategory(field) }
     let fuzzy = refs.filter { $0.matchingField.contains(field) }
     switch fuzzy.count {
     case 0: throw SophonError.noMatchingCategory(field)

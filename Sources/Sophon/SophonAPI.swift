@@ -69,7 +69,9 @@ public struct SophonAPI: Sendable {
   private func downloadManifest(_ ref: SophonManifestRef) async throws -> Data {
     var prefix = ref.manifestURLPrefix
     while prefix.hasSuffix("/") { prefix.removeLast() }
-    guard let url = URL(string: "\(prefix)/\(ref.manifestID)\(ref.manifestURLSuffix)") else {
+    guard let url = URL(string: "\(prefix)/\(ref.manifestID)\(ref.manifestURLSuffix)"),
+      url.scheme == "https"
+    else {
       throw SophonError.malformedResponse
     }
     return try await send(URLRequest(url: url))
@@ -122,9 +124,10 @@ public struct LiveSophonClient: SophonClient {
     let branches = try await api.gameBranches()
     guard let main = branches.main else { throw SophonError.malformedResponse }
     let game = try await api.build(for: main).manifest(matching: "game")
+    guard let stats = game.stats else { throw SophonError.malformedResponse }
     return SophonOnlineInfo(
       latestVersion: main.tag,
-      installSize: game.stats?.compressedSize ?? 0,
+      installSize: stats.compressedSize,
       patchableVersions: main.diffTags,
       preDownload: branches.preDownload?.tag
     )

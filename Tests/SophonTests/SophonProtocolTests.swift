@@ -252,3 +252,38 @@ private func decodedBuild(fields: [String]) throws -> SophonBuild {
   let json = #"{"retcode":0,"message":"OK","data":{"build_id":"b","tag":"1.0.0","manifests":[\#(manifests)]}}"#
   return try SophonBuild.decode(Data(json.utf8))
 }
+
+@Suite struct SophonHardeningTests {
+  @Test func APP_009_manifestPrefixMustBeHTTPS() async throws {
+    let (session, _) = StubURLProtocol.session { _ in (200, Data()) }
+    let ref = SophonManifestRef.stub(id: "m", manifestPrefix: "file:///etc")
+    await #expect(throws: SophonError.malformedResponse) {
+      _ = try await SophonAPI(session: session).manifest(for: ref)
+    }
+  }
+
+  @Test func APP_009_chunkAndDiffSuffixesAreKept() throws {
+    let json = """
+      {"retcode":0,"message":"OK","data":{"build_id":"b","tag":"1.0.0","manifests":[
+       {"category_id":"1","matching_field":"game","manifest":{"id":"m"},
+        "manifest_download":{"url_prefix":"https://x.invalid/m","url_suffix":""},
+        "chunk_download":{"url_prefix":"https://x.invalid/c","url_suffix":".z"}}]}}
+      """
+    let ref = try SophonBuild.decode(Data(json.utf8)).manifest(matching: "game")
+    #expect(ref.chunkURLSuffix == ".z")
+  }
+
+  @Test func APP_009_malformedStatsAreAnErrorNotSilentlyDropped() {
+    let json = """
+      {"retcode":0,"message":"OK","data":{"build_id":"b","tag":"1.0.0","manifests":[
+       {"category_id":"1","matching_field":"game","manifest":{"id":"m"},
+        "manifest_download":{"url_prefix":"https://x.invalid/m"},"stats":{"compressed_size":"abc"}}]}}
+      """
+    #expect(throws: SophonError.malformedResponse) { _ = try SophonBuild.decode(Data(json.utf8)) }
+  }
+
+  @Test func APP_009_mainAndEmptyNamesAreNeverFuzzyMatched() throws {
+    let build = try decodedBuild(fields: ["game"])
+    #expect(throws: SophonError.noMatchingCategory("")) { try build.manifest(matching: "") }
+  }
+}
