@@ -105,8 +105,19 @@ final class FakeGameClient: GameClient, Sendable {
     }
   }
 
+  /// When set, `requiredDiskSpace` signals `diskQueries` and suspends until cancelled.
+  let stallsDiskQuery = Mutex(false)
+  let diskQueries = AsyncQueue<Void>()
+
   func requiredDiskSpace(for job: GameJob) async throws -> Int64 {
-    state.withLock { $0.required[job] ?? 0 }
+    if stallsDiskQuery.withLock({ $0 }) {
+      diskQueries.push(())
+      while true {
+        try Task.checkCancellation()
+        try await Task.sleep(for: .seconds(60))
+      }
+    }
+    return state.withLock { $0.required[job] ?? 0 }
   }
 
   func run(_ job: GameJob) -> AsyncThrowingStream<JobProgress, Error> {

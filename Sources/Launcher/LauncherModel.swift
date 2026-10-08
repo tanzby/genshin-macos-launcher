@@ -80,6 +80,8 @@ public final class LauncherModel {
 
   private var exclusiveTask: Task<Void, Never>?
   private var preDownloadTask: Task<Void, Never>?
+  private var exclusivePreflight: Task<Void, Error>?
+  private var preDownloadPreflight: Task<Void, Error>?
   private var launchGate: LaunchGate?
   private var launchWork: Task<LaunchOutcome, Error>?
 
@@ -148,13 +150,21 @@ public final class LauncherModel {
     guard let store else { throw LauncherError.noGameDirectory }
     exclusive = job.exclusivePhase  // claim before any await so nothing else can slip in
     lastError = nil
-    do {
-      await stopPreDownload()
-      try await checkDiskSpace(for: job, in: store.gameDirectory)
-    } catch {
-      exclusive = .idle
-      throw error
+    // The preflight is a Task the model owns, so pause() and shutdown() can cancel it and wait for it.
+    let preflight = Task<Void, Error> {
+      defer { exclusivePreflight = nil }
+      do {
+        await stopPreDownload()
+        try Task.checkCancellation()
+        try await checkDiskSpace(for: job, in: store.gameDirectory)
+        try Task.checkCancellation()
+      } catch {
+        exclusive = .idle
+        throw error
+      }
     }
+    exclusivePreflight = preflight
+    do { try await preflight.value } catch is CancellationError { return }  // paused before the job began
     let stream = begin(job, store: store)
     exclusiveTask = Task { await self.drive(job, stream: stream, store: store) }
   }
@@ -168,17 +178,22 @@ public final class LauncherModel {
     guard let store else { throw LauncherError.noGameDirectory }
     isPreDownloading = true
     lastError = nil
-    do {
-      try await checkDiskSpace(for: .preDownload, in: store.gameDirectory)
-    } catch {
-      isPreDownloading = false
-      throw error
+    let preflight = Task<Void, Error> {
+      defer { preDownloadPreflight = nil }
+      do {
+        try await checkDiskSpace(for: .preDownload, in: store.gameDirectory)
+        try Task.checkCancellation()
+        // Starting install/update/repair during the check would have claimed the slot first.
+        guard exclusive == .idle || exclusive == .launching || exclusive == .running else {
+          throw LauncherError.busy
+        }
+      } catch {
+        isPreDownloading = false
+        throw error
+      }
     }
-    // Starting install/update/repair during the check above would have stopped us; it claims the slot first.
-    guard exclusive == .idle || exclusive == .launching || exclusive == .running else {
-      isPreDownloading = false
-      throw LauncherError.busy
-    }
+    preDownloadPreflight = preflight
+    do { try await preflight.value } catch is CancellationError { return }
     let stream = begin(.preDownload, store: store)
     preDownloadTask = Task { await self.drive(.preDownload, stream: stream, store: store) }
   }
@@ -231,6 +246,18 @@ public final class LauncherModel {
     }
   }
 
+  /// Cancels the preflight and job Tasks of the chosen slots and returns once all of them have stopped.
+  private func cancelAndWait(exclusive: Bool, preDownload: Bool) async {
+    var preflights: [Task<Void, Error>] = []
+    var jobs: [Task<Void, Never>] = []
+    if exclusive { preflights += [exclusivePreflight].compactMap { $0 }; jobs += [exclusiveTask].compactMap { $0 } }
+    if preDownload { preflights += [preDownloadPreflight].compactMap { $0 }; jobs += [preDownloadTask].compactMap { $0 } }
+    for task in preflights { task.cancel() }
+    for task in jobs { task.cancel() }
+    for task in preflights { _ = await task.result }
+    for task in jobs { await task.value }
+  }
+
   private func stopPreDownload() async {
     guard let task = preDownloadTask else { return }
     task.cancel()
@@ -242,6 +269,7 @@ public final class LauncherModel {
     do {
       bytes = try await client.requiredDiskSpace(for: job)
     } catch {
+      if Task.isCancelled || error is CancellationError { throw CancellationError() }
       throw LauncherError(error)
     }
     guard bytes > 0 else { return }
@@ -255,10 +283,12 @@ public final class LauncherModel {
   public func pause() async {
     // Only download jobs are pausable; cancelling a launch Task alone would leave `await` hanging until the game exits.
     let pausable: Set<LauncherPhase> = [.installing, .updating, .repairing]
-    guard let task = pausable.contains(exclusive) ? exclusiveTask : preDownloadTask else { return }
+    let exclusivePause = pausable.contains(exclusive)
+    guard exclusivePause ? (exclusivePreflight != nil || exclusiveTask != nil)
+      : (preDownloadPreflight != nil || preDownloadTask != nil)
+    else { return }
     isPausing = true
-    task.cancel()
-    await task.value
+    await cancelAndWait(exclusive: exclusivePause, preDownload: !exclusivePause)
     isPausing = false
   }
 
@@ -269,10 +299,8 @@ public final class LauncherModel {
 
   /// App quit: cancel everything, wait for it to stop, keep `job.json`.
   public func shutdown() async {
-    let tasks = [exclusiveTask, preDownloadTask].compactMap { $0 }
-    for task in tasks { task.cancel() }
     launchWork?.cancel()
-    for task in tasks { await task.value }
+    await cancelAndWait(exclusive: true, preDownload: true)
   }
 
   // MARK: Launch
@@ -339,6 +367,9 @@ public final class LauncherModel {
 
   /// Test hook: returns once no job or launch Task is outstanding.
   func waitUntilIdle() async {
+    while let task = exclusivePreflight ?? preDownloadPreflight {
+      _ = await task.result
+    }
     while let task = exclusiveTask ?? preDownloadTask {
       await task.value
     }

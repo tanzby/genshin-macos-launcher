@@ -622,6 +622,31 @@ private final class Queried: Sendable {
     await h.model.waitUntilIdle()
   }
 
+  @Test func PRG_006_pauseDuringDiskPreflightStopsTheStartBeforeAnyRun() async throws {
+    let h = await Harness(status: Status.installed)
+    h.fake.stallsDiskQuery.withLock { $0 = true }
+    let starting = Task { try await h.model.start(.repair) }
+    try await h.fake.diskQueries.pop("the disk query")
+    #expect(h.model.phase == .repairing)
+    await h.model.pause()
+    try await starting.value
+    #expect(h.model.phase == .idle)
+    #expect(h.model.isPausing == false)
+    #expect(h.fake.runs.isEmpty)
+    #expect(!h.jobFileExists)
+  }
+
+  @Test func PRG_006_shutdownDuringDiskPreflightStopsTheStartBeforeAnyRun() async throws {
+    let h = await Harness(status: Status.installed)
+    h.fake.stallsDiskQuery.withLock { $0 = true }
+    let starting = Task { try await h.model.start(.repair) }
+    try await h.fake.diskQueries.pop("the disk query")
+    await h.model.shutdown()
+    try await starting.value
+    #expect(h.model.phase == .idle)
+    #expect(h.fake.runs.isEmpty)
+  }
+
   @Test func PRG_006_pauseCancelsPreDownload() async throws {
     let h = await Harness(status: Status.preDownloadable)
     let run = try await h.begin(.preDownload)
