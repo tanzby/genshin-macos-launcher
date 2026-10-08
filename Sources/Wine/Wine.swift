@@ -20,14 +20,43 @@ public actor WineRuntime {
   /// The one Wine version the app installs (ADR 0001).
   public static let pinnedVersion = "11.0-1-crossover-signed-experimental"
 
-  private let dataDirectory: DataDirectory
+  public nonisolated let layout: WineLayout
+  let distribution: WineDistribution
+  let dxmt: DXMTRelease
+  let downloader: any Downloading
+  let runner: any ProcessRunning
 
-  public init(dataDirectory: DataDirectory) {
-    self.dataDirectory = dataDirectory
+  public init(
+    dataDirectory: DataDirectory,
+    distribution: WineDistribution = .pinned,
+    dxmt: DXMTRelease = .pinned,
+    downloader: any Downloading = Downloader(),
+    runner: (any ProcessRunning)? = nil
+  ) {
+    let layout = WineLayout(root: dataDirectory.root)
+    self.layout = layout
+    self.distribution = distribution
+    self.dxmt = dxmt
+    self.downloader = downloader
+    self.runner = runner ?? SystemProcessRunner(allowedRoots: [layout.runtimeDirectory])
   }
 
-  public nonisolated var runtimeDirectory: URL {
-    dataDirectory.root.appending(path: "wine", directoryHint: .isDirectory)
+  public nonisolated var runtimeDirectory: URL { layout.runtimeDirectory }
+  public nonisolated var prefixDirectory: URL { layout.prefixDirectory }
+
+  /// Whether the pinned Wine and DXMT are installed and intact. Looks at the disk, not just the stamp.
+  public func status() -> WineStatus {
+    .needsInstall(.notInstalled)
+  }
+
+  /// Installs Wine + DXMT + prefix when `status()` is not `.ready`. Concurrent callers share one install.
+  public func ensureInstalled(progress: @escaping @Sendable (WineInstallProgress) -> Void = { _ in }) async throws {
+    throw CocoaError(.featureUnsupported)
+  }
+
+  /// Installs unconditionally, replacing `wine/` and `wineprefix/`.
+  public func reinstall(progress: @escaping @Sendable (WineInstallProgress) -> Void = { _ in }) async throws {
+    throw CocoaError(.featureUnsupported)
   }
 }
 

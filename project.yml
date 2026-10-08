@@ -26,6 +26,10 @@ targets:
     platform: macOS
     sources:
       - path: App
+      # Windows PE files copied into the Wine prefix for the Steam patch (see THIRD_PARTY_NOTICES.md).
+      - path: Resources/protonextras
+        type: folder
+        buildPhase: resources
     info:
       path: build/Info.plist
       properties:

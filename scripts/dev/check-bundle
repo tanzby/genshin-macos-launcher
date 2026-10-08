@@ -1,0 +1,17 @@
+#!/bin/sh
+# Asserts what a built Yaagl.app must contain: x86_64 helpers in Contents/Helpers/ and the
+# protonextras Windows files in Contents/Resources/protonextras/. Usage: check-bundle [Yaagl.app]
+set -eu
+cd "$(dirname "$0")/../.."
+app="${1:-build/DerivedData/Build/Products/Debug/Yaagl.app}"
+fail=0
+for helper in yaagl-wine-shim yaagl-gamehost.dylib; do
+  path="$app/Contents/Helpers/$helper"
+  if [ ! -f "$path" ]; then echo "missing: $path"; fail=1; continue; fi
+  if [ "$(lipo -archs "$path")" != "x86_64" ]; then echo "not x86_64-only: $path"; fail=1; fi
+  codesign --verify --strict "$path" || { echo "bad signature: $path"; fail=1; }
+done
+for extra in steam32.exe steam64.exe lsteamclient32.dll lsteamclient64.dll; do
+  [ -f "$app/Contents/Resources/protonextras/$extra" ] || { echo "missing: protonextras/$extra"; fail=1; }
+done
+exit $fail
