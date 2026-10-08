@@ -12,8 +12,8 @@
 
 | 处置 | 含义 | 条数 |
 |---|---|---|
-| 照搬 | 行为不变，按旧行为验收 | 57 |
-| 改写 | 被后来的决定改变，按新行为验收 | 86 |
+| 照搬 | 行为不变，按旧行为验收 | 55 |
+| 改写 | 被后来的决定改变，按新行为验收 | 88 |
 | 作废 | 旧机制已不存在，不验收 | 37 |
 
 有意照搬的特殊项：LCH-011 的实测回退分支、UPG-014 语音包不管、WIN-009 根证书。有意放弃：UPG-002 音频目录迁移。[#28](https://github.com/tanzby/yet-another-anime-game-launcher/issues/28) 的 C 组（APP-004、APP-022、INS-008/009/010、PRG-001、WIN-016/019 等）是负面用例：旧版的缺陷在新版里必须不再出现。与 ADR 0002 冲突时以 #28 为准：ReShade 整个删除，DXMT 在安装 Wine 时一次装好。
@@ -125,7 +125,7 @@
 | LCH-007 | 用注册表实现自定义分辨率（强制窗口化） | 改写 | [#28](https://github.com/tanzby/yet-another-anime-game-launcher/issues/28) B13 | diag |  |
 | LCH-008 | 分辨率输入校验 | 改写 | [#28](https://github.com/tanzby/yet-another-anime-game-launcher/issues/28) B16 | 单元 |  |
 | LCH-009 | 写完注册表后等待 wineserver 退出 | 照搬 | TS 行为不变；LaunchRecipe/GameSession 重做 | diag |  |
-| LCH-010 | config.bat（默认启动路径） | 照搬 | TS 行为不变；LaunchRecipe/GameSession 重做 | 单元 |  |
+| LCH-010 | config.bat（默认启动路径） | 改写 | [#28](https://github.com/tanzby/yet-another-anime-game-launcher/issues/28) B14/A9：Steam patch 固定开启，旧的非 Steam 默认路径不再是启动路径；config.bat 仅作 Steam 路径的载体 | 单元 |  |
 | LCH-011 | Steam patch 启动路径 | 改写 | [#28](https://github.com/tanzby/yet-another-anime-game-launcher/issues/28) B14（含实测回退分支） | diag |  |
 | LCH-012 | 补丁幂等 | 改写 | [#28](https://github.com/tanzby/yet-another-anime-game-launcher/issues/28) B12：启动前准备幂等，.bak 存在则不覆盖 | 单元 |  |
 | LCH-013 | patch-off 只跳过对游戏文件的修改 | 作废 | [#28](https://github.com/tanzby/yet-another-anime-game-launcher/issues/28) A9 删除的开关 | — |  |
@@ -214,7 +214,7 @@
 | WIN-011 | 在 /etc/hosts 中维护永久屏蔽段 | 改写 | [#29](https://github.com/tanzby/yet-another-anime-game-launcher/issues/29)/ADR 0001 | diag |  |
 | WIN-012 | 初始化 prefix | 照搬 | Wine 运行时行为不变 | diag |  |
 | WIN-013 | hk4ecn 不安装 Media Foundation | 作废 | 死/开发便利/无版本选择 UI/空列表 | — |  |
-| WIN-014 | 安装完成后写入状态 | 照搬 | Wine 运行时行为不变 | 单元 |  |
+| WIN-014 | 安装完成后写入状态 | 改写 | [#28](https://github.com/tanzby/yet-another-anime-game-launcher/issues/28) B20：删除 wine_netbiosname、wine_update_url 等死数据；状态由 Wine 目录版本戳推导（ADR 0002） | 单元 |  |
 | WIN-015 | NetBIOS 名称 | 改写 | [#28](https://github.com/tanzby/yet-another-anime-game-launcher/issues/28) B20 删死数据 / ADR 0002 启动顺序 | 单元 |  |
 | WIN-016 | 选择 Wine 可执行文件与基础环境 | 改写 | [#28](https://github.com/tanzby/yet-another-anime-game-launcher/issues/28) C 负面用例 | diag |  |
 | WIN-017 | 路径转换与 copy 特例 | 照搬 | Wine 运行时行为不变 | 单元 |  |
