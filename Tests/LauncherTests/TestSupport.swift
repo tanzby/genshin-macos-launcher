@@ -85,7 +85,6 @@ final class AsyncQueue<T: Sendable>: Sendable {
 final class ManualSleeper: Sendable {
   private struct State {
     var durations: [Duration] = []
-    var fired = false
     var cancelledCount = 0
     var waiters: [(id: Int, continuation: CheckedContinuation<Void, Error>)] = []
     var nextID = 0
@@ -105,17 +104,10 @@ final class ManualSleeper: Sendable {
     }
     try await withTaskCancellationHandler {
       try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
-        let fired = state.withLock { s -> Bool in
-          if s.fired { return true }
-          s.waiters.append((id, continuation))
-          return false
-        }
-        if fired {
-          continuation.resume()
-        } else {
-          sleeping.push(duration)
-          if Task.isCancelled { cancelWaiter(id) }
-        }
+        // `fire()` only wakes sleeps already waiting, so a retry's new sleep waits for its own fire.
+        state.withLock { $0.waiters.append((id, continuation)) }
+        sleeping.push(duration)
+        if Task.isCancelled { cancelWaiter(id) }
       }
     } onCancel: {
       cancelWaiter(id)
@@ -124,7 +116,6 @@ final class ManualSleeper: Sendable {
 
   func fire() {
     let waiters = state.withLock { s -> [CheckedContinuation<Void, Error>] in
-      s.fired = true
       let all = s.waiters.map(\.continuation)
       s.waiters = []
       return all
