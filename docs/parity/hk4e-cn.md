@@ -27,7 +27,7 @@
 | diag | 真机 `yaagl-diag`：看 Wine 进程、窗口、`gamehost.log`、prefix（游戏运行时行为，只能在这一层验证） |
 | 线上 | 只读的线上契约测试（getGameBranches / getBuild / getPatchBuild + 一个最小 chunk），独立 workflow，非 PR 必过项 |
 
-「对应测试」一列先留空，由各模块实现票填入。测试名带规则 ID（如 `APP_011_…`）；覆盖脚本（另票实现）核对每个「照搬/改写」ID 至少被一个测试或 diag 检查项引用。
+「对应测试」一列先留空，由各模块实现票填入。测试名带规则 ID（如 `APP_011_…`）；覆盖脚本 `scripts/dev/parity-coverage` 核对每个「照搬/改写」ID 至少被一个测试或 diag 检查项引用（见下）。
 
 ## 1.0.0 发布门槛
 
@@ -40,6 +40,16 @@
 
 真实 CN ldiff 更新**不阻塞**发布（TS 版也做不到），靠夹具和线上契约覆盖。
 
+## 覆盖脚本
+
+`scripts/dev/parity-coverage` 解析本清单，取处置为「照搬/改写」的 ID，在 `Tests/**/*.swift` 里含 `func ` 或 `@Test` 的行（测试名，注释不算）以及 `Diag/`、`scripts/diag/`（diag 检查项，目录存在时）里找引用。`APP-011` 与 `APP_011` 等价。
+
+- **报告模式**（默认）：列出未覆盖的 ID，退出码 0。各模块票还在补测试时 CI 用这个模式，已接入 `scripts/dev/macos-check`（因此也是 CI 和 pre-push）。
+- **严格模式**（`--strict` 或 `PARITY_STRICT=1`）：有任何未覆盖 ID 就失败。**1.0.0 发布前必须在严格模式下通过**，这是发布门槛第 2 项；发布 workflow 对正式版本（不带 `-rc.N` 后缀）显式用 `--strict`，所以 `1.0.0` 打 tag 时覆盖不全会被卡住，`1.0.0-rc.N` 只报告、不阻塞（rc 要先用来验证 Sparkle 更新）；最后一张模块票合并后，再在 CI 的 `swift` job 设 `PARITY_STRICT=1`，让日常 PR 也严格。
+- 两种模式都会在结构性错误时失败：清单行重复或处置不是照搬/改写/作废，或测试引用了清单里不存在的 ID。引用「作废」规则只警告。
+- 脚本是命名核对，不证明测试被执行：块注释、套件级 `@Suite(.disabled)` 之类的边角不处理，由发布门槛第 1 项「测试全绿」和 code review 兜底。
+- 脚本不看「对应测试」列，它只保证覆盖；该列是给人读的索引，由各票填写。
+
 ## 清单（基线 `f38cda4`）
 
 | 规则 ID | 标题 | 处置 | 依据 | 验收层 | 对应测试 |
@@ -51,8 +61,8 @@
 | APP-005 | aria2 下载服务启动 | 作废 | [#17](https://github.com/tanzby/yet-another-anime-game-launcher/issues/17)/[#13](https://github.com/tanzby/yet-another-anime-game-launcher/issues/13) 无 sidecar/Neutralino | — |  |
 | APP-006 | aria2 下载任务的去重与续传 | 作废 | [#17](https://github.com/tanzby/yet-another-anime-game-launcher/issues/17)/[#13](https://github.com/tanzby/yet-another-anime-game-launcher/issues/13) 无 sidecar/Neutralino | — |  |
 | APP-007 | Sophon 服务进程的启动与生命周期 | 作废 | [#17](https://github.com/tanzby/yet-another-anime-game-launcher/issues/17)/[#13](https://github.com/tanzby/yet-another-anime-game-launcher/issues/13) 无 sidecar/Neutralino | — |  |
-| APP-008 | 在线游戏信息 | 改写 | [#26](https://github.com/tanzby/yet-another-anime-game-launcher/issues/26) 端点/缓存 | 组件、线上 |  |
-| APP-009 | CN 的 HoYoPlay / Sophon 接口端点 | 改写 | [#26](https://github.com/tanzby/yet-another-anime-game-launcher/issues/26) 端点/缓存 | 组件、线上 |  |
+| APP-008 | 在线游戏信息 | 改写 | [#26](https://github.com/tanzby/yet-another-anime-game-launcher/issues/26) 端点/缓存 | 组件、线上 | `APP_008_*`（SophonProtocolTests、SophonManifestTests） |
+| APP-009 | CN 的 HoYoPlay / Sophon 接口端点 | 改写 | [#26](https://github.com/tanzby/yet-another-anime-game-launcher/issues/26) 端点/缓存 | 组件、线上 | `APP_009_*`（SophonProtocolTests、SophonManifestTests、SophonLiveContractTests） |
 | APP-010 | 在线信息查询失败 | 改写 | [#28](https://github.com/tanzby/yet-another-anime-game-launcher/issues/28) A1-A3 | 组件、线上 |  |
 | APP-011 | 本地安装状态判定 | 照搬 | TS 行为不变，但依 ADR 0002 在 Sophon/Launcher 重做 | 单元 |  |
 | APP-012 | 从 globalgamemanagers 读取游戏版本 | 照搬 | TS 行为不变，但依 ADR 0002 在 Sophon/Launcher 重做 | 单元 |  |
@@ -190,7 +200,7 @@
 | UPG-001 | 更新资格 | 照搬 | TS 行为不变，但依 ADR 0002 在 Sophon/Launcher 重做 | 单元 |  |
 | UPG-002 | 3.6.0 及以上版本的音频目录迁移 | 作废 | [#26](https://github.com/tanzby/yet-another-anime-game-launcher/issues/26) D3 放弃音频迁移 | — |  |
 | UPG-003 | 更新请求与 Sophon 的处理顺序 | 照搬 | TS 行为不变，但依 ADR 0002 在 Sophon/Launcher 重做 | 单元 |  |
-| UPG-004 | CN 的更新和预下载请求必然失败 | 改写 | [#26](https://github.com/tanzby/yet-another-anime-game-launcher/issues/26) | 单元、线上 |  |
+| UPG-004 | CN 的更新和预下载请求必然失败 | 改写 | [#26](https://github.com/tanzby/yet-another-anime-game-launcher/issues/26) | 单元、线上 | `UPG_004_*`（SophonProtocolTests）、`APP_009_live_*` |
 | UPG-005 | Sophon 判定发行类型与已安装版本 | 照搬 | TS 行为不变，但依 ADR 0002 在 Sophon/Launcher 重做 | 单元 |  |
 | UPG-006 | 没有可用更新时报错 | 照搬 | TS 行为不变，但依 ADR 0002 在 Sophon/Launcher 重做 | 单元 |  |
 | UPG-007 | 删除旧文件（files_delete） | 照搬 | TS 行为不变，但依 ADR 0002 在 Sophon/Launcher 重做 | 单元 |  |
