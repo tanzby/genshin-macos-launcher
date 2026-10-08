@@ -26,6 +26,12 @@ targets:
     platform: macOS
     sources:
       - path: App
+    info:
+      path: build/Info.plist
+      properties:
+        SUFeedURL: https://github.com/tanzby/genshin-macos-launcher/releases/latest/download/appcast.xml
+        # EdDSA public key printed by generate_keys. Empty until the maintainer generates the key pair.
+        SUPublicEDKey: ""
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: io.github.tanzby.yaagl
