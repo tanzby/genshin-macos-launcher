@@ -50,8 +50,8 @@ public struct HostsBlocklist: Sendable {
     let lines = Self.lines(of: try currentContents())
     let sections = Self.sections(in: lines)
     guard let first = sections.first else { return .missing }
-    let expected = Self.section(for: domains).split(separator: "\n").map(String.init)
-    let actual = lines[first.range].map { $0.trimmingCharacters(in: .whitespaces) }
+    let expected = Self.lines(of: Self.section(for: domains))
+    let actual = lines[first.range].map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
     return sections.count == 1 && first.terminated && actual == expected ? .current : .outdated
   }
 
@@ -84,7 +84,8 @@ public struct HostsBlocklist: Sendable {
   }
 
   static func lines(of text: String) -> [String] {
-    var lines = text.split(separator: "\n", omittingEmptySubsequences: false).map(String.init)
+    // components(separatedBy:) splits on the literal "\n"; Character splitting treats "\r\n" as one.
+    var lines = text.components(separatedBy: "\n")
     if lines.last == "" { lines.removeLast() }
     return lines
   }
@@ -95,14 +96,14 @@ public struct HostsBlocklist: Sendable {
     var found: [FoundSection] = []
     var index = 0
     while index < lines.count {
-      guard lines[index].trimmingCharacters(in: .whitespaces) == beginMarker else {
+      guard lines[index].trimmingCharacters(in: .whitespacesAndNewlines) == beginMarker else {
         index += 1
         continue
       }
       var end = index + 1
       var terminated = false
-      if let close = lines[end...].firstIndex(where: { $0.trimmingCharacters(in: .whitespaces) == endMarker }),
-        lines[end..<close].allSatisfy({ !isBeginMarker($0) })
+      if let close = lines[end...].firstIndex(where: { $0.trimmingCharacters(in: .whitespacesAndNewlines) == endMarker }),
+        lines[end..<close].allSatisfy(isOwnLine)
       {
         end = close + 1
         terminated = true
@@ -116,11 +117,18 @@ public struct HostsBlocklist: Sendable {
   }
 
   private static func isBeginMarker(_ line: String) -> Bool {
-    line.trimmingCharacters(in: .whitespaces) == beginMarker
+    line.trimmingCharacters(in: .whitespacesAndNewlines) == beginMarker
+  }
+
+  /// Inside a terminated section only comments and 0.0.0.0 routes can be ours; anything else means
+  /// the end marker belongs to somebody else's block.
+  private static func isOwnLine(_ line: String) -> Bool {
+    let line = line.trimmingCharacters(in: .whitespacesAndNewlines)
+    return (line.hasPrefix("#") && line != beginMarker) || line.hasPrefix("0.0.0.0 ")
   }
 
   private static func isManagedLine(_ line: String) -> Bool {
-    let line = line.trimmingCharacters(in: .whitespaces)
+    let line = line.trimmingCharacters(in: .whitespacesAndNewlines)
     return line == warning || line.hasPrefix("0.0.0.0 ")
   }
 

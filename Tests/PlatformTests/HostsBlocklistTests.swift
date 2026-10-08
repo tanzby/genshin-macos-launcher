@@ -181,3 +181,26 @@ import Testing
     #expect(AdminShell.shellQuote("a b") == "'a b'")
   }
 }
+
+@Suite struct HostsBlocklistReviewTests {
+  @Test func WIN_011_crlfHostsFileIsRecognised() throws {
+    let temp = try TempDir()
+    defer { temp.cleanup() }
+    let crlf = HostsBlocklist.section(for: ["a.example.com"]).replacingOccurrences(of: "\n", with: "\r\n")
+    let file = temp.path("hosts")
+    try ("127.0.0.1 localhost\r\n" + crlf).write(to: file, atomically: true, encoding: .utf8)
+    let blocklist = HostsBlocklist(domains: ["a.example.com"], hostsFile: file, admin: ShellAdmin())
+    #expect(try blocklist.status() == .current)
+  }
+
+  @Test func WIN_011_foreignEndMarkerDoesNotSwallowUserLines() async throws {
+    let temp = try TempDir()
+    defer { temp.cleanup() }
+    let file = temp.path("hosts")
+    let hosts = "# Added by Yaagl\n0.0.0.0 a.example.com\n10.0.0.1 mine\n# End of section\n"
+    try hosts.write(to: file, atomically: true, encoding: .utf8)
+    let blocklist = HostsBlocklist(domains: ["a.example.com"], hostsFile: file, admin: ShellAdmin(), scratchDirectory: temp.url)
+    try await blocklist.apply()
+    #expect(try String(contentsOf: file, encoding: .utf8).contains("10.0.0.1 mine"))
+  }
+}

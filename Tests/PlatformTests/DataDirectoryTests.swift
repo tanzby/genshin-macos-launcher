@@ -153,3 +153,17 @@ import Testing
     #expect(temp.exists("Elsewhere/keep.txt"))
   }
 }
+
+@Suite struct DataDirectoryMarkerLinkTests {
+  @Test func APP_002_danglingSymlinkMarkerIsNotTreatedAsMissing() throws {
+    let temp = try TempDir()
+    defer { temp.cleanup() }
+    try temp.makeFile("Yaagl/wine/stamp")
+    try FileManager.default.createSymbolicLink(
+      at: temp.path("Yaagl", ".yaagl-native"), withDestinationURL: temp.path("nowhere"))
+    #expect(throws: DataDirectory.PrepareError.self) {
+      try DataDirectory.prepare(root: temp.path("Yaagl"), externalResidue: [])
+    }
+    #expect(temp.exists("Yaagl/wine/stamp"))
+  }
+}

@@ -77,7 +77,7 @@ extension DataDirectory {
     let directory = DataDirectory(root: root)
     try fileManager.createDirectory(at: root, withIntermediateDirectories: true)
 
-    if fileManager.fileExists(atPath: directory.nativeMarker.path) {
+    if (try? fileManager.attributesOfItem(atPath: directory.nativeMarker.path)) != nil {
       let marker: Marker
       do {
         marker = try JSONDecoder().decode(Marker.self, from: Data(contentsOf: directory.nativeMarker))
