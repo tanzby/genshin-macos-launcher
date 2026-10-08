@@ -19,7 +19,11 @@ set -eu
 cd "$(dirname "$0")/../.."
 
 strict=${PARITY_STRICT:-0}
-[ "${1:-}" = "--strict" ] && strict=1
+case "${1:-}" in
+  "") ;;
+  --strict) strict=1 ;;
+  *) echo "usage: $0 [--strict]" >&2; exit 2 ;;
+esac
 
 list=docs/parity/hk4e-cn.md
 tmp=$(mktemp -d)
