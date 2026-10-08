@@ -66,7 +66,7 @@ import Testing
     }
   }
 
-  @Test("WIN-003 stamp for another dxmtVersion is versionMismatch")
+  @Test("WIN-019 WIN-003 stamp for another dxmtVersion is versionMismatch")
   func otherDXMTVersion() async throws {
     try await withWineTempDirectory { dir in
       let h = try await makeInstalledWineHarness(in: dir)

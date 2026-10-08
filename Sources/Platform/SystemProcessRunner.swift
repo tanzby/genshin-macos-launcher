@@ -9,7 +9,20 @@ public enum ProcessRunnerError: Error, Equatable {
 public struct SystemProcessRunner: ProcessRunning {
   public static let systemTools: Set<String> = ["/usr/bin/codesign", "/usr/bin/tar", "/usr/bin/ditto"]
 
-  public init(allowedRoots: [URL] = []) {}
+  private let allowedRoots: [URL]
+
+  public init(allowedRoots: [URL] = []) {
+    self.allowedRoots = allowedRoots
+  }
+
+  func isAllowed(_ executable: URL) -> Bool {
+    let path = executable.standardizedFileURL.path
+    if Self.systemTools.contains(path) { return true }
+    // Resolve symlinks so `<root>/bin/wine -> /elsewhere` and `..` cannot escape the root.
+    let resolved = executable.standardizedFileURL.resolvingSymlinksInPath().path
+    // Roots are resolved per call: the Wine directory may not exist yet when the runner is created.
+    return allowedRoots.contains { resolved.hasPrefix($0.standardizedFileURL.resolvingSymlinksInPath().path + "/") }
+  }
 
   public func run(
     _ executable: URL,
@@ -17,6 +30,62 @@ public struct SystemProcessRunner: ProcessRunning {
     environment: [String: String],
     workingDirectory: URL?
   ) async throws -> ProcessResult {
-    throw CocoaError(.featureUnsupported)
+    guard isAllowed(executable) else {
+      throw ProcessRunnerError.executableNotAllowed(executable.path)
+    }
+    let process = Process()
+    process.executableURL = executable
+    process.arguments = arguments
+    process.environment = ProcessInfo.processInfo.environment.merging(environment) { _, new in new }
+    process.currentDirectoryURL = workingDirectory
+    let pipe = Pipe()
+    process.standardOutput = pipe
+    process.standardError = pipe
+    process.standardInput = FileHandle.nullDevice
+
+    return try await withTaskCancellationHandler {
+      try await withCheckedThrowingContinuation { continuation in
+        // Drain the pipe on its own thread so a chatty child never blocks on a full buffer.
+        let collected = LockedData()
+        pipe.fileHandleForReading.readabilityHandler = { handle in
+          let data = handle.availableData
+          if data.isEmpty { handle.readabilityHandler = nil } else { collected.append(data) }
+        }
+        process.terminationHandler = { finished in
+          pipe.fileHandleForReading.readabilityHandler = nil
+          collected.append((try? pipe.fileHandleForReading.readToEnd()) ?? Data())
+          continuation.resume(
+            returning: ProcessResult(
+              exitCode: finished.terminationStatus,
+              output: String(decoding: collected.value, as: UTF8.self)))
+        }
+        do {
+          try process.run()
+          if Task.isCancelled { process.terminate() }
+        } catch {
+          pipe.fileHandleForReading.readabilityHandler = nil
+          continuation.resume(throwing: error)
+        }
+      }
+    } onCancel: {
+      if process.isRunning { process.terminate() }
+    }
+  }
+}
+
+private final class LockedData: @unchecked Sendable {
+  private let lock = NSLock()
+  private var data = Data()
+
+  func append(_ more: Data) {
+    lock.lock()
+    data.append(more)
+    lock.unlock()
+  }
+
+  var value: Data {
+    lock.lock()
+    defer { lock.unlock() }
+    return data
   }
 }

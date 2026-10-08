@@ -88,6 +88,9 @@ public struct WineLayout: Sendable, Equatable {
   public var prefixSystem32: URL {
     prefixDirectory.appending(path: "drive_c/windows/system32", directoryHint: .isDirectory)
   }
+  /// DXMT files that replace the stock ones in `x86_64-windows`.
+  static let dxmtWindowsFiles = ["d3d10core.dll", "d3d11.dll", "dxgi.dll", "winemetal.dll"]
+
   public var wineBootLog: URL { root.appending(path: "wineboot.log", directoryHint: .notDirectory) }
   public var wineCfgLog: URL { root.appending(path: "winecfg.log", directoryHint: .notDirectory) }
 
@@ -137,6 +140,16 @@ public enum WineInstallError: Error, Equatable {
 enum WineInf {
   /// Inserts the root CA after the `; URL Associations` section (WIN-009). Idempotent.
   static func injectingCertificate(into contents: String) throws -> String {
-    throw WineInstallError.certificateSectionNotFound
+    let thumbprint = "F09065E2D57F005BBD975DDCF9EB63F570764F17"
+    if contents.contains(thumbprint) { return contents }
+    var lines = contents.replacingOccurrences(of: "\r\n", with: "\n").components(separatedBy: "\n")
+    guard let marker = lines.firstIndex(where: { $0.trimmingCharacters(in: .whitespaces) == "; URL Associations" }),
+      let blank = lines[(marker + 1)...].firstIndex(where: { $0.trimmingCharacters(in: .whitespaces).isEmpty })
+    else {
+      throw WineInstallError.certificateSectionNotFound
+    }
+    let block = WineInfCertificate.block.components(separatedBy: "\n")
+    lines.insert(contentsOf: [""] + block, at: blank)
+    return lines.joined(separator: "\n")
   }
 }

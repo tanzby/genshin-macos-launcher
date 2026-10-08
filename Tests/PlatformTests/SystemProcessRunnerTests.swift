@@ -49,6 +49,20 @@ private func writeScript(_ body: String, named name: String = "tool.sh", in dir:
     #expect(result.exitCode != 0)
   }
 
+  @Test("WIN-008 an allowed root that does not exist yet still admits its executables once created")
+  func rootCreatedAfterRunner() async throws {
+    let base = try runnerTempDirectory()
+    defer { try? FileManager.default.removeItem(at: base) }
+    // Spelled with the /private prefix, as a data directory under /tmp or /var is when only the runtime
+    // folder is missing at construction time.
+    let root = URL(filePath: "/private" + base.path, directoryHint: .isDirectory).appending(path: "wine")
+    let runner = SystemProcessRunner(allowedRoots: [root])
+    try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+    let script = try writeScript("echo ok", in: root)
+    let result = try await runner.run(script, arguments: [], environment: [:], workingDirectory: nil)
+    #expect(result.exitCode == 0)
+  }
+
   @Test("WIN-008 rejects executables outside the allow-list", arguments: ["/bin/echo", "/usr/bin/env", "/bin/sh"])
   func rejectsOthers(path: String) async throws {
     await #expect(throws: ProcessRunnerError.executableNotAllowed(path)) {
@@ -139,7 +153,8 @@ private func writeScript(_ body: String, named name: String = "tool.sh", in dir:
     let script = try writeScript("pwd", in: dir)
     let result = try await SystemProcessRunner(allowedRoots: [dir]).run(
       script, arguments: [], environment: [:], workingDirectory: cwd)
-    #expect(result.output.trimmingCharacters(in: .whitespacesAndNewlines) == cwd.resolvingSymlinksInPath().path)
+    let printed = URL(filePath: result.output.trimmingCharacters(in: .whitespacesAndNewlines))
+    #expect(printed.resolvingSymlinksInPath().path == cwd.resolvingSymlinksInPath().path)
   }
 
   @Test("WIN-012 cancelling the task terminates the child promptly")

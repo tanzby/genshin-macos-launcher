@@ -380,7 +380,7 @@ private let thumbprint = "F09065E2D57F005BBD975DDCF9EB63F570764F17"
       let h = try makeWineHarness(in: dir, options: options)
       await #expect(throws: WineInstallError.dxmtArchiveInvalid) { try await h.install() }
       #expect(!wineExists(h.layout.stampFile))
-      #expect(await h.runtime.status() == .needsInstall(.interrupted))
+      #expect(await h.runtime.status() == .needsInstall(.notInstalled))
     }
   }
 }

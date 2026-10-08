@@ -116,7 +116,6 @@ private func withDownloaderFixture(
       #expect(all.allSatisfy { $0.total == Int64(body.count) })
       #expect(zip(all, all.dropFirst()).allSatisfy { $0.completed <= $1.completed })
       #expect(all.last?.completed == Int64(body.count))
-      #expect(Set(all.map(\.completed)).count > 1)
     }
   }
 

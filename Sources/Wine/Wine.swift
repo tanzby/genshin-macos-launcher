@@ -25,6 +25,7 @@ public actor WineRuntime {
   let dxmt: DXMTRelease
   let downloader: any Downloading
   let runner: any ProcessRunning
+  private var installation: Task<Void, any Error>?
 
   public init(
     dataDirectory: DataDirectory,
@@ -46,17 +47,29 @@ public actor WineRuntime {
 
   /// Whether the pinned Wine and DXMT are installed and intact. Looks at the disk, not just the stamp.
   public func status() -> WineStatus {
-    .needsInstall(.notInstalled)
+    currentStatus()
   }
 
   /// Installs Wine + DXMT + prefix when `status()` is not `.ready`. Concurrent callers share one install.
   public func ensureInstalled(progress: @escaping @Sendable (WineInstallProgress) -> Void = { _ in }) async throws {
-    throw CocoaError(.featureUnsupported)
+    if installation == nil, currentStatus() == .ready { return }
+    try await runInstall(progress: progress)
   }
 
   /// Installs unconditionally, replacing `wine/` and `wineprefix/`.
   public func reinstall(progress: @escaping @Sendable (WineInstallProgress) -> Void = { _ in }) async throws {
-    throw CocoaError(.featureUnsupported)
+    try await runInstall(progress: progress)
+  }
+
+  private func runInstall(progress: @escaping @Sendable (WineInstallProgress) -> Void) async throws {
+    if let running = installation {
+      try await running.value
+      return
+    }
+    let task = Task { try await performInstall(progress: progress) }
+    installation = task
+    defer { installation = nil }
+    try await task.value
   }
 }
 
