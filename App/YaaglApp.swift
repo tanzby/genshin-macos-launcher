@@ -7,12 +7,18 @@ import SwiftUI
 struct YaaglApp: App {
   @State private var launcher = LauncherModel(client: GenshinCNClient())
 
-  // Sparkle starts once the appcast URL and EdDSA public key are in Info.plist.
+  // Sparkle refuses to start without an EdDSA public key, so builds made before
+  // the key exists (SUPublicEDKey empty) leave the updater stopped.
   private let updaterController = SPUStandardUpdaterController(
-    startingUpdater: false,
+    startingUpdater: Self.hasUpdateKey,
     updaterDelegate: nil,
     userDriverDelegate: nil
   )
+
+  private static var hasUpdateKey: Bool {
+    let key = Bundle.main.object(forInfoDictionaryKey: "SUPublicEDKey") as? String
+    return key?.isEmpty == false
+  }
 
   var body: some Scene {
     Window("Yaagl", id: "main") {
