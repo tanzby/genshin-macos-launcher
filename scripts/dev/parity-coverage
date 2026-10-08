@@ -13,9 +13,9 @@
 # test/diag referencing an ID that is not in the checklist.
 #
 # Sources searched:
-#   Tests/**/*.swift         lines with `func ` or `@Test` (test names, not comments)
+#   Tests/**/*.swift         lines with `func ` or `@Test`, comment lines excluded
 #   Diag/, scripts/diag/     any line (diag check names), if present
-set -eu
+set -euo pipefail
 cd "$(dirname "$0")/../.."
 
 strict=${PARITY_STRICT:-0}
@@ -32,8 +32,10 @@ errors=0
 err() { echo "error: $*" >&2; errors=$((errors + 1)); }
 
 # id|disposition for every checklist row.
-awk -F'|' '/^\| [A-Z]+-[0-9]+ /{
-  gsub(/ /, "", $2); gsub(/ /, "", $4); print $2 "|" $4 }' "$list" | sort > "$tmp/rows"
+awk -F'|' '/^[ \t]*\|[ \t]*[A-Z]+-[0-9]+/{
+  if (NF != 8) { print "error: malformed rule row (expected 6 columns): " $0 > "/dev/stderr"; bad = 1; next }
+  gsub(/[ \t]/, "", $2); gsub(/[ \t]/, "", $4); print $2 "|" $4 }
+  END { exit bad }' "$list" | sort > "$tmp/rows" || err "unparseable rule rows in $list"
 
 [ -s "$tmp/rows" ] || { err "no rule rows found in $list"; exit 1; }
 cut -d'|' -f1 "$tmp/rows" | sort | uniq -d | while read -r id; do echo "error: duplicate rule $id" >&2; done
@@ -47,7 +49,7 @@ grep -E '\|(照搬|改写)$' "$tmp/rows" | cut -d'|' -f1 | sort -u > "$tmp/requi
 # IDs referenced by tests / diag checks, normalised to the dashed form.
 {
   find Tests -name '*.swift' 2>/dev/null | while read -r f; do
-    grep -E 'func |@Test' "$f" || true
+    grep -E 'func |@Test' "$f" | grep -vE '^[[:space:]]*(//|/\*|\*)' || true
   done
   for d in Diag scripts/diag; do
     [ -d "$d" ] && grep -rh '' "$d" || true
