@@ -12,8 +12,8 @@
 
 | 处置 | 含义 | 条数 |
 |---|---|---|
-| 照搬 | 行为不变，按旧行为验收 | 63 |
-| 改写 | 被后来的决定改变，按新行为验收 | 80 |
+| 照搬 | 行为不变，按旧行为验收 | 55 |
+| 改写 | 被后来的决定改变，按新行为验收 | 88 |
 | 作废 | 旧机制已不存在，不验收 | 37 |
 
 有意照搬的特殊项：LCH-011 的实测回退分支、UPG-014 语音包不管、WIN-009 根证书。有意放弃：UPG-002 音频目录迁移。[#28](https://github.com/tanzby/yet-another-anime-game-launcher/issues/28) 的 C 组（APP-004、APP-022、INS-008/009/010、PRG-001、WIN-016/019 等）是负面用例：旧版的缺陷在新版里必须不再出现。与 ADR 0002 冲突时以 #28 为准：ReShade 整个删除，DXMT 在安装 Wine 时一次装好。
@@ -116,7 +116,7 @@
 | INS-014 | 选中已有目录：已是最新版 | 照搬 | TS 行为不变，但依 ADR 0002 在 Sophon/Launcher 重做 | 组件 |  |
 | INS-015 | 安装中断后的恢复 | 改写 | [#28](https://github.com/tanzby/yet-another-anime-game-launcher/issues/28) C32 / ADR 0002 暂停继续 | 组件 |  |
 | INS-016 | Sophon 接口缓存与清理 | 改写 | [#26](https://github.com/tanzby/yet-another-anime-game-launcher/issues/26) 端点/缓存 | 单元 |  |
-| LCH-001 | 启动任务的整体顺序 | 照搬 | TS 行为不变；LaunchRecipe/GameSession 重做 | 单元 |  |
+| LCH-001 | 启动任务的整体顺序 | 改写 | [#28](https://github.com/tanzby/yet-another-anime-game-launcher/issues/28) B12/A7：无 ReShade 步骤，DXMT 随 Wine 装好，还原改为 journal（ADR 0002 已修订） | 单元 |  |
 | LCH-002 | 按版本下载 ReShade | 作废 | [#28](https://github.com/tanzby/yet-another-anime-game-launcher/issues/28) A7 删 ReShade（ADR 0002 已按此修订） | — |  |
 | LCH-003 | 启动前强制清理 prefix 中的残留进程 | 照搬 | TS 行为不变；LaunchRecipe/GameSession 重做 | diag |  |
 | LCH-004 | 判断 MetalFX 是否生效 | 照搬 | TS 行为不变；LaunchRecipe/GameSession 重做 | diag |  |
@@ -125,11 +125,11 @@
 | LCH-007 | 用注册表实现自定义分辨率（强制窗口化） | 改写 | [#28](https://github.com/tanzby/yet-another-anime-game-launcher/issues/28) B13 | diag |  |
 | LCH-008 | 分辨率输入校验 | 改写 | [#28](https://github.com/tanzby/yet-another-anime-game-launcher/issues/28) B16 | 单元 |  |
 | LCH-009 | 写完注册表后等待 wineserver 退出 | 照搬 | TS 行为不变；LaunchRecipe/GameSession 重做 | diag |  |
-| LCH-010 | config.bat（默认启动路径） | 照搬 | TS 行为不变；LaunchRecipe/GameSession 重做 | 单元 |  |
+| LCH-010 | config.bat（默认启动路径） | 改写 | [#28](https://github.com/tanzby/yet-another-anime-game-launcher/issues/28) B14/A9：Steam patch 固定开启，旧的非 Steam 默认路径不再是启动路径；config.bat 仅作 Steam 路径的载体 | 单元 |  |
 | LCH-011 | Steam patch 启动路径 | 改写 | [#28](https://github.com/tanzby/yet-another-anime-game-launcher/issues/28) B14（含实测回退分支） | diag |  |
 | LCH-012 | 补丁幂等 | 改写 | [#28](https://github.com/tanzby/yet-another-anime-game-launcher/issues/28) B12：启动前准备幂等，.bak 存在则不覆盖 | 单元 |  |
 | LCH-013 | patch-off 只跳过对游戏文件的修改 | 作废 | [#28](https://github.com/tanzby/yet-another-anime-game-launcher/issues/28) A9 删除的开关 | — |  |
-| LCH-014 | CN 版启动前移走三个文件 | 照搬 | TS 行为不变；LaunchRecipe/GameSession 重做 | 单元 |  |
+| LCH-014 | CN 版启动前移走三个文件 | 改写 | [#28](https://github.com/tanzby/yet-another-anime-game-launcher/issues/28) B12/A9：补丁永远应用（无 patch-off）；`.bak` 已存在时不覆盖，启动时自愈 | 单元 |  |
 | LCH-015 | workaround3 对 hk4ecn 无效果 | 作废 | [#28](https://github.com/tanzby/yet-another-anime-game-launcher/issues/28) A9 删除的开关 | — |  |
 | LCH-016 | 差分补丁和新增文件机制（CN 下列表为空） | 作废 | 死/开发便利/无版本选择 UI/空列表 | — |  |
 | LCH-017 | ReShade 注入游戏目录 | 作废 | [#28](https://github.com/tanzby/yet-another-anime-game-launcher/issues/28) A7 删 ReShade（ADR 0002 已按此修订） | — |  |
@@ -137,24 +137,24 @@
 | LCH-019 | patched 标记 | 改写 | [#28](https://github.com/tanzby/yet-another-anime-game-launcher/issues/28) B12：无 patched 标记，状态只看文件系统和 journal | 单元 |  |
 | LCH-020 | 每次启动生成一个游戏日志 | 改写 | [#28](https://github.com/tanzby/yet-another-anime-game-launcher/issues/28) B18 | 单元 |  |
 | LCH-021 | 屏蔽网络（临时修改 hosts 10 秒） | 改写 | [#29](https://github.com/tanzby/yet-another-anime-game-launcher/issues/29)/ADR 0001 | 单元 |  |
-| LCH-022 | Game Mode 开关 | 照搬 | TS 行为不变；LaunchRecipe/GameSession 重做 | diag |  |
+| LCH-022 | Game Mode 开关 | 改写 | [#28](https://github.com/tanzby/yet-another-anime-game-launcher/issues/28) A9：Game Mode 固定开启，无关闭分支；仅保留 LCH-023 的失败降级 | diag |  |
 | LCH-023 | game host 缺失或出错时降级 | 照搬 | TS 行为不变；LaunchRecipe/GameSession 重做 | diag |  |
 | LCH-024 | 安装 wine 加载器 shim | 照搬 | x86_64 shim/host 原样搬 (ADR 0002)；只能 E2E | diag |  |
-| LCH-025 | 构建并注册 YaaglGame.app | 照搬 | x86_64 shim/host 原样搬 (ADR 0002)；只能 E2E | diag |  |
+| LCH-025 | 构建并注册 YaaglGame.app | 改写 | [#28](https://github.com/tanzby/yet-another-anime-game-launcher/issues/28) A11：游戏包装 App 使用新 bundle id，codesign 标识符必须与之相同 | diag |  |
 | LCH-026 | game host 的环境变量 | 照搬 | TS 行为不变；LaunchRecipe/GameSession 重做 | diag |  |
 | LCH-027 | wine-shim 按可执行文件分流 | 照搬 | x86_64 shim/host 原样搬 (ADR 0002)；只能 E2E | diag |  |
 | LCH-028 | gamehost 把游戏窗口切到原生全屏 | 照搬 | x86_64 shim/host 原样搬 (ADR 0002)；只能 E2E | diag |  |
 | LCH-029 | 全屏时覆盖刘海区域 | 照搬 | x86_64 shim/host 原样搬 (ADR 0002)；只能 E2E | diag |  |
 | LCH-030 | 窗口关闭 15 秒后进程仍在则自行退出 | 照搬 | x86_64 shim/host 原样搬 (ADR 0002)；只能 E2E | diag |  |
 | LCH-031 | 本机主机名在本地直接解析 | 照搬 | TS 行为不变；LaunchRecipe/GameSession 重做 | 单元 |  |
-| LCH-032 | Metal HUD、超时修复与 DLL 覆盖 | 照搬 | TS 行为不变；LaunchRecipe/GameSession 重做 | diag |  |
+| LCH-032 | Metal HUD、超时修复与 DLL 覆盖 | 改写 | [#28](https://github.com/tanzby/yet-another-anime-game-launcher/issues/28) A9：Timeout Fix 固定开启，`WINE_ENABLE_TIMEOUT_FIX` 恒为启用值 | diag |  |
 | LCH-033 | DXMT 环境变量与 60 帧上限 | 改写 | [#28](https://github.com/tanzby/yet-another-anime-game-launcher/issues/28) A6 删 FPS，DXMT 固定 60 | 单元 |  |
 | LCH-034 | 代理环境变量 | 改写 | [#28](https://github.com/tanzby/yet-another-anime-game-launcher/issues/28) B17 | 单元 |  |
 | LCH-035 | 空字符串的环境变量不会传递 | 照搬 | TS 行为不变；LaunchRecipe/GameSession 重做 | 单元 |  |
 | LCH-036 | 游戏退出后最多等待 Wine 15 秒，超时强杀 | 改写 | [#28](https://github.com/tanzby/yet-another-anime-game-launcher/issues/28) B15 | diag |  |
 | LCH-037 | 正常退出后撤销 HDR 和分辨率注册表 | 改写 | [#28](https://github.com/tanzby/yet-another-anime-game-launcher/issues/28) B16 | 单元 |  |
 | LCH-038 | 启动失败或崩溃时不撤销注册表 | 改写 | [#28](https://github.com/tanzby/yet-another-anime-game-launcher/issues/28) B12：崩溃残留由 recover() 与幂等写入自愈 | 单元 |  |
-| LCH-039 | 退出后删除 config.bat 并还原 | 照搬 | TS 行为不变；LaunchRecipe/GameSession 重做 | 单元 |  |
+| LCH-039 | 退出后删除 config.bat 并还原 | 改写 | [#28](https://github.com/tanzby/yet-another-anime-game-launcher/issues/28) B12：只删除 config.bat 并按 journal 还原游戏文件，无 DXMT/ReShade/patched 还原 | 单元 |  |
 | PRE-001 | 何时显示预下载提示 | 改写 | [#26](https://github.com/tanzby/yet-another-anime-game-launcher/issues/26) | 组件、线上 |  |
 | PRE-002 | 执行预下载 | 改写 | [#26](https://github.com/tanzby/yet-another-anime-game-launcher/issues/26) | 组件、线上 |  |
 | PRE-003 | 预下载版本的显示 | 照搬 | 行为不变（流程由 Launcher + Fake GameClient 承载） | 组件 |  |
@@ -214,7 +214,7 @@
 | WIN-011 | 在 /etc/hosts 中维护永久屏蔽段 | 改写 | [#29](https://github.com/tanzby/yet-another-anime-game-launcher/issues/29)/ADR 0001 | diag |  |
 | WIN-012 | 初始化 prefix | 照搬 | Wine 运行时行为不变 | diag |  |
 | WIN-013 | hk4ecn 不安装 Media Foundation | 作废 | 死/开发便利/无版本选择 UI/空列表 | — |  |
-| WIN-014 | 安装完成后写入状态 | 照搬 | Wine 运行时行为不变 | 单元 |  |
+| WIN-014 | 安装完成后写入状态 | 改写 | [#28](https://github.com/tanzby/yet-another-anime-game-launcher/issues/28) B20：删除 wine_netbiosname、wine_update_url 等死数据；状态由 Wine 目录版本戳推导（ADR 0002） | 单元 |  |
 | WIN-015 | NetBIOS 名称 | 改写 | [#28](https://github.com/tanzby/yet-another-anime-game-launcher/issues/28) B20 删死数据 / ADR 0002 启动顺序 | 单元 |  |
 | WIN-016 | 选择 Wine 可执行文件与基础环境 | 改写 | [#28](https://github.com/tanzby/yet-another-anime-game-launcher/issues/28) C 负面用例 | diag |  |
 | WIN-017 | 路径转换与 copy 特例 | 照搬 | Wine 运行时行为不变 | 单元 |  |
