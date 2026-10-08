@@ -53,12 +53,12 @@
 | APP-007 | Sophon 服务进程的启动与生命周期 | 作废 | [#17](https://github.com/tanzby/yet-another-anime-game-launcher/issues/17)/[#13](https://github.com/tanzby/yet-another-anime-game-launcher/issues/13) 无 sidecar/Neutralino | — |  |
 | APP-008 | 在线游戏信息 | 改写 | [#26](https://github.com/tanzby/yet-another-anime-game-launcher/issues/26) 端点/缓存 | 组件、线上 |  |
 | APP-009 | CN 的 HoYoPlay / Sophon 接口端点 | 改写 | [#26](https://github.com/tanzby/yet-another-anime-game-launcher/issues/26) 端点/缓存 | 组件、线上 |  |
-| APP-010 | 在线信息查询失败 | 改写 | [#28](https://github.com/tanzby/yet-another-anime-game-launcher/issues/28) A1-A3 | 组件、线上 |  |
+| APP-010 | 在线信息查询失败 | 改写 | [#28](https://github.com/tanzby/yet-another-anime-game-launcher/issues/28) A1-A3 | 组件、线上 | `APP_010_*` |
 | APP-011 | 本地安装状态判定 | 照搬 | TS 行为不变，但依 ADR 0002 在 Sophon/Launcher 重做 | 单元 |  |
 | APP-012 | 从 globalgamemanagers 读取游戏版本 | 照搬 | TS 行为不变，但依 ADR 0002 在 Sophon/Launcher 重做 | 单元 |  |
-| APP-013 | 任务队列串行执行，出错即致命 | 改写 | [#28](https://github.com/tanzby/yet-another-anime-game-launcher/issues/28) A1-A3 | 组件 |  |
+| APP-013 | 任务队列串行执行，出错即致命 | 改写 | [#28](https://github.com/tanzby/yet-another-anime-game-launcher/issues/28) A1-A3 | 组件 | `APP_013_*` |
 | APP-014 | 版本不可读时告警 | 照搬 | 行为不变（流程由 Launcher + Fake GameClient 承载） | 组件 |  |
-| APP-015 | 预下载队列与主队列可以并发 | 改写 | [#28](https://github.com/tanzby/yet-another-anime-game-launcher/issues/28) A1-A3 | 组件 |  |
+| APP-015 | 预下载队列与主队列可以并发 | 改写 | [#28](https://github.com/tanzby/yet-another-anime-game-launcher/issues/28) A1-A3 | 组件 | `APP_015_*` |
 | APP-016 | 是否需要更新 | 照搬 | TS 行为不变，但依 ADR 0002 在 Sophon/Launcher 重做 | 组件 |  |
 | APP-017 | 主按钮的文案与动作 | 改写 | [#21](https://github.com/tanzby/yet-another-anime-game-launcher/issues/21) SwiftUI 主界面 / 设置窗口重新设计 | 组件 |  |
 | APP-018 | 设置按钮的可见性 | 改写 | [#21](https://github.com/tanzby/yet-another-anime-game-launcher/issues/21) SwiftUI 主界面 / 设置窗口重新设计 | 组件 |  |
@@ -103,7 +103,7 @@
 | INS-001 | 安装目录选择的校验 | 照搬 | TS 行为不变，但依 ADR 0002 在 Sophon/Launcher 重做 | 组件 |  |
 | INS-002 | 判定"已有安装"还是"全新安装" | 照搬 | TS 行为不变，但依 ADR 0002 在 Sophon/Launcher 重做 | 组件 |  |
 | INS-003 | 全新安装主流程（TS 侧） | 照搬 | 行为不变（流程由 Launcher + Fake GameClient 承载） | 组件 |  |
-| INS-004 | 全新安装前的磁盘空间检查 | 改写 | [#28](https://github.com/tanzby/yet-another-anime-game-launcher/issues/28) A4 | 组件 |  |
+| INS-004 | 全新安装前的磁盘空间检查 | 改写 | [#28](https://github.com/tanzby/yet-another-anime-game-launcher/issues/28) A4 | 组件 | `INS_004_*` |
 | INS-005 | Sophon 安装的前置条件与 config.ini 模板 | 照搬 | TS 行为不变，但依 ADR 0002 在 Sophon/Launcher 重做 | 单元 |  |
 | INS-006 | config.ini 中 game_version 的两次写入 | 照搬 | TS 行为不变，但依 ADR 0002 在 Sophon/Launcher 重做 | 单元 |  |
 | INS-007 | 下载顺序与并发 | 照搬 | 行为不变（流程由 Launcher + Fake GameClient 承载） | 组件 |  |
@@ -114,7 +114,7 @@
 | INS-012 | 选中已有目录：旧版本，可以增量更新 | 照搬 | TS 行为不变，但依 ADR 0002 在 Sophon/Launcher 重做 | 组件 |  |
 | INS-013 | 选中已有目录：版本太旧 | 照搬 | TS 行为不变，但依 ADR 0002 在 Sophon/Launcher 重做 | 组件 |  |
 | INS-014 | 选中已有目录：已是最新版 | 照搬 | TS 行为不变，但依 ADR 0002 在 Sophon/Launcher 重做 | 组件 |  |
-| INS-015 | 安装中断后的恢复 | 改写 | [#28](https://github.com/tanzby/yet-another-anime-game-launcher/issues/28) C32 / ADR 0002 暂停继续 | 组件 |  |
+| INS-015 | 安装中断后的恢复 | 改写 | [#28](https://github.com/tanzby/yet-another-anime-game-launcher/issues/28) C32 / ADR 0002 暂停继续 | 组件 | `INS_015_*`（Launcher 侧 job.json 与续跑） |
 | INS-016 | Sophon 接口缓存与清理 | 改写 | [#26](https://github.com/tanzby/yet-another-anime-game-launcher/issues/26) 端点/缓存 | 单元 |  |
 | LCH-001 | 启动任务的整体顺序 | 改写 | [#28](https://github.com/tanzby/yet-another-anime-game-launcher/issues/28) B12/A7：无 ReShade 步骤，DXMT 随 Wine 装好，还原改为 journal（ADR 0002 已修订） | 单元 |  |
 | LCH-002 | 按版本下载 ReShade | 作废 | [#28](https://github.com/tanzby/yet-another-anime-game-launcher/issues/28) A7 删 ReShade（ADR 0002 已按此修订） | — |  |
@@ -151,7 +151,7 @@
 | LCH-033 | DXMT 环境变量与 60 帧上限 | 改写 | [#28](https://github.com/tanzby/yet-another-anime-game-launcher/issues/28) A6 删 FPS，DXMT 固定 60 | 单元 |  |
 | LCH-034 | 代理环境变量 | 改写 | [#28](https://github.com/tanzby/yet-another-anime-game-launcher/issues/28) B17 | 单元 |  |
 | LCH-035 | 空字符串的环境变量不会传递 | 照搬 | TS 行为不变；LaunchRecipe/GameSession 重做 | 单元 |  |
-| LCH-036 | 游戏退出后最多等待 Wine 15 秒，超时强杀 | 改写 | [#28](https://github.com/tanzby/yet-another-anime-game-launcher/issues/28) B15 | diag |  |
+| LCH-036 | 游戏退出后最多等待 Wine 15 秒，超时强杀 | 改写 | [#28](https://github.com/tanzby/yet-another-anime-game-launcher/issues/28) B15 | diag | `LCH_036_*`（仅 120 s 启动超时部分；退出后 15 s 等待归 diag） |
 | LCH-037 | 正常退出后撤销 HDR 和分辨率注册表 | 改写 | [#28](https://github.com/tanzby/yet-another-anime-game-launcher/issues/28) B16 | 单元 |  |
 | LCH-038 | 启动失败或崩溃时不撤销注册表 | 改写 | [#28](https://github.com/tanzby/yet-another-anime-game-launcher/issues/28) B12：崩溃残留由 recover() 与幂等写入自愈 | 单元 |  |
 | LCH-039 | 退出后删除 config.bat 并还原 | 改写 | [#28](https://github.com/tanzby/yet-another-anime-game-launcher/issues/28) B12：只删除 config.bat 并按 journal 还原游戏文件，无 DXMT/ReShade/patched 还原 | 单元 |  |
@@ -163,9 +163,9 @@
 | PRG-003 | 事件与界面文案的对应关系 | 改写 | [#21](https://github.com/tanzby/yet-another-anime-game-launcher/issues/21) SwiftUI 主界面 / 设置窗口重新设计 | 单元 |  |
 | PRG-004 | 字节数的可读格式 | 改写 | [#21](https://github.com/tanzby/yet-another-anime-game-launcher/issues/21) SwiftUI 主界面 / 设置窗口重新设计 | 单元 |  |
 | PRG-005 | 进度条显示规则 | 改写 | [#21](https://github.com/tanzby/yet-another-anime-game-launcher/issues/21) SwiftUI 主界面 / 设置窗口重新设计 | 单元 |  |
-| PRG-006 | 取消功能没有接入 | 改写 | [#21](https://github.com/tanzby/yet-another-anime-game-launcher/issues/21) SwiftUI 主界面 / 设置窗口重新设计 | 单元 |  |
+| PRG-006 | 取消功能没有接入 | 改写 | [#21](https://github.com/tanzby/yet-another-anime-game-launcher/issues/21) SwiftUI 主界面 / 设置窗口重新设计 | 单元 | `PRG_006_*` |
 | REP-001 | 修复的入口 | 照搬 | TS 行为不变，但依 ADR 0002 在 Sophon/Launcher 重做 | 单元 |  |
-| REP-002 | 前置条件：版本必须是最新 | 照搬 | TS 行为不变，但依 ADR 0002 在 Sophon/Launcher 重做 | 单元 |  |
+| REP-002 | 前置条件：版本必须是最新 | 照搬 | TS 行为不变，但依 ADR 0002 在 Sophon/Launcher 重做 | 单元 | `REP_002_*`（Launcher 侧前置条件） |
 | REP-003 | 文件校验 | 照搬 | TS 行为不变，但依 ADR 0002 在 Sophon/Launcher 重做 | 单元 |  |
 | REP-004 | 修复不了"大小对、MD5 错"的文件 | 改写 | [#26](https://github.com/tanzby/yet-another-anime-game-launcher/issues/26) | 单元 |  |
 | REP-005 | hk4e 的完整性检查不清除 `patched` | 改写 | [#28](https://github.com/tanzby/yet-another-anime-game-launcher/issues/28) B12：DXMT 不再注入，修复后无需清标记 | 单元 |  |
@@ -199,7 +199,7 @@
 | UPG-010 | 下载新增文件和需要整体替换的文件 | 照搬 | TS 行为不变，但依 ADR 0002 在 Sophon/Launcher 重做 | 单元 |  |
 | UPG-011 | 更新后的快速校验与写入 config.ini | 照搬 | TS 行为不变，但依 ADR 0002 在 Sophon/Launcher 重做 | 单元 |  |
 | UPG-012 | 清理 ldiff | 照搬 | TS 行为不变，但依 ADR 0002 在 Sophon/Launcher 重做 | 单元 |  |
-| UPG-013 | 更新完成后启动器侧的状态 | 照搬 | TS 行为不变，但依 ADR 0002 在 Sophon/Launcher 重做 | 单元 |  |
+| UPG-013 | 更新完成后启动器侧的状态 | 照搬 | TS 行为不变，但依 ADR 0002 在 Sophon/Launcher 重做 | 单元 | `UPG_013_*` |
 | UPG-014 | 更新和修复的处理范围 | 照搬 | [#28](https://github.com/tanzby/yet-another-anime-game-launcher/issues/28) A5 语音包不管（有意照搬） | 单元 |  |
 | WIN-001 | 内置的 Wine 发行版清单 | 改写 | ADR 0001/0002 / [#27](https://github.com/tanzby/yet-another-anime-game-launcher/issues/27) (removexattr 不提权) | 单元 |  |
 | WIN-002 | 默认的 Wine 版本 | 改写 | [#29](https://github.com/tanzby/yet-another-anime-game-launcher/issues/29)/ADR 0001 | 单元 |  |

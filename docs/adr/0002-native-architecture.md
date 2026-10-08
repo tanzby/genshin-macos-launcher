@@ -30,13 +30,15 @@ x86_64 helper（XcodeGen target，放进 Contents/Helpers/）: YaaglWineShim、Y
 
 ```swift
 protocol GameClient: Sendable {
-  func status() async throws -> GameStatus                       // 本地版本、远端版本、可更新、可预下载
+  func status() async throws -> GameStatus                       // 本地版本、远端版本、可更新、可预下载；离线时 remoteVersion 为 nil
+  func requiredDiskSpace(for job: GameJob) async throws -> Int64 // 解压后要写入的字节数；Launcher 加余量后与剩余空间比较
   func run(_ job: GameJob) -> AsyncThrowingStream<JobProgress, Error>   // install / update / preDownload / repair
-  func launch(_ options: LaunchOptions) async throws -> LaunchOutcome
+  func launch(_ options: LaunchOptions, onStarted: @escaping @Sendable () -> Void) async throws -> LaunchOutcome
   func backgroundImage() async -> BackgroundImage                // 失败不致命，返回内置默认图
 }
 ```
 
+- **修订（票 #13，实现 `LauncherModel` 时发现原协议不够）：** ① `requiredDiskSpace(for:)`：磁盘空间检查（#28 A4）需要只有客户端知道的大小（安装：解压后总大小；更新和预下载：下载量加新文件），`Launcher` 负责加 chunk 临时空间余量、与剩余空间比较，并在 `LauncherError.insufficientDiskSpace(required:available:)` 里带上差额。② `launch` 增加 `onStarted` 回调：120 秒启动超时（#28 15）要知道「游戏进程是否已出现」，只返回最终结果的 `async -> LaunchOutcome` 表达不了。超时时 `Launcher` 取消 launch 的 Task 并等它返回，客户端在取消路径上必须还原 Launch Mutations 并杀 prefix（清理按上文放在不受取消影响的上下文里）。
 - 错误分类：`GameClientError` 分为网络、磁盘空间不足、校验失败、已取消、需要重装 Wine。`Launcher` 据此决定重试、提示或引导。
 - `LaunchOutcome`：正常退出、非零退出（带退出码和日志路径）、启动失败。
 

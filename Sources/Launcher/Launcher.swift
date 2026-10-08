@@ -22,7 +22,7 @@ public struct GameStatus: Sendable, Equatable {
   }
 }
 
-public enum GameJob: Sendable, Equatable {
+public enum GameJob: String, Sendable, Equatable, Codable {
   case install, update, preDownload, repair
 }
 
@@ -64,7 +64,12 @@ public enum GameClientError: Error, Sendable, Equatable {
 public protocol GameClient: Sendable {
   func status() async throws -> GameStatus
   func run(_ job: GameJob) -> AsyncThrowingStream<JobProgress, Error>
-  func launch(_ options: LaunchOptions) async throws -> LaunchOutcome
+  /// Bytes the job will write after decompression, excluding the chunk-cache margin the launcher adds.
+  /// Install: unpacked total. Update and pre-download: download size plus new files. 0 when nothing is written.
+  func requiredDiskSpace(for job: GameJob) async throws -> Int64
+  /// `onStarted` fires once the game process exists; without it within the launch timeout the launcher cancels.
+  /// Cancellation must restore Launch Mutations and kill the prefix before returning.
+  func launch(_ options: LaunchOptions, onStarted: @escaping @Sendable () -> Void) async throws -> LaunchOutcome
   func backgroundImage() async -> BackgroundImage
 }
 
@@ -77,25 +82,5 @@ public enum PrimaryAction: Sendable, Equatable {
   public static func derive(_ status: GameStatus?) -> PrimaryAction {
     guard let status, status.localVersion != nil else { return .install }
     return status.canUpdate ? .update : .launch
-  }
-}
-
-/// Single source of truth for the main window.
-@MainActor @Observable
-public final class LauncherModel {
-  public private(set) var status: GameStatus?
-
-  public var primaryAction: PrimaryAction {
-    PrimaryAction.derive(status)
-  }
-
-  private let client: any GameClient
-
-  public init(client: any GameClient) {
-    self.client = client
-  }
-
-  public func refresh() async {
-    status = try? await client.status()
   }
 }
