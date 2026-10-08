@@ -51,8 +51,8 @@
 | APP-005 | aria2 下载服务启动 | 作废 | [#17](https://github.com/tanzby/yet-another-anime-game-launcher/issues/17)/[#13](https://github.com/tanzby/yet-another-anime-game-launcher/issues/13) 无 sidecar/Neutralino | — |  |
 | APP-006 | aria2 下载任务的去重与续传 | 作废 | [#17](https://github.com/tanzby/yet-another-anime-game-launcher/issues/17)/[#13](https://github.com/tanzby/yet-another-anime-game-launcher/issues/13) 无 sidecar/Neutralino | — |  |
 | APP-007 | Sophon 服务进程的启动与生命周期 | 作废 | [#17](https://github.com/tanzby/yet-another-anime-game-launcher/issues/17)/[#13](https://github.com/tanzby/yet-another-anime-game-launcher/issues/13) 无 sidecar/Neutralino | — |  |
-| APP-008 | 在线游戏信息 | 改写 | [#26](https://github.com/tanzby/yet-another-anime-game-launcher/issues/26) 端点/缓存 | 组件、线上 |  |
-| APP-009 | CN 的 HoYoPlay / Sophon 接口端点 | 改写 | [#26](https://github.com/tanzby/yet-another-anime-game-launcher/issues/26) 端点/缓存 | 组件、线上 |  |
+| APP-008 | 在线游戏信息 | 改写 | [#26](https://github.com/tanzby/yet-another-anime-game-launcher/issues/26) 端点/缓存 | 组件、线上 | `APP_008_*`（SophonProtocolTests、SophonManifestTests） |
+| APP-009 | CN 的 HoYoPlay / Sophon 接口端点 | 改写 | [#26](https://github.com/tanzby/yet-another-anime-game-launcher/issues/26) 端点/缓存 | 组件、线上 | `APP_009_*`（SophonProtocolTests、SophonManifestTests、SophonLiveContractTests） |
 | APP-010 | 在线信息查询失败 | 改写 | [#28](https://github.com/tanzby/yet-another-anime-game-launcher/issues/28) A1-A3 | 组件、线上 |  |
 | APP-011 | 本地安装状态判定 | 照搬 | TS 行为不变，但依 ADR 0002 在 Sophon/Launcher 重做 | 单元 |  |
 | APP-012 | 从 globalgamemanagers 读取游戏版本 | 照搬 | TS 行为不变，但依 ADR 0002 在 Sophon/Launcher 重做 | 单元 |  |
@@ -190,7 +190,7 @@
 | UPG-001 | 更新资格 | 照搬 | TS 行为不变，但依 ADR 0002 在 Sophon/Launcher 重做 | 单元 |  |
 | UPG-002 | 3.6.0 及以上版本的音频目录迁移 | 作废 | [#26](https://github.com/tanzby/yet-another-anime-game-launcher/issues/26) D3 放弃音频迁移 | — |  |
 | UPG-003 | 更新请求与 Sophon 的处理顺序 | 照搬 | TS 行为不变，但依 ADR 0002 在 Sophon/Launcher 重做 | 单元 |  |
-| UPG-004 | CN 的更新和预下载请求必然失败 | 改写 | [#26](https://github.com/tanzby/yet-another-anime-game-launcher/issues/26) | 单元、线上 |  |
+| UPG-004 | CN 的更新和预下载请求必然失败 | 改写 | [#26](https://github.com/tanzby/yet-another-anime-game-launcher/issues/26) | 单元、线上 | `UPG_004_*`（SophonProtocolTests）、`APP_009_live_*` |
 | UPG-005 | Sophon 判定发行类型与已安装版本 | 照搬 | TS 行为不变，但依 ADR 0002 在 Sophon/Launcher 重做 | 单元 |  |
 | UPG-006 | 没有可用更新时报错 | 照搬 | TS 行为不变，但依 ADR 0002 在 Sophon/Launcher 重做 | 单元 |  |
 | UPG-007 | 删除旧文件（files_delete） | 照搬 | TS 行为不变，但依 ADR 0002 在 Sophon/Launcher 重做 | 单元 |  |

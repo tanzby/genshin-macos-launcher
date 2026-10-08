@@ -1,0 +1,24 @@
+name: Live contract
+
+# Read-only checks against the real CN Sophon servers (parity checklist, "线上" layer).
+# Not a required check: it depends on the runner reaching mihoyo.com.
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "17 3 * * 1"
+
+permissions:
+  contents: read
+
+jobs:
+  sophon:
+    runs-on: macos-26
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Sophon contract tests
+        env:
+          YAAGL_LIVE: "1"
+        run: swift test --filter SophonLiveContractTests
