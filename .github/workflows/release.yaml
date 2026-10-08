@@ -1,0 +1,145 @@
+name: Release
+
+# A semver tag (1.0.0-rc.1, 1.0.0, ...) builds the app and publishes a regular
+# release with Yaagl-<ver>.zip (Sparkle enclosure), Yaagl-<ver>.dmg and appcast.xml.
+# It stays a dry run (artifacts only, nothing published) until the secret
+# SPARKLE_ED_PRIVATE_KEY exists and SUPublicEDKey is set in project.yml.
+# Run it by hand from the Actions tab to dry-run on any branch.
+
+on:
+  push:
+    tags: ["[0-9]+.[0-9]+.[0-9]+", "[0-9]+.[0-9]+.[0-9]+-*"]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Version to build, as if tagged (dry run, never publishes)
+        default: 0.0.0-dryrun
+        required: true
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+env:
+  SPARKLE_VERSION: 2.10.0
+  SPARKLE_SHA256: c2bf58aa8387266ac179357b1415d6f2635f044da8be41042af32425dae6da0c
+
+jobs:
+  release:
+    runs-on: macos-26
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Resolve version and mode
+        env:
+          HAS_KEY: ${{ secrets.SPARKLE_ED_PRIVATE_KEY != '' }}
+          INPUT_VERSION: ${{ inputs.version }}
+        run: |
+          set -eu
+          if [ "$GITHUB_REF_TYPE" = tag ]; then
+            version="$GITHUB_REF_NAME"
+          else
+            version="$INPUT_VERSION"
+          fi
+          echo "$version" | grep -Eq '^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-[0-9A-Za-z.-]+)?$' \
+            || { echo "::error::'$version' is not a semver version"; exit 1; }
+
+          publish=false
+          if [ "$GITHUB_REF_TYPE" = tag ]; then
+            # Releases come from main only.
+            git merge-base --is-ancestor "$GITHUB_SHA" origin/main \
+              || { echo "::error::tag $version is not on main"; exit 1; }
+            if [ "$HAS_KEY" != true ]; then
+              echo "::warning::SPARKLE_ED_PRIVATE_KEY is not set; dry run, nothing is published"
+            elif grep -Eq 'SUPublicEDKey: ""' project.yml; then
+              echo "::warning::SUPublicEDKey is empty in project.yml; dry run, nothing is published"
+            else
+              publish=true
+            fi
+          fi
+          # CFBundleVersion: a plain, monotonically increasing integer. Sparkle
+          # compares it, so the rc -> final ordering never depends on the tag.
+          build=$GITHUB_RUN_NUMBER
+          echo "VERSION=$version" >> "$GITHUB_ENV"
+          echo "BUILD=$build" >> "$GITHUB_ENV"
+          echo "PUBLISH=$publish" >> "$GITHUB_ENV"
+          echo "version=$version build=$build publish=$publish"
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Swift test
+        run: swift test
+
+      - name: Build app
+        run: |
+          set -eu
+          xcodegen generate
+          xcodebuild -project Yaagl.xcodeproj -scheme Yaagl -configuration Release \
+            -destination 'platform=macOS,arch=arm64' -derivedDataPath build/DerivedData \
+            MARKETING_VERSION="$VERSION" CURRENT_PROJECT_VERSION="$BUILD" build
+          app=build/DerivedData/Build/Products/Release/Yaagl.app
+          codesign --verify --deep --strict --verbose=2 "$app"
+          plist="$app/Contents/Info.plist"
+          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$plist")" = "$VERSION"
+          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$plist")" = "$BUILD"
+          /usr/libexec/PlistBuddy -c 'Print :SUFeedURL' "$plist"
+          lipo -archs "$app/Contents/MacOS/Yaagl"
+          echo "APP=$PWD/$app" >> "$GITHUB_ENV"
+
+      - name: Package zip and dmg
+        run: |
+          set -eu
+          mkdir -p dist/updates dmg-root
+          # ditto keeps symlinks, so the framework signatures stay valid.
+          ditto -c -k --sequesterRsrc --keepParent "$APP" "dist/updates/Yaagl-$VERSION.zip"
+          cp -R "$APP" dmg-root/
+          ln -s /Applications dmg-root/Applications
+          hdiutil create -volname Yaagl -srcfolder dmg-root -fs APFS -format ULFO "dist/Yaagl-$VERSION.dmg"
+          ls -l dist dist/updates
+
+      - name: Generate appcast
+        if: env.PUBLISH == 'true'
+        env:
+          SPARKLE_ED_PRIVATE_KEY: ${{ secrets.SPARKLE_ED_PRIVATE_KEY }}
+        run: |
+          set -eu
+          curl -fsSL -o "$RUNNER_TEMP/sparkle.tar.xz" \
+            "https://github.com/sparkle-project/Sparkle/releases/download/$SPARKLE_VERSION/Sparkle-$SPARKLE_VERSION.tar.xz"
+          echo "$SPARKLE_SHA256  $RUNNER_TEMP/sparkle.tar.xz" | shasum -a 256 -c -
+          mkdir "$RUNNER_TEMP/sparkle"
+          tar -xJf "$RUNNER_TEMP/sparkle.tar.xz" -C "$RUNNER_TEMP/sparkle" ./bin
+          # The private key goes in through stdin only, never to disk or argv.
+          printf '%s' "$SPARKLE_ED_PRIVATE_KEY" | "$RUNNER_TEMP/sparkle/bin/generate_appcast" --ed-key-file - \
+            --download-url-prefix "https://github.com/$GITHUB_REPOSITORY/releases/download/$VERSION/" \
+            -o dist/appcast.xml dist/updates
+          grep -q 'sparkle:edSignature' dist/appcast.xml \
+            || { echo "::error::appcast has no EdDSA signature"; exit 1; }
+          grep -q "<sparkle:shortVersionString>$VERSION<" dist/appcast.xml \
+            || { echo "::error::appcast does not list $VERSION"; exit 1; }
+          cat dist/appcast.xml
+
+      - name: Upload build artifacts (dry run)
+        if: env.PUBLISH != 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: Yaagl-${{ env.VERSION }}
+          path: dist
+          retention-days: 7
+
+      - name: Publish release
+        if: env.PUBLISH == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -eu
+          cat > notes.md <<'NOTES'
+          First install: drag Yaagl to Applications, then allow it once under System Settings > Privacy & Security > Open Anyway. The app is ad-hoc signed and not notarized. Later updates arrive through the built-in updater.
+          NOTES
+          gh release create "$VERSION" --verify-tag --title "$VERSION" --generate-notes --notes-file notes.md \
+            "dist/Yaagl-$VERSION.dmg" "dist/updates/Yaagl-$VERSION.zip" dist/appcast.xml
