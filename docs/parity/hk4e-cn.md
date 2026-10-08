@@ -211,26 +211,26 @@
 | UPG-012 | 清理 ldiff | 照搬 | TS 行为不变，但依 ADR 0002 在 Sophon/Launcher 重做 | 单元 |  |
 | UPG-013 | 更新完成后启动器侧的状态 | 照搬 | TS 行为不变，但依 ADR 0002 在 Sophon/Launcher 重做 | 单元 |  |
 | UPG-014 | 更新和修复的处理范围 | 照搬 | [#28](https://github.com/tanzby/yet-another-anime-game-launcher/issues/28) A5 语音包不管（有意照搬） | 单元 |  |
-| WIN-001 | 内置的 Wine 发行版清单 | 改写 | ADR 0001/0002 / [#27](https://github.com/tanzby/yet-another-anime-game-launcher/issues/27) (removexattr 不提权) | 单元 |  |
-| WIN-002 | 默认的 Wine 版本 | 改写 | [#29](https://github.com/tanzby/yet-another-anime-game-launcher/issues/29)/ADR 0001 | 单元 |  |
-| WIN-003 | 判断 Wine 是否就绪 | 改写 | [#29](https://github.com/tanzby/yet-another-anime-game-launcher/issues/29)/ADR 0001 | 单元 |  |
-| WIN-004 | wine_tag 不在清单中时强制重装 | 改写 | [#29](https://github.com/tanzby/yet-another-anime-game-launcher/issues/29)/ADR 0001 | 单元 |  |
+| WIN-001 | 内置的 Wine 发行版清单 | 改写 | ADR 0001/0002 / [#27](https://github.com/tanzby/yet-another-anime-game-launcher/issues/27) (removexattr 不提权) | 单元 | WineStatusTests（pinned 清单） |
+| WIN-002 | 默认的 Wine 版本 | 改写 | [#29](https://github.com/tanzby/yet-another-anime-game-launcher/issues/29)/ADR 0001 | 单元 | WineStatusTests（固定 Wine / DXMT 版本） |
+| WIN-003 | 判断 Wine 是否就绪 | 改写 | [#29](https://github.com/tanzby/yet-another-anime-game-launcher/issues/29)/ADR 0001 | 单元 | WineStatusTests（磁盘与版本戳判定） |
+| WIN-004 | wine_tag 不在清单中时强制重装 | 改写 | [#29](https://github.com/tanzby/yet-another-anime-game-launcher/issues/29)/ADR 0001 | 单元 | WineStatusTests（旧 tag 即不符；不依赖 shim 文件） |
 | WIN-005 | 启动时按 Wine 状态分流 | 改写 | ADR 0001/0002 / [#27](https://github.com/tanzby/yet-another-anime-game-launcher/issues/27) (removexattr 不提权) | 单元 |  |
-| WIN-006 | 安装或切换 Wine 时先删除 prefix | 改写 | [#29](https://github.com/tanzby/yet-another-anime-game-launcher/issues/29)/ADR 0001 | 单元 |  |
-| WIN-007 | 下载 Wine 安装包并判断格式 | 照搬 | Wine 运行时行为不变 | 单元 |  |
-| WIN-008 | 解压规则 | 照搬 | Wine 运行时行为不变 | 单元 |  |
-| WIN-009 | 向 wine.inf 注入根证书 | 照搬 | [#28](https://github.com/tanzby/yet-another-anime-game-launcher/issues/28) B19 根证书（有意照搬） | diag |  |
+| WIN-006 | 安装或切换 Wine 时先删除 prefix | 改写 | [#29](https://github.com/tanzby/yet-another-anime-game-launcher/issues/29)/ADR 0001 | 单元 | WineInstallTests（重装先下后删，prefix 一并重建） |
+| WIN-007 | 下载 Wine 安装包并判断格式 | 照搬 | Wine 运行时行为不变 | 单元 | WineInstallTests、DownloaderTests |
+| WIN-008 | 解压规则 | 照搬 | Wine 运行时行为不变 | 单元 | WineInstallTests、SystemProcessRunnerTests |
+| WIN-009 | 向 wine.inf 注入根证书 | 照搬 | [#28](https://github.com/tanzby/yet-another-anime-game-launcher/issues/28) B19 根证书（有意照搬） | diag | WineInfTests、WineInstallTests |
 | WIN-010 | 移除 quarantine 属性（需要管理员权限） | 改写 | ADR 0001/0002 / [#27](https://github.com/tanzby/yet-another-anime-game-launcher/issues/27) (removexattr 不提权) | diag | `WIN_010_*`（QuarantineTests） |
 | WIN-011 | 在 /etc/hosts 中维护永久屏蔽段 | 改写 | [#29](https://github.com/tanzby/yet-another-anime-game-launcher/issues/29)/ADR 0001 | diag | `WIN_011_*`（HostsBlocklistTests、TelemetryHostsTests）；真机提权写入由 diag 验收 |
-| WIN-012 | 初始化 prefix | 照搬 | Wine 运行时行为不变 | diag |  |
+| WIN-012 | 初始化 prefix | 照搬 | Wine 运行时行为不变 | diag | WineInstallTests（wineboot / winecfg argv 与日志；真机仍走 diag） |
 | WIN-013 | hk4ecn 不安装 Media Foundation | 作废 | 死/开发便利/无版本选择 UI/空列表 | — |  |
-| WIN-014 | 安装完成后写入状态 | 改写 | [#28](https://github.com/tanzby/yet-another-anime-game-launcher/issues/28) B20：删除 wine_netbiosname、wine_update_url 等死数据；状态由 Wine 目录版本戳推导（ADR 0002） | 单元 |  |
-| WIN-015 | NetBIOS 名称 | 改写 | [#28](https://github.com/tanzby/yet-another-anime-game-launcher/issues/28) B20 删死数据 / ADR 0002 启动顺序 | 单元 |  |
+| WIN-014 | 安装完成后写入状态 | 改写 | [#28](https://github.com/tanzby/yet-another-anime-game-launcher/issues/28) B20：删除 wine_netbiosname、wine_update_url 等死数据；状态由 Wine 目录版本戳推导（ADR 0002） | 单元 | WineInstallTests（版本戳最后写入） |
+| WIN-015 | NetBIOS 名称 | 改写 | [#28](https://github.com/tanzby/yet-another-anime-game-launcher/issues/28) B20 删死数据 / ADR 0002 启动顺序 | 单元 | WineInstallTests（负面：不写 NetBIOS） |
 | WIN-016 | 选择 Wine 可执行文件与基础环境 | 改写 | [#28](https://github.com/tanzby/yet-another-anime-game-launcher/issues/28) C 负面用例 | diag |  |
 | WIN-017 | 路径转换与 copy 特例 | 照搬 | Wine 运行时行为不变 | 单元 |  |
 | WIN-018 | Wine 关停与强杀 | 照搬 | Wine 运行时行为不变 | diag |  |
-| WIN-019 | DXMT 版本检查与下载 | 改写 | [#28](https://github.com/tanzby/yet-another-anime-game-launcher/issues/28) C 负面用例 | 单元 |  |
-| WIN-020 | 把 DXMT 注入 Wine 运行时 | 改写 | [#28](https://github.com/tanzby/yet-another-anime-game-launcher/issues/28) B12：DXMT 装 Wine 时一次装好，不再注入（ADR 0002 已修订） | 单元 |  |
-| WIN-021 | 还原 DXMT 注入 | 改写 | [#28](https://github.com/tanzby/yet-another-anime-game-launcher/issues/28) B12：DXMT 不再注入，因此无需还原（ADR 0002 已修订） | 单元 |  |
+| WIN-019 | DXMT 版本检查与下载 | 改写 | [#28](https://github.com/tanzby/yet-another-anime-game-launcher/issues/28) C 负面用例 | 单元 | WineStatusTests（DXMT 版本不符即重装） |
+| WIN-020 | 把 DXMT 注入 Wine 运行时 | 改写 | [#28](https://github.com/tanzby/yet-another-anime-game-launcher/issues/28) B12：DXMT 装 Wine 时一次装好，不再注入（ADR 0002 已修订） | 单元 | WineInstallTests（DXMT 随 Wine 一次装好） |
+| WIN-021 | 还原 DXMT 注入 | 改写 | [#28](https://github.com/tanzby/yet-another-anime-game-launcher/issues/28) B12：DXMT 不再注入，因此无需还原（ADR 0002 已修订） | 单元 | WineInstallTests（无 .bak，无需还原） |
 | WIN-022 | 打开 Wine 命令行窗口 | 改写 | [#21](https://github.com/tanzby/yet-another-anime-game-launcher/issues/21) 设置窗口重新设计；保留为开发便利入口（CFG-032） | 组件 |  |
 | WIN-023 | 当前版本不在清单中时的下拉框 | 作废 | 死/开发便利/无版本选择 UI/空列表 | — |  |
