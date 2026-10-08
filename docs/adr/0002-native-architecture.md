@@ -70,7 +70,7 @@ protocol GameClient: Sendable {
   - 未完成作业与预下载：`<game>/.yaagl-tmp/job.json`。「已预下载」由磁盘上的缓存与目标版本推导，不再单独存布尔值。
   - 都用 `Codable`、原子写入、忽略未知字段。
 - **首启清场**在 `Platform` 的 `DataDirectory`：`DataDirectory.prepare()` 没有原生标记就按 ADR 0001 清场，再写入标记，返回已就绪的数据目录值。清场只在标记文件不存在时触发；标记存在但内容不可识别，视为错误并报告，不清场。在它返回之前，其他模块拿不到数据目录路径。
-- **提权**：`AdminShell`（进程内 `NSAppleScript`）是 `Platform` 的内部类型，唯一调用方是 `HostsBlocklist`，不对外暴露「以 root 跑任意命令」。`HostsBlocklist.status()` 只读 `/etc/hosts`，不需要权限；`apply()` 弹出密码框。
+- **提权**：`AdminShell`（进程内 `NSAppleScript`）是 `Platform` 的内部类型，唯一调用方是 `HostsBlocklist`，不对外暴露「以 root 跑任意命令」。`HostsBlocklist.status()` 只读 `/etc/hosts`，不需要权限；`apply()` 弹出密码框。提权脚本只做一件事：`cmp` 确认 `/etc/hosts` 仍等于快照后，`cp` 暂存文件覆盖它（两者都由提权的 `do shell script` 的 shell 执行，不经 `ProcessRunning`，所以不受 `codesign`/`tar`/`ditto` 白名单约束；内容不经 shell 或格式串）。
 - `Launcher` 的启动顺序固定：清场 → hosts 检查（不通过则引导，并禁止启动游戏）→ Rosetta 检查（先于 2GB 的 Wine 下载）→ Wine 就绪 → `GameSession.recover()`（先 `wineserver -k` 并清孤儿进程，再重放 journal）→ 读取本地与远端游戏状态。
 
 ## Wine 与启动会话

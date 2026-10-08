@@ -25,23 +25,3 @@ public struct ProcessResult: Sendable, Equatable {
 public protocol AdminPrivilege: Sendable {
   func run(shellCommand: String) async throws
 }
-
-/// `~/Library/Application Support/Yaagl`. First-launch cleanup (ADR 0001) lands in `prepare()`.
-public struct DataDirectory: Sendable, Equatable {
-  public static let name = "Yaagl"
-  public static let nativeMarkerName = ".yaagl-native"
-
-  public let root: URL
-
-  public init(root: URL) {
-    self.root = root
-  }
-
-  public static var defaultRoot: URL {
-    URL.applicationSupportDirectory.appending(path: name, directoryHint: .isDirectory)
-  }
-
-  public var nativeMarker: URL {
-    root.appending(path: Self.nativeMarkerName, directoryHint: .notDirectory)
-  }
-}
