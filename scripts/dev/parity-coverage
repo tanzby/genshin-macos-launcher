@@ -14,7 +14,7 @@
 #
 # Sources searched:
 #   Tests/**/*.swift         lines with `func ` or `@Test`, comment lines excluded
-#   Diag/, scripts/diag/     any line (diag check names), if present
+#   Diag/, scripts/diag/     non-comment lines of non-markdown files, if present
 set -euo pipefail
 cd "$(dirname "$0")/../.."
 
@@ -46,15 +46,27 @@ bad=$(cut -d'|' -f2 "$tmp/rows" | grep -vxE '照搬|改写|作废' || true)
 cut -d'|' -f1 "$tmp/rows" | sort -u > "$tmp/all"
 grep -E '\|(照搬|改写)$' "$tmp/rows" | cut -d'|' -f1 | sort -u > "$tmp/required"
 
-# IDs referenced by tests / diag checks, normalised to the dashed form.
+# IDs referenced by tests / diag checks, normalised to the dashed form. Comment
+# lines (// /* * #) and docs (*.md) never count. An ID may be followed by `_`
+# and another ID (APP_011_INS_002_status), so extract with awk, not grep -o.
 {
   find Tests -name '*.swift' 2>/dev/null | while read -r f; do
-    grep -E 'func |@Test' "$f" | grep -vE '^[[:space:]]*(//|/\*|\*)' || true
+    grep -E 'func |@Test' "$f" || true
   done
   for d in Diag scripts/diag; do
-    [ -d "$d" ] && grep -rh '' "$d" || true
+    [ -d "$d" ] && find "$d" -type f ! -name '*.md' -exec cat {} + || true
   done
-} | grep -oE '(^|[^A-Za-z0-9])[A-Z]{3}[-_][0-9]{3}([^0-9]|$)' | grep -oE '[A-Z]{3}[-_][0-9]{3}' | tr '_' '-' | sort -u > "$tmp/refs" || true
+} | grep -vE '^[[:space:]]*(//|/\*|\*|#)' | awk '{
+  s = $0
+  while (match(s, /[A-Z][A-Z][A-Z][-_][0-9][0-9][0-9]/)) {
+    pre = (RSTART > 1) ? substr(s, RSTART - 1, 1) : ""
+    post = substr(s, RSTART + RLENGTH, 1)
+    if (pre !~ /[A-Za-z0-9]/ && post !~ /[0-9]/) {
+      id = substr(s, RSTART, RLENGTH); sub(/_/, "-", id); print id
+    }
+    s = substr(s, RSTART + 1)
+  }
+}' | sort -u > "$tmp/refs"
 
 unknown=$(comm -13 "$tmp/all" "$tmp/refs")
 [ -z "$unknown" ] || err "tests reference rules not in the checklist: $(echo "$unknown" | tr '\n' ' ')"
