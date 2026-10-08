@@ -1,0 +1,69 @@
+#!/bin/bash
+# Parity coverage check: every 照搬 / 改写 rule in docs/parity/hk4e-cn.md must be
+# referenced by at least one test name or diag check. Rule IDs are written
+# APP-011 in the checklist and APP_011 in Swift identifiers; both match.
+#
+#   scripts/dev/parity-coverage            report mode: list uncovered rules, exit 0
+#   scripts/dev/parity-coverage --strict   exit 1 if any rule is uncovered
+#   PARITY_STRICT=1 scripts/dev/parity-coverage   same as --strict
+#
+# Report mode is the transition state while module tickets are still writing
+# tests; the 1.0.0 release gate (docs/parity/hk4e-cn.md) requires --strict.
+# Both modes always fail on structural errors: malformed or duplicate rows, or a
+# test/diag referencing an ID that is not in the checklist.
+#
+# Sources searched:
+#   Tests/**/*.swift         lines with `func ` or `@Test` (test names, not comments)
+#   Diag/, scripts/diag/     any line (diag check names), if present
+set -eu
+cd "$(dirname "$0")/../.."
+
+strict=${PARITY_STRICT:-0}
+[ "${1:-}" = "--strict" ] && strict=1
+
+list=docs/parity/hk4e-cn.md
+tmp=$(mktemp -d)
+trap 'rm -rf "$tmp"' EXIT
+errors=0
+err() { echo "error: $*" >&2; errors=$((errors + 1)); }
+
+# id|disposition for every checklist row.
+awk -F'|' '/^\| [A-Z]+-[0-9]+ /{
+  gsub(/ /, "", $2); gsub(/ /, "", $4); print $2 "|" $4 }' "$list" | sort > "$tmp/rows"
+
+[ -s "$tmp/rows" ] || { err "no rule rows found in $list"; exit 1; }
+cut -d'|' -f1 "$tmp/rows" | sort | uniq -d | while read -r id; do echo "error: duplicate rule $id" >&2; done
+[ -z "$(cut -d'|' -f1 "$tmp/rows" | sort | uniq -d)" ] || errors=$((errors + 1))
+bad=$(cut -d'|' -f2 "$tmp/rows" | grep -vxE '照搬|改写|作废' || true)
+[ -z "$bad" ] || err "unknown disposition: $(echo "$bad" | sort -u | tr '\n' ' ')"
+
+cut -d'|' -f1 "$tmp/rows" | sort -u > "$tmp/all"
+grep -E '\|(照搬|改写)$' "$tmp/rows" | cut -d'|' -f1 | sort -u > "$tmp/required"
+
+# IDs referenced by tests / diag checks, normalised to the dashed form.
+{
+  find Tests -name '*.swift' 2>/dev/null | while read -r f; do
+    grep -E 'func |@Test' "$f" || true
+  done
+  for d in Diag scripts/diag; do
+    [ -d "$d" ] && grep -rh '' "$d" || true
+  done
+} | grep -oE '(^|[^A-Za-z0-9])[A-Z]{3}[-_][0-9]{3}([^0-9]|$)' | grep -oE '[A-Z]{3}[-_][0-9]{3}' | tr '_' '-' | sort -u > "$tmp/refs" || true
+
+unknown=$(comm -13 "$tmp/all" "$tmp/refs")
+[ -z "$unknown" ] || err "tests reference rules not in the checklist: $(echo "$unknown" | tr '\n' ' ')"
+
+void_refs=$(comm -12 "$tmp/refs" <(grep '作废' "$tmp/rows" | cut -d'|' -f1 | sort -u))
+[ -z "$void_refs" ] || echo "warning: tests reference 作废 rules: $(echo "$void_refs" | tr '\n' ' ')" >&2
+
+comm -23 "$tmp/required" "$tmp/refs" > "$tmp/missing"
+total=$(wc -l < "$tmp/required" | tr -d ' ')
+missing=$(wc -l < "$tmp/missing" | tr -d ' ')
+echo "parity coverage: $((total - missing))/$total 照搬/改写 rules referenced by a test or diag check"
+if [ "$missing" -gt 0 ]; then
+  echo "uncovered:"
+  tr '\n' ' ' < "$tmp/missing" | fold -s -w 100 | sed 's/^/  /'
+  echo
+  if [ "$strict" = 1 ]; then err "$missing rules uncovered (strict mode)"; fi
+fi
+[ "$errors" -eq 0 ]
