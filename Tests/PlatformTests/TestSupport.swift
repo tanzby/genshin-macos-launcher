@@ -35,9 +35,12 @@ struct TempDir {
 final class ShellAdmin: AdminPrivilege, @unchecked Sendable {
   private(set) var commands: [String] = []
   var failure: (any Error)?
+  /// Runs just before the command, e.g. to simulate another tool editing hosts mid-prompt.
+  var beforeRun: ((Int) -> Void)?
 
   func run(shellCommand: String) async throws {
     commands.append(shellCommand)
+    beforeRun?(commands.count)
     if let failure { throw failure }
     let process = Process()
     process.executableURL = URL(filePath: "/bin/sh")

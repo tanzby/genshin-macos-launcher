@@ -204,3 +204,25 @@ import Testing
     #expect(try String(contentsOf: file, encoding: .utf8).contains("10.0.0.1 mine"))
   }
 }
+
+@Suite struct HostsBlocklistConcurrencyTests {
+  @Test func WIN_011_editDuringPasswordPromptIsPreservedAndBlocklistStillApplied() async throws {
+    let temp = try TempDir()
+    defer { temp.cleanup() }
+    let file = temp.path("hosts")
+    try "127.0.0.1 localhost\n".write(to: file, atomically: true, encoding: .utf8)
+    let admin = ShellAdmin()
+    admin.beforeRun = { call in
+      if call == 1 { try? "127.0.0.1 localhost\n10.9.9.9 vpn\n".write(to: file, atomically: true, encoding: .utf8) }
+    }
+    let blocklist = HostsBlocklist(
+      domains: ["a.example.com"], hostsFile: file, admin: admin, scratchDirectory: temp.url)
+
+    try await blocklist.apply()
+
+    let result = try String(contentsOf: file, encoding: .utf8)
+    #expect(result.contains("10.9.9.9 vpn"))
+    #expect(try blocklist.status() == .current)
+    #expect(admin.commands.count == 2)
+  }
+}

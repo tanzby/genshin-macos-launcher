@@ -55,21 +55,44 @@ public struct HostsBlocklist: Sendable {
     return sections.count == 1 && first.terminated && actual == expected ? .current : .outdated
   }
 
-  /// Rewrites the section (appending it if absent) through an elevated `cp` of a temp file, so the
-  /// file's content never passes through a shell or a format string.
+  /// Rewrites the section (appending it if absent) through an elevated, guarded `cp` of a temp
+  /// file, so the file's content never passes through a shell or a format string. The copy only
+  /// happens if `/etc/hosts` still equals the snapshot the new content was built from; if somebody
+  /// else edited it while the password dialog was open, the whole step is redone on fresh content.
   public func apply() async throws {
-    guard try status() != .current else { return }
-    let updated = Self.merged(section: Self.section(for: domains), into: try currentContents())
-    let staged = scratchDirectory.appending(path: "yaagl-hosts-\(UUID().uuidString)")
-    try updated.write(to: staged, atomically: true, encoding: .utf8)
-    defer { try? FileManager.default.removeItem(at: staged) }
+    for attempt in 1...Self.maxAttempts {
+      guard try status() != .current else { return }
+      let snapshot = try currentContents()
+      let updated = Self.merged(section: Self.section(for: domains), into: snapshot)
+      let id = UUID().uuidString
+      let stagedNew = scratchDirectory.appending(path: "yaagl-hosts-\(id)")
+      let stagedOld = scratchDirectory.appending(path: "yaagl-hosts-\(id).orig")
+      try updated.write(to: stagedNew, atomically: true, encoding: .utf8)
+      try snapshot.write(to: stagedOld, atomically: true, encoding: .utf8)
+      defer {
+        try? FileManager.default.removeItem(at: stagedNew)
+        try? FileManager.default.removeItem(at: stagedOld)
+      }
 
-    try await admin.run(
-      shellCommand: "/bin/cp \(AdminShell.shellQuote(staged.path)) \(AdminShell.shellQuote(hostsFile.path))")
-    guard try status() == .current else {
-      throw AdminPrivilegeError.failed("hosts file does not contain the blocklist after writing")
+      let hosts = AdminShell.shellQuote(hostsFile.path)
+      let command =
+        "/usr/bin/cmp -s \(AdminShell.shellQuote(stagedOld.path)) \(hosts) && "
+        + "/bin/cp \(AdminShell.shellQuote(stagedNew.path)) \(hosts)"
+      do {
+        try await admin.run(shellCommand: command)
+      } catch AdminPrivilegeError.failed(let message) {
+        // Retry only when the guard tripped, i.e. the file really changed under us.
+        if try currentContents() != snapshot, attempt < Self.maxAttempts { continue }
+        throw AdminPrivilegeError.failed(message)
+      }
+      guard try status() == .current else {
+        throw AdminPrivilegeError.failed("hosts file does not contain the blocklist after writing")
+      }
+      return
     }
   }
+
+  private static let maxAttempts = 3
 
   private func currentContents() throws -> String {
     guard FileManager.default.fileExists(atPath: hostsFile.path) else { return "" }
