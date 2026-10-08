@@ -27,7 +27,7 @@
 | diag | 真机 `yaagl-diag`：看 Wine 进程、窗口、`gamehost.log`、prefix（游戏运行时行为，只能在这一层验证） |
 | 线上 | 只读的线上契约测试（getGameBranches / getBuild / getPatchBuild + 一个最小 chunk），独立 workflow，非 PR 必过项 |
 
-「对应测试」一列先留空，由各模块实现票填入。测试名带规则 ID（如 `APP_011_…`）；覆盖脚本（另票实现）核对每个「照搬/改写」ID 至少被一个测试或 diag 检查项引用。
+「对应测试」一列先留空，由各模块实现票填入。测试名带规则 ID（如 `APP_011_…`）；覆盖脚本 `scripts/dev/parity-coverage` 核对每个「照搬/改写」ID 至少被一个测试或 diag 检查项引用（见下）。
 
 ## 1.0.0 发布门槛
 
@@ -40,12 +40,22 @@
 
 真实 CN ldiff 更新**不阻塞**发布（TS 版也做不到），靠夹具和线上契约覆盖。
 
+## 覆盖脚本
+
+`scripts/dev/parity-coverage` 解析本清单，取处置为「照搬/改写」的 ID，在 `Tests/**/*.swift` 里含 `func ` 或 `@Test` 的行（测试名，注释不算）以及 `Diag/`、`scripts/diag/`（diag 检查项，目录存在时）里找引用。`APP-011` 与 `APP_011` 等价。
+
+- **报告模式**（默认）：列出未覆盖的 ID，退出码 0。各模块票还在补测试时 CI 用这个模式，已接入 `scripts/dev/macos-check`（因此也是 CI 和 pre-push）。
+- **严格模式**（`--strict` 或 `PARITY_STRICT=1`）：有任何未覆盖 ID 就失败。**1.0.0 发布前必须在严格模式下通过**，这是发布门槛第 2 项；发布 workflow 对正式版本（不带 `-rc.N` 后缀）显式用 `--strict`，所以 `1.0.0` 打 tag 时覆盖不全会被卡住，`1.0.0-rc.N` 只报告、不阻塞（rc 要先用来验证 Sparkle 更新）；最后一张模块票合并后，再在 CI 的 `swift` job 设 `PARITY_STRICT=1`，让日常 PR 也严格。
+- 两种模式都会在结构性错误时失败：清单行重复或处置不是照搬/改写/作废，或测试引用了清单里不存在的 ID。引用「作废」规则只警告。
+- 脚本是命名核对，不证明测试被执行：块注释、套件级 `@Suite(.disabled)` 之类的边角不处理，由发布门槛第 1 项「测试全绿」和 code review 兜底。
+- 脚本不看「对应测试」列，它只保证覆盖；该列是给人读的索引，由各票填写。
+
 ## 清单（基线 `f38cda4`）
 
 | 规则 ID | 标题 | 处置 | 依据 | 验收层 | 对应测试 |
 |---|---|---|---|---|---|
 | APP-001 | 应用启动顺序 | 改写 | [#28](https://github.com/tanzby/yet-another-anime-game-launcher/issues/28) B20 删死数据 / ADR 0002 启动顺序 | 组件 |  |
-| APP-002 | 数据目录的位置与解析 | 改写 | ADR 0001/0002 / [#27](https://github.com/tanzby/yet-another-anime-game-launcher/issues/27) (removexattr 不提权) | 组件 |  |
+| APP-002 | 数据目录的位置与解析 | 改写 | ADR 0001/0002 / [#27](https://github.com/tanzby/yet-another-anime-game-launcher/issues/27) (removexattr 不提权) | 组件 | `APP_002_*`（DataDirectoryTests） |
 | APP-003 | 启动时把 App bundle 同步到数据目录 | 作废 | [#17](https://github.com/tanzby/yet-another-anime-game-launcher/issues/17)/[#13](https://github.com/tanzby/yet-another-anime-game-launcher/issues/13) 无 sidecar/Neutralino | — |  |
 | APP-004 | 部分路径依赖进程当前目录 | 改写 | [#28](https://github.com/tanzby/yet-another-anime-game-launcher/issues/28) C 负面用例 | 组件 |  |
 | APP-005 | aria2 下载服务启动 | 作废 | [#17](https://github.com/tanzby/yet-another-anime-game-launcher/issues/17)/[#13](https://github.com/tanzby/yet-another-anime-game-launcher/issues/13) 无 sidecar/Neutralino | — |  |
@@ -136,7 +146,7 @@
 | LCH-018 | 把 steam.exe 和 lsteamclient 部署到 prefix | 照搬 | TS 行为不变；LaunchRecipe/GameSession 重做 | diag |  |
 | LCH-019 | patched 标记 | 改写 | [#28](https://github.com/tanzby/yet-another-anime-game-launcher/issues/28) B12：无 patched 标记，状态只看文件系统和 journal | 单元 |  |
 | LCH-020 | 每次启动生成一个游戏日志 | 改写 | [#28](https://github.com/tanzby/yet-another-anime-game-launcher/issues/28) B18 | 单元 |  |
-| LCH-021 | 屏蔽网络（临时修改 hosts 10 秒） | 改写 | [#29](https://github.com/tanzby/yet-another-anime-game-launcher/issues/29)/ADR 0001 | 单元 |  |
+| LCH-021 | 屏蔽网络（临时修改 hosts 10 秒） | 改写 | [#29](https://github.com/tanzby/yet-another-anime-game-launcher/issues/29)/ADR 0001 | 单元 | `LCH_021_*`（HostsBlocklistTests） |
 | LCH-022 | Game Mode 开关 | 改写 | [#28](https://github.com/tanzby/yet-another-anime-game-launcher/issues/28) A9：Game Mode 固定开启，无关闭分支；仅保留 LCH-023 的失败降级 | diag |  |
 | LCH-023 | game host 缺失或出错时降级 | 照搬 | TS 行为不变；LaunchRecipe/GameSession 重做 | diag |  |
 | LCH-024 | 安装 wine 加载器 shim | 照搬 | x86_64 shim/host 原样搬 (ADR 0002)；只能 E2E | diag |  |
@@ -210,8 +220,8 @@
 | WIN-007 | 下载 Wine 安装包并判断格式 | 照搬 | Wine 运行时行为不变 | 单元 |  |
 | WIN-008 | 解压规则 | 照搬 | Wine 运行时行为不变 | 单元 |  |
 | WIN-009 | 向 wine.inf 注入根证书 | 照搬 | [#28](https://github.com/tanzby/yet-another-anime-game-launcher/issues/28) B19 根证书（有意照搬） | diag |  |
-| WIN-010 | 移除 quarantine 属性（需要管理员权限） | 改写 | ADR 0001/0002 / [#27](https://github.com/tanzby/yet-another-anime-game-launcher/issues/27) (removexattr 不提权) | diag |  |
-| WIN-011 | 在 /etc/hosts 中维护永久屏蔽段 | 改写 | [#29](https://github.com/tanzby/yet-another-anime-game-launcher/issues/29)/ADR 0001 | diag |  |
+| WIN-010 | 移除 quarantine 属性（需要管理员权限） | 改写 | ADR 0001/0002 / [#27](https://github.com/tanzby/yet-another-anime-game-launcher/issues/27) (removexattr 不提权) | diag | `WIN_010_*`（QuarantineTests） |
+| WIN-011 | 在 /etc/hosts 中维护永久屏蔽段 | 改写 | [#29](https://github.com/tanzby/yet-another-anime-game-launcher/issues/29)/ADR 0001 | diag | `WIN_011_*`（HostsBlocklistTests、TelemetryHostsTests）；真机提权写入由 diag 验收 |
 | WIN-012 | 初始化 prefix | 照搬 | Wine 运行时行为不变 | diag |  |
 | WIN-013 | hk4ecn 不安装 Media Foundation | 作废 | 死/开发便利/无版本选择 UI/空列表 | — |  |
 | WIN-014 | 安装完成后写入状态 | 改写 | [#28](https://github.com/tanzby/yet-another-anime-game-launcher/issues/28) B20：删除 wine_netbiosname、wine_update_url 等死数据；状态由 Wine 目录版本戳推导（ADR 0002） | 单元 |  |
