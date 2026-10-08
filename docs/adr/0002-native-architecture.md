@@ -2,6 +2,8 @@
 
 原生 Swift 版（地图 #13，票 #22）按下面的模块和缝划分。这是后续骨架（#25）和各模块实现票的前提。前提条件已由其他票定下：macOS 26+、仅 Apple Silicon、Swift 6 strict concurrency、`@Observable`、SwiftPM + XcodeGen、Sophon 用 Swift 重写、只允许 Wine / x86_64 helper / 白名单系统工具作为外部进程（#27）、不兼容 TS 数据（ADR 0001）。
 
+> **修订（地图 #1、票 #2，依据旧仓库 [#28](https://github.com/tanzby/yet-another-anime-game-launcher/issues/28) 的决定）：** 删除 ReShade；DXMT 在安装 Wine 时一次装好，运行时不再注入和还原。下文相应段落已改。
+
 ## Target 与依赖
 
 仓库根目录的 `Package.swift` 一个包放所有库 target，每个库一个测试 target。XcodeGen 的 `project.yml` 只定义 App 和两个 x86_64 helper，App 依赖这个本地包。
@@ -55,7 +57,7 @@ protocol GameClient: Sendable {
 - **安装的前置条件**：目录为空，或只含 `.yaagl-tmp`（带 `job.json`）和中断安装留下的半成品。TS 的「必须为空」与幂等重跑冲突，因此放宽。
 - **Wine 准备不是持久化的 Pending Job。** 它发生在游戏目录存在之前，状态由 `<data>/wine/` 的版本戳推导：版本戳缺失或与固定版本不一致，就重新准备（下载走 `Downloader` 的 `resumeData`）。只有游戏作业（install、update、preDownload、repair）写 `job.json`。
 - **长作业与睡眠**：下载、更新、修复期间持有 `ProcessInfo.beginActivity`，避免 App Nap 和空闲睡眠打断。
-- **进度**：`Sophon` 对外只暴露收窄枚举 `SophonProgress`（`preparing`、`downloading(done,total)`、`verifying(done,total)`、`patching(done,total)`、`finalizing`）。操作形状是 `SophonClient.run(_:in:) -> AsyncThrowingStream<SophonProgress, Error>`，取消语义见下。生产端限流，每秒最多 4 条。速度和剩余时间由 `Launcher` 用滑动窗口计算，`Sophon` 不算。`Platform` 的下载（Wine、DXMT、ReShade）有自己的进度类型，`Launcher` 把它们和 `SophonProgress` 一起映射成统一的 `JobProgress`。
+- **进度**：`Sophon` 对外只暴露收窄枚举 `SophonProgress`（`preparing`、`downloading(done,total)`、`verifying(done,total)`、`patching(done,total)`、`finalizing`）。操作形状是 `SophonClient.run(_:in:) -> AsyncThrowingStream<SophonProgress, Error>`，取消语义见下。生产端限流，每秒最多 4 条。速度和剩余时间由 `Launcher` 用滑动窗口计算，`Sophon` 不算。`Platform` 的下载（Wine 与 DXMT）有自己的进度类型，`Launcher` 把它们和 `SophonProgress` 一起映射成统一的 `JobProgress`。
 - **Sophon 接口**：`onlineInfo() async throws -> OnlineInfo`（最新版本、安装大小、可增量更新的旧版本、`preDownload: 目标版本?`，分支为 null 是 `nil`，不是异常）；已装版本检测（`globalgamemanagers` 正则与 `config.ini` 取较小值）也在 `Sophon`，因为 `config.ini` 由它写。
 - **临时目录**：`<game>/.yaagl-tmp`（chunk 缓存、ldiff、组装中文件、`job.json`）。放在游戏目录内，是因为游戏目录可能在外置盘，只有同卷才能原子 rename 移入。TS 的位置也是游戏目录内（`.tmp`、`ldiff`），这里换新名字，并在 Sophon 首次运行时删掉遗留的 `<game>/.tmp` 和 `<game>/ldiff`，但只在该目录里存在 `config.ini` 或 `YuanShen.exe`（即确认是游戏目录）时才删。文件名用完整相对路径，修掉 TS 里按 basename 命名导致撞名的问题。
 
@@ -64,7 +66,7 @@ protocol GameClient: Sendable {
 - **偏好**（含游戏目录）用 `UserDefaults`，这是 macOS 惯例，Sparkle 的开关也在这里。`SettingsModel` 的类型化属性用 `didSet` 写入；已实测 `@Observable` 属性上的 `didSet` 同时能触发观察并写入 `UserDefaults`。
 - **不设集中的 `state.json`。机器状态跟着它描述的对象走**，对象被清掉时状态自然一起消失，不会出现「状态说有，磁盘上没有」：
   - 原生标记：`<data>/.yaagl-native`，单独的小文件（内容含 `schemaVersion`）。标记不与其他状态共用文件，别的状态损坏不会被误当成「没有标记」而触发清场。
-  - Wine 与 DXMT 的版本：各自目录里的版本戳文件（`<data>/wine/`、`<data>/dxmt/`），重装时随目录一起消失。
+  - Wine 与 DXMT 的版本：DXMT 随 Wine 一次装好，两者共用 `<data>/wine/` 里的版本戳文件，重装时随目录一起消失。
   - 未完成作业与预下载：`<game>/.yaagl-tmp/job.json`。「已预下载」由磁盘上的缓存与目标版本推导，不再单独存布尔值。
   - 都用 `Codable`、原子写入、忽略未知字段。
 - **首启清场**在 `Platform` 的 `DataDirectory`：`DataDirectory.prepare()` 没有原生标记就按 ADR 0001 清场，再写入标记，返回已就绪的数据目录值。清场只在标记文件不存在时触发；标记存在但内容不可识别，视为错误并报告，不清场。在它返回之前，其他模块拿不到数据目录路径。
@@ -73,8 +75,8 @@ protocol GameClient: Sendable {
 
 ## Wine 与启动会话
 
-- `Wine` 对外两个东西。`WineRuntime`（actor）：确保已安装固定版本、重装、prefix 初始化、DXMT 下载、shutdown。`GameSession`：`launch(recipe:game:)` 一次调用里执行 `LaunchRecipe`：写注册表、`config.bat`、Launch Mutations、启动、等待退出、清理。**清理不放 `defer`**：它是异步的（`wineserver -w`、15 秒竞速、`reg delete`），已取消的 Task 里子 await 会立即抛错，所以清理跑在不受取消影响、不抛错的独立上下文里，错误只记日志。
-- **崩溃恢复**：改动前先写 mutations journal（数据目录里的小文件，记录要还原的文件改名、注册表项、DXMT DLL），正常还原后删除。`Launcher` 启动时调用 `GameSession.recover()`（见启动顺序）重放 journal，取代 TS 的 `patched` 标记。重放按磁盘的实际状态逐项幂等；`.bak` 已存在时拒绝覆盖，避免干净备份被 DXMT 版本覆盖（TS 的 `patch.ts:69-73` 有此风险）；注册表项记录原值，或「原本不存在」。这样「异常退出时是否撤销 HDR / 分辨率注册表」只是 #28 可以直接选的策略，不再是架构问题。
+- `Wine` 对外两个东西。`WineRuntime`（actor）：确保已安装固定版本（Wine 与 DXMT 在同一次安装里一起装好）、重装、prefix 初始化、shutdown。`GameSession`：`launch(recipe:game:)` 一次调用里执行 `LaunchRecipe`：写注册表、`config.bat`、Launch Mutations、启动、等待退出、清理。**清理不放 `defer`**：它是异步的（`wineserver -w`、15 秒竞速、`reg delete`），已取消的 Task 里子 await 会立即抛错，所以清理跑在不受取消影响、不抛错的独立上下文里，错误只记日志。
+- **崩溃恢复**：改动前先写 mutations journal（数据目录里的小文件，记录要还原的文件改名和注册表原值），正常还原后删除。`Launcher` 启动时调用 `GameSession.recover()`（见启动顺序）重放 journal，取代 TS 的 `patched` 标记。重放按磁盘的实际状态逐项幂等；`.bak` 已存在时拒绝覆盖，避免干净备份被覆盖；DXMT 不在其中：它在安装 Wine 时一次装好，运行时不注入、不还原，所以没有「崩溃丢原版 DLL」；注册表项记录原值，或「原本不存在」。这样「异常退出时是否撤销 HDR / 分辨率注册表」只是 #28 可以直接选的策略，不再是架构问题。
 - Game Mode、全屏、刘海区域全在注入 Wine 的 x86_64 shim 与 dylib 里，Swift 不重写；`Wine` 只负责准备 `YaaglGame.app`、`codesign`、`LSRegisterURL` 和传四个 `YAAGL_GAME_HOST*` 环境变量。
 
 ## 测试缝
@@ -84,15 +86,15 @@ protocol GameClient: Sendable {
 ## 其他行为的位置
 
 - **通知**：`JobCoordinator` 除了更新 `@Observable` 状态，还发出离散的 `JobEvent` 流（更新发布、可预下载、失败）。`@Observable` 会合并中间状态，不适合触发通知。通知代码只在 `YaaglApp`。
-- **ReShade**：保留。#21 已把它放在「高级」设置页，下载走 `Platform.Downloader`，注入逻辑在 `LaunchRecipe`。
+- **ReShade**：删除（旧仓库 #28 A7）。不下载、不注入、不复制 DLL，`LaunchRecipe` 里没有对应项；「高级」设置页放什么由设置 UI 票决定，不再有解锁手势。
 - **yaagl-diag 与自动启动（TS 的 `YAAGL_AUTOLAUNCH`）**：本票只保证架构上有位置（`Launcher` 暴露可由命令行参数驱动的入口，日志写数据目录 `logs/`），具体方案留给 diag 适配票。
 - **HTTP 重试与退避**：`Sophon` 与 `Platform` 各有一份，是十几行的值类型。为保持 `Sophon` 不依赖 `Platform`，接受这点重复。
-- **Wine 孤儿进程**：启动器被强杀后 Wine 会残留。`recover()` 在重放 journal 之前先 `wineserver -k` 并清理，避免游戏还在跑时还原 DXMT DLL。
+- **Wine 孤儿进程**：启动器被强杀后 Wine 会残留。`recover()` 在重放 journal 之前先 `wineserver -k` 并清理，避免游戏还在跑时还原游戏文件。
 
 ## 术语
 
 - **ldiff**：Sophon 的增量更新文件，一个文件里拼接多个 HDiffPatch 补丁。只在 `Sophon` 内部出现。
-- **Launch Mutations**：启动前对游戏文件、Wine 运行时和 prefix 的改动（`.bak` 改名、DXMT 注入、protonextras、注册表），退出后还原。在 `GameSession` 内部。
+- **Launch Mutations**：启动前对游戏文件、Wine 运行时和 prefix 的改动（`.bak` 改名、protonextras、注册表），退出后还原。在 `GameSession` 内部。
 - 领域词汇里不单用「Patch」这个词。
 
 ## x86_64 helper 的源码位置
