@@ -13,7 +13,7 @@
 # test/diag referencing an ID that is not in the checklist.
 #
 # Sources searched:
-#   Tests/**/*.swift         lines with `func ` or `@Test`, comment lines excluded
+#   Tests/**/*.swift         Swift Testing `@Test` declarations (helpers and comments excluded)
 #   Diag/, scripts/diag/     non-comment lines of non-markdown files, if present
 set -euo pipefail
 cd "$(dirname "$0")/../.."
@@ -51,7 +51,11 @@ grep -E '\|(照搬|改写)$' "$tmp/rows" | cut -d'|' -f1 | sort -u > "$tmp/requi
 # and another ID (APP_011_INS_002_status), so extract with awk, not grep -o.
 {
   find Tests -name '*.swift' 2>/dev/null | while read -r f; do
-    grep -E 'func |@Test' "$f" || true
+    # Only real test declarations: a `@Test` line, the `func` line that follows a
+    # bare `@Test` attribute. Helpers don't count.
+    awk '/@Test/ { print; att = ($0 !~ /func /); next }
+         att && /func / { print; att = 0; next }
+         !/^[ \t]*$/ && !/^[ \t]*@/ { att = 0 }' "$f"
   done
   for d in Diag scripts/diag; do
     [ -d "$d" ] && find "$d" -type f ! -name '*.md' -exec cat {} + || true
