@@ -8,16 +8,21 @@ struct YaaglApp: App {
   @State private var launcher = LauncherModel(client: GenshinCNClient())
 
   // Sparkle refuses to start without an EdDSA public key, so builds made before
-  // the key exists (SUPublicEDKey empty) leave the updater stopped.
+  // the key exists (SUPublicEDKey empty) leave the updater stopped. Debug builds
+  // never start it: a local build must not offer to replace itself with a release.
   private let updaterController = SPUStandardUpdaterController(
-    startingUpdater: Self.hasUpdateKey,
+    startingUpdater: Self.startsUpdater,
     updaterDelegate: nil,
     userDriverDelegate: nil
   )
 
-  private static var hasUpdateKey: Bool {
-    let key = Bundle.main.object(forInfoDictionaryKey: "SUPublicEDKey") as? String
-    return key?.isEmpty == false
+  private static var startsUpdater: Bool {
+    #if DEBUG
+      return false
+    #else
+      let key = Bundle.main.object(forInfoDictionaryKey: "SUPublicEDKey") as? String
+      return key?.isEmpty == false
+    #endif
   }
 
   var body: some Scene {
