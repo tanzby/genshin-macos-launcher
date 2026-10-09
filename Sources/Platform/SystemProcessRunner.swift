@@ -10,9 +10,16 @@ public struct SystemProcessRunner: ProcessRunning {
   public static let systemTools: Set<String> = ["/usr/bin/codesign", "/usr/bin/tar", "/usr/bin/ditto"]
 
   private let allowedRoots: [URL]
+  /// How long a cancelled process gets after SIGTERM before it is killed.
+  let terminationGrace: TimeInterval
 
   public init(allowedRoots: [URL] = []) {
+    self.init(allowedRoots: allowedRoots, terminationGrace: 5)
+  }
+
+  init(allowedRoots: [URL], terminationGrace: TimeInterval) {
     self.allowedRoots = allowedRoots
+    self.terminationGrace = terminationGrace
   }
 
   func isAllowed(_ executable: URL) -> Bool {
@@ -61,14 +68,15 @@ public struct SystemProcessRunner: ProcessRunning {
         }
         do {
           try process.run()
-          if Task.isCancelled { process.terminate() }
+          // Cancelled before the process existed: onCancel found nothing to stop, so do it (with the KILL fallback).
+          if Task.isCancelled { Self.terminate(process, after: terminationGrace) }
         } catch {
           pipe.fileHandleForReading.readabilityHandler = nil
           continuation.resume(throwing: error)
         }
       }
     } onCancel: {
-      Self.terminate(process)
+      Self.terminate(process, after: terminationGrace)
     }
   }
 
@@ -99,13 +107,14 @@ public struct SystemProcessRunner: ProcessRunning {
         process.terminationHandler = { continuation.resume(returning: $0.terminationStatus) }
         do {
           try process.run()
-          if Task.isCancelled { process.terminate() }
+          // Cancelled before the process existed: onCancel found nothing to stop, so do it (with the KILL fallback).
+          if Task.isCancelled { Self.terminate(process, after: terminationGrace) }
         } catch {
           continuation.resume(throwing: error)
         }
       }
     } onCancel: {
-      Self.terminate(process)
+      Self.terminate(process, after: terminationGrace)
     }
   }
 
