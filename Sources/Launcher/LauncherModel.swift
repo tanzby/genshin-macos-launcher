@@ -203,6 +203,11 @@ public final class LauncherModel {
 
   private func begin(_ job: GameJob, store: PendingJobStore) -> AsyncThrowingStream<JobProgress, Error> {
     let pending = PendingJob(kind: job, targetVersion: status?.remoteVersion)
+    // A pre-download must not replace the marker of an unfinished install/update/repair: that one blocks launch.
+    if job == .preDownload, let existing = store.load(), existing.kind != .preDownload {
+      progress = .preparing
+      return client.run(job)
+    }
     do {
       try store.save(pending)
       pendingJob = pending
@@ -233,8 +238,10 @@ public final class LauncherModel {
       lastError = error
       eventSink.yield(.failed(job, error))
     } else {
-      let cleared = store.clear()
-      pendingJob = nil
+      // A finished pre-download leaves an unfinished install/update/repair marker alone.
+      let foreign = job == .preDownload && store.load().map { $0.kind != .preDownload } == true
+      let cleared = foreign || store.clear()
+      if !foreign { pendingJob = nil }
       await refresh()
       if cleared {
         eventSink.yield(.finished(job))

@@ -672,6 +672,19 @@ private final class Queried: Sendable {
     #expect(h.fake.runs.isEmpty)
   }
 
+  @Test func INS_015_preDownloadKeepsTheMarkerOfAnUnfinishedUpdate() async throws {
+    let h = await Harness(
+      status: Status.preDownloadable,
+      preexistingJobFile: #"{"schemaVersion":1,"kind":"update","targetVersion":"5.1.0"}"#)
+    try await h.begin(.preDownload)
+    #expect(h.jobFile?.kind == .update)
+    #expect(h.model.pendingJob?.kind == .update)
+    h.fake.finish(run: 0)
+    await h.model.waitUntilIdle()
+    #expect(h.jobFile?.kind == .update)  // finishing the pre-download must not delete it either
+    #expect(h.model.pendingJob?.kind == .update)
+  }
+
   @Test func PRG_006_pauseCancelsPreDownload() async throws {
     let h = await Harness(status: Status.preDownloadable)
     let run = try await h.begin(.preDownload)
