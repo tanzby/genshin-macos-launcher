@@ -83,7 +83,6 @@ extension WineRuntime {
       removeIfEmpty(layout.downloadsDirectory)
       throw error
     }
-    defer { try? fileManager.removeItem(at: layout.downloadsDirectory) }
 
     // 2. Unpack DXMT into scratch while nothing is destroyed yet; an invalid archive fails early.
     let dxmtFiles = try await unpackDXMT(zip: dxmtArchive, in: scratch)
@@ -128,6 +127,9 @@ extension WineRuntime {
     let encoder = JSONEncoder()
     encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
     try encoder.encode(stamp).write(to: layout.stampFile, options: .atomic)
+
+    // Done: the verified archives are no longer needed. After a failure they stay, so a retry does not download again.
+    try? fileManager.removeItem(at: layout.downloadsDirectory)
   }
 
   private func runTool(_ path: String, _ arguments: [String]) async throws {

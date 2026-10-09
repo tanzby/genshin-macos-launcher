@@ -109,6 +109,18 @@ import Testing
     }
   }
 
+  @Test("WIN-007 verified archives stay after a later step fails, so a retry does not download them again")
+  func archivesSurviveALaterFailure() async throws {
+    try await withWineTempDirectory { dir in
+      var options = WineHarnessOptions()
+      options.bootExitCode = 1
+      let h = try makeWineHarness(in: dir, options: options)
+      await #expect(throws: WineInstallError.self) { try await h.install() }
+      let kept = try FileManager.default.contentsOfDirectory(atPath: h.layout.downloadsDirectory.path)
+      #expect(kept.contains { $0.hasPrefix("dxmt-") })
+    }
+  }
+
   @Test("WIN-007 the progress of each archive grows across several reports")
   func progressGrows() async throws {
     try await withWineTempDirectory { dir in
