@@ -216,9 +216,9 @@
 | WIN-003 | 判断 Wine 是否就绪 | 改写 | [#29](https://github.com/tanzby/yet-another-anime-game-launcher/issues/29)/ADR 0001 | 单元 | WineStatusTests（磁盘与版本戳判定） |
 | WIN-004 | wine_tag 不在清单中时强制重装 | 改写 | [#29](https://github.com/tanzby/yet-another-anime-game-launcher/issues/29)/ADR 0001 | 单元 | WineStatusTests（旧 tag 即不符；不依赖 shim 文件） |
 | WIN-005 | 启动时按 Wine 状态分流 | 改写 | ADR 0001/0002 / [#27](https://github.com/tanzby/yet-another-anime-game-launcher/issues/27) (removexattr 不提权) | 单元 |  |
-| WIN-006 | 安装或切换 Wine 时先删除 prefix | 改写 | [#29](https://github.com/tanzby/yet-another-anime-game-launcher/issues/29)/ADR 0001 | 单元 | WineInstallTests（重装先下后删，prefix 一并重建） |
-| WIN-007 | 下载 Wine 安装包并判断格式 | 照搬 | Wine 运行时行为不变 | 单元 | WineInstallTests、DownloaderTests |
-| WIN-008 | 解压规则 | 照搬 | Wine 运行时行为不变 | 单元 | WineInstallTests、SystemProcessRunnerTests |
+| WIN-006 | 安装或切换 Wine 时先删除 prefix | 改写 | [#29](https://github.com/tanzby/yet-another-anime-game-launcher/issues/29)/ADR 0001 | 单元 | WineInstallTests（重装先下后删，prefix 一并重建）、WineInstallResumeTests（空间预检在下载与删除之前） |
+| WIN-007 | 下载 Wine 安装包并判断格式 | 照搬 | Wine 运行时行为不变 | 单元 | WineInstallTests、WineInstallResumeTests（并行下载、稳定路径）、DownloaderTests、DownloaderResumeTests（Range 续传） |
+| WIN-008 | 解压规则 | 照搬 | Wine 运行时行为不变 | 单元 | WineInstallTests、WineInstallResumeTests（失败带 tar/ditto 输出）、SystemProcessRunnerTests |
 | WIN-009 | 向 wine.inf 注入根证书 | 照搬 | [#28](https://github.com/tanzby/yet-another-anime-game-launcher/issues/28) B19 根证书（有意照搬） | diag | WineInfTests、WineInstallTests |
 | WIN-010 | 移除 quarantine 属性（需要管理员权限） | 改写 | ADR 0001/0002 / [#27](https://github.com/tanzby/yet-another-anime-game-launcher/issues/27) (removexattr 不提权) | diag | `WIN_010_*`（QuarantineTests） |
 | WIN-011 | 在 /etc/hosts 中维护永久屏蔽段 | 改写 | [#29](https://github.com/tanzby/yet-another-anime-game-launcher/issues/29)/ADR 0001 | diag | `WIN_011_*`（HostsBlocklistTests、TelemetryHostsTests）；真机提权写入由 diag 验收 |

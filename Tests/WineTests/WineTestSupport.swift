@@ -88,6 +88,12 @@ struct WineFixtures {
   var dxmt: DXMTRelease
 }
 
+/// Declared sizes of the fixture archives (the real files are a few KB). Required space = wine archive + 4 x DXMT archive (zip, tar.gz, unpacked) + installed + prefix.
+let wineFixtureArchiveSize: Int64 = 450_000_000
+let wineFixtureDXMTArchiveSize: Int64 = 30_000_000
+let wineFixtureInstalledSize: Int64 = 2_000_000_000
+let wineFixturePrefixSize: Int64 = 600_000_000
+
 let wineFixtureCommit = "abc1234def5678abc1234def5678abc1234def56"
 
 func makeWineFixtures(in directory: URL, options: WineFixtureOptions = .init()) throws -> WineFixtures {
@@ -152,10 +158,12 @@ func makeWineFixtures(in directory: URL, options: WineFixtureOptions = .init()) 
     dxmtZip: dxmtZip,
     distribution: WineDistribution(
       id: "test-wine-1", url: URL(string: "https://fixtures.invalid/wine.tar.xz")!, sha256: wineSHA,
-      winePath: options.winePath),
+      winePath: options.winePath, archiveSize: wineFixtureArchiveSize, installedSize: wineFixtureInstalledSize,
+      prefixSize: wineFixturePrefixSize),
     dxmt: DXMTRelease(
       version: "abc1234", commit: wineFixtureCommit,
-      zipURL: URL(string: "https://fixtures.invalid/dxmt-\(wineFixtureCommit).zip")!, sha256: dxmtSHA))
+      zipURL: URL(string: "https://fixtures.invalid/dxmt-\(wineFixtureCommit).zip")!, sha256: dxmtSHA,
+      archiveSize: wineFixtureDXMTArchiveSize))
 }
 
 // MARK: - Stub downloader
@@ -171,38 +179,55 @@ final class WineStubDownloader: Downloading, @unchecked Sendable {
 
   private let lock = NSLock()
   private var _requests: [Request] = []
+  private var _failing: Set<URL>
+  private var _active = 0
+  private var _maxActive = 0
   private let sources: [URL: URL]
-  private let failing: Set<URL>
   private let delay: Duration?
+  private let chunks: Int
 
-  init(fixtures: WineFixtures, failing: Set<URL> = [], delay: Duration? = nil) {
+  /// `chunks`: how many progress reports one download makes, each after a short suspension so concurrent
+  /// downloads interleave.
+  init(fixtures: WineFixtures, failing: Set<URL> = [], delay: Duration? = nil, chunks: Int = 4) {
     sources = [fixtures.distribution.url: fixtures.wineArchive, fixtures.dxmt.zipURL: fixtures.dxmtZip]
-    self.failing = failing
+    _failing = failing
     self.delay = delay
+    self.chunks = chunks
   }
 
   var requests: [Request] { lock.withLock { _requests } }
   func count(of url: URL) -> Int { requests.filter { $0.url == url }.count }
+  /// The highest number of downloads that were in flight at the same time.
+  var maxConcurrentDownloads: Int { lock.withLock { _maxActive } }
+  func setFailing(_ urls: Set<URL>) { lock.withLock { _failing = urls } }
 
   func download(
     from url: URL, to destination: URL, sha256: String?,
     progress: @escaping @Sendable (DownloadProgress) -> Void
   ) async throws {
-    lock.withLock { _requests.append(Request(url: url, destination: destination, sha256: sha256)) }
+    lock.withLock {
+      _requests.append(Request(url: url, destination: destination, sha256: sha256))
+      _active += 1
+      _maxActive = max(_maxActive, _active)
+    }
+    defer { lock.withLock { _active -= 1 } }
     if let delay { try await Task.sleep(for: delay) }
-    if failing.contains(url) { throw WineStubDownloadFailure() }
+    if lock.withLock({ _failing.contains(url) }) { throw WineStubDownloadFailure() }
     guard let source = sources[url] else { throw WineStubDownloadFailure() }
     let data = try Data(contentsOf: source)
     let actual = wineSHA256(data)
     if let sha256, sha256.lowercased() != actual {
       throw DownloadError.checksumMismatch(expected: sha256, actual: actual)
     }
-    progress(DownloadProgress(completed: Int64(data.count) / 2, total: Int64(data.count)))
+    let total = Int64(data.count)
+    for step in 1...chunks {
+      try await Task.sleep(for: .milliseconds(5))
+      progress(DownloadProgress(completed: total * Int64(step) / Int64(chunks), total: total))
+    }
     let fm = FileManager.default
     try fm.createDirectory(at: destination.deletingLastPathComponent(), withIntermediateDirectories: true)
     try? fm.removeItem(at: destination)
     try data.write(to: destination)
-    progress(DownloadProgress(completed: Int64(data.count), total: Int64(data.count)))
   }
 }
 
@@ -225,13 +250,18 @@ final class WineRecordingRunner: ProcessRunning, @unchecked Sendable {
   private let bootExitCode: Int32
   private let winecfgExitCode: Int32
   private let tarExitCode: Int32?
+  private let tarOutput: String
   private let real = SystemProcessRunner()
 
-  init(root: URL, bootExitCode: Int32 = 0, winecfgExitCode: Int32 = 0, tarExitCode: Int32? = nil) {
+  init(
+    root: URL, bootExitCode: Int32 = 0, winecfgExitCode: Int32 = 0, tarExitCode: Int32? = nil,
+    tarOutput: String = "tar: stub failure"
+  ) {
     self.root = root
     self.bootExitCode = bootExitCode
     self.winecfgExitCode = winecfgExitCode
     self.tarExitCode = tarExitCode
+    self.tarOutput = tarOutput
   }
 
   var calls: [WineRecordedCall] { lock.withLock { _calls } }
@@ -258,7 +288,7 @@ final class WineRecordingRunner: ProcessRunning, @unchecked Sendable {
     }
     switch executable.path {
     case "/usr/bin/tar":
-      if let tarExitCode { return ProcessResult(exitCode: tarExitCode, output: "tar: stub failure") }
+      if let tarExitCode { return ProcessResult(exitCode: tarExitCode, output: tarOutput) }
       return try await real.run(
         executable, arguments: arguments, environment: environment, workingDirectory: workingDirectory)
     case "/usr/bin/ditto":
@@ -290,8 +320,18 @@ final class WineRecordingRunner: ProcessRunning, @unchecked Sendable {
 final class WineProgressCollector: @unchecked Sendable {
   private let lock = NSLock()
   private var labels: [String] = []
+  private var _wine: [DownloadProgress] = []
+  private var _dxmt: [DownloadProgress] = []
+
+  var wineDownloads: [DownloadProgress] { lock.withLock { _wine } }
+  var dxmtDownloads: [DownloadProgress] { lock.withLock { _dxmt } }
 
   func record(_ progress: WineInstallProgress) {
+    switch progress {
+    case .downloadingWine(let value): lock.withLock { _wine.append(value) }
+    case .downloadingDXMT(let value): lock.withLock { _dxmt.append(value) }
+    default: break
+    }
     let label: String
     switch progress {
     case .downloadingWine: label = "downloadingWine"
@@ -344,6 +384,9 @@ struct WineHarnessOptions {
   var bootExitCode: Int32 = 0
   var winecfgExitCode: Int32 = 0
   var tarExitCode: Int32?
+  var tarOutput = "tar: stub failure"
+  /// Free bytes the volume reports. The default is plenty.
+  var availableBytes: Int64? = Int64.max
 }
 
 func makeWineHarness(in directory: URL, options: WineHarnessOptions = .init()) throws -> WineHarness {
@@ -355,10 +398,10 @@ func makeWineHarness(in directory: URL, options: WineHarnessOptions = .init()) t
     fixtures: fixtures, failing: options.failingURLs(fixtures), delay: options.downloadDelay)
   let runner = WineRecordingRunner(
     root: root, bootExitCode: options.bootExitCode, winecfgExitCode: options.winecfgExitCode,
-    tarExitCode: options.tarExitCode)
+    tarExitCode: options.tarExitCode, tarOutput: options.tarOutput)
   let runtime = WineRuntime(
     dataDirectory: DataDirectory(root: root), distribution: fixtures.distribution, dxmt: fixtures.dxmt,
-    downloader: downloader, runner: runner)
+    downloader: downloader, runner: runner, availableSpace: { [bytes = options.availableBytes] _ in bytes })
   return WineHarness(
     directory: directory, root: root, fixtures: fixtures, downloader: downloader, runner: runner,
     runtime: runtime)

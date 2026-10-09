@@ -11,6 +11,7 @@ public actor WineRuntime {
   let dxmt: DXMTRelease
   let downloader: any Downloading
   let runner: any ProcessRunning
+  let availableSpace: @Sendable (URL) -> Int64?
   private var installation: Task<Void, any Error>?
 
   public init(
@@ -18,7 +19,8 @@ public actor WineRuntime {
     distribution: WineDistribution = .pinned,
     dxmt: DXMTRelease = .pinned,
     downloader: any Downloading = Downloader(),
-    runner: (any ProcessRunning)? = nil
+    runner: (any ProcessRunning)? = nil,
+    availableSpace: @escaping @Sendable (URL) -> Int64? = WineRuntime.volumeAvailableSpace
   ) {
     let layout = WineLayout(root: dataDirectory.root)
     self.layout = layout
@@ -26,6 +28,13 @@ public actor WineRuntime {
     self.dxmt = dxmt
     self.downloader = downloader
     self.runner = runner ?? SystemProcessRunner(allowedRoots: [layout.runtimeDirectory])
+    self.availableSpace = availableSpace
+  }
+
+  /// Free bytes on the volume holding `url`, counting what the system can purge. `nil` if it cannot be read.
+  public static let volumeAvailableSpace: @Sendable (URL) -> Int64? = { url in
+    try? url.resourceValues(forKeys: [.volumeAvailableCapacityForImportantUsageKey])
+      .volumeAvailableCapacityForImportantUsage
   }
 
   public nonisolated var runtimeDirectory: URL { layout.runtimeDirectory }

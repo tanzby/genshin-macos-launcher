@@ -47,15 +47,47 @@ extension WineRuntime {
     try fileManager.createDirectory(at: scratch, withIntermediateDirectories: true)
     defer { try? fileManager.removeItem(at: scratch) }
 
-    // 1. Download and verify both archives before touching the working install, so a network
-    //    failure leaves the existing runtime and prefix alone.
-    let wineArchive = scratch.appending(path: "wine-archive", directoryHint: .notDirectory)
-    let dxmtArchive = scratch.appending(path: "dxmt.zip", directoryHint: .notDirectory)
-    try await downloader.download(from: distribution.url, to: wineArchive, sha256: distribution.sha256) {
-      progress(.downloadingWine($0))
+    // Archives sit at a stable path with a name derived from the checksum: an interrupted download resumes there
+    // on the next attempt (WIN-007).
+    let wineArchive = layout.downloadsDirectory.appending(
+      path: "wine-\(distribution.sha256.prefix(16)).archive", directoryHint: .notDirectory)
+    let dxmtArchive = layout.downloadsDirectory.appending(
+      path: "dxmt-\(dxmt.sha256.prefix(16)).zip", directoryHint: .notDirectory)
+
+    // 0. Free space, before anything is downloaded or deleted (WIN-006). An unreadable volume does not block.
+    //    On the data volume at the same time: the two archives, the unpacked runtime, the DXMT tar.gz and
+    //    unpacked files (taken as 3 x the zip) and the new prefix `wineboot` fills. Bytes of an archive that
+    //    is already there (finished or partial) are on the volume and no longer needed.
+    let required =
+      max(0, distribution.archiveSize - Self.bytesOnDisk(of: wineArchive))
+      + max(0, dxmt.archiveSize - Self.bytesOnDisk(of: dxmtArchive)) + 3 * dxmt.archiveSize
+      + distribution.installedSize + distribution.prefixSize
+    if let available = availableSpace(layout.root), available < required {
+      throw WineInstallError.insufficientDiskSpace(required: required, available: available)
     }
-    try await downloader.download(from: dxmt.zipURL, to: dxmtArchive, sha256: dxmt.sha256) {
-      progress(.downloadingDXMT($0))
+
+    // 1. Download and verify both archives before touching the working install, so a network failure leaves
+    //    the existing runtime and prefix alone. The two run in parallel.
+    try fileManager.createDirectory(at: layout.downloadsDirectory, withIntermediateDirectories: true)
+    let downloader = downloader, distribution = distribution, dxmt = dxmt
+    do {
+      try await withThrowingTaskGroup(of: Void.self) { group in
+        group.addTask {
+          try await downloader.download(from: distribution.url, to: wineArchive, sha256: distribution.sha256) {
+            progress(.downloadingWine($0))
+          }
+        }
+        group.addTask {
+          try await downloader.download(from: dxmt.zipURL, to: dxmtArchive, sha256: dxmt.sha256) {
+            progress(.downloadingDXMT($0))
+          }
+        }
+        try await group.waitForAll()
+      }
+    } catch {
+      // Partial files stay for the next attempt; an empty directory does not.
+      removeIfEmpty(layout.downloadsDirectory)
+      throw error
     }
 
     // 2. Unpack DXMT into scratch while nothing is destroyed yet; an invalid archive fails early.
@@ -79,7 +111,6 @@ extension WineRuntime {
       arguments += ["--strip-components=\(depth)", winePath]
     }
     try await runTool("/usr/bin/tar", arguments)
-    try? fileManager.removeItem(at: wineArchive)
 
     // 4. Root certificate, before wineboot (WIN-009).
     progress(.configuring)
@@ -101,6 +132,9 @@ extension WineRuntime {
     let encoder = JSONEncoder()
     encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
     try encoder.encode(stamp).write(to: layout.stampFile, options: .atomic)
+
+    // Done: the verified archives are no longer needed. After a failure they stay, so a retry does not download again.
+    try? fileManager.removeItem(at: layout.downloadsDirectory)
   }
 
   private func runTool(_ path: String, _ arguments: [String]) async throws {
@@ -108,7 +142,8 @@ extension WineRuntime {
       URL(filePath: path), arguments: arguments, environment: [:], workingDirectory: layout.root)
     guard result.exitCode == 0 else {
       throw WineInstallError.extractionFailed(
-        tool: URL(filePath: path).lastPathComponent, exitCode: result.exitCode)
+        tool: URL(filePath: path).lastPathComponent, exitCode: result.exitCode,
+        output: String(result.output.suffix(Self.toolOutputLimit)))
     }
   }
 
@@ -162,6 +197,18 @@ extension WineRuntime {
   private func replace(_ source: URL, with destination: URL) throws {
     try removeIfPresent(destination)
     try FileManager.default.copyItem(at: source, to: destination)
+  }
+
+  static let toolOutputLimit = 2000
+
+  /// Size of a finished download plus its `.part`, 0 if neither exists.
+  static func bytesOnDisk(of archive: URL) -> Int64 {
+    Downloader.fileSize(archive) + Downloader.fileSize(URL(filePath: archive.path + ".part"))
+  }
+
+  private func removeIfEmpty(_ directory: URL) {
+    let entries = (try? FileManager.default.contentsOfDirectory(atPath: directory.path)) ?? []
+    if entries.isEmpty { try? FileManager.default.removeItem(at: directory) }
   }
 
   private func removeIfPresent(_ url: URL) throws {
