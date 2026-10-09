@@ -22,7 +22,13 @@ public struct GenshinCNClient: GameClient {
     AsyncThrowingStream { $0.finish(throwing: GenshinCNClientError.notImplemented) }
   }
 
-  public func launch(_ options: LaunchOptions) async throws -> LaunchOutcome {
+  public func requiredDiskSpace(for job: GameJob) async throws -> Int64 {
+    throw GenshinCNClientError.notImplemented
+  }
+
+  public func launch(
+    _ options: LaunchOptions, onStarted: @escaping @Sendable () -> Void
+  ) async throws -> LaunchOutcome {
     throw GenshinCNClientError.notImplemented
   }
 

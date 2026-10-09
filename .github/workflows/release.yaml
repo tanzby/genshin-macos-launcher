@@ -98,7 +98,9 @@ jobs:
           test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$plist")" = "$BUILD"
           /usr/libexec/PlistBuddy -c 'Print :SUFeedURL' "$plist"
           # The built plist, not project.yml text, decides whether publishing is safe.
-          if [ "$PUBLISH" = true ] && [ -z "$(/usr/libexec/PlistBuddy -c 'Print :SUPublicEDKey' "$plist")" ]; then
+          ed_key=$(/usr/libexec/PlistBuddy -c 'Print :SUPublicEDKey' "$plist")
+          echo "ED_PUBLIC_KEY=$ed_key" >> "$GITHUB_ENV"
+          if [ "$PUBLISH" = true ] && [ -z "$ed_key" ]; then
             echo "::warning::SUPublicEDKey is empty in the built app; dry run, nothing is published"
             echo "PUBLISH=false" >> "$GITHUB_ENV"
           fi
@@ -135,6 +137,11 @@ jobs:
             || { echo "::error::appcast has no EdDSA signature"; exit 1; }
           grep -q "<sparkle:shortVersionString>$VERSION<" dist/appcast.xml \
             || { echo "::error::appcast does not list $VERSION"; exit 1; }
+          # The secret must pair with the SUPublicEDKey built into the app, or every
+          # client would reject this update. Check before anything is published.
+          sig=$(grep -o 'sparkle:edSignature="[^"]*"' dist/appcast.xml | head -1 | cut -d'"' -f2)
+          swift scripts/release/verify-ed-signature.swift "$ED_PUBLIC_KEY" "$sig" "dist/updates/Yaagl-$VERSION.zip" \
+            || { echo "::error::SPARKLE_ED_PRIVATE_KEY does not match SUPublicEDKey"; exit 1; }
           cat dist/appcast.xml
 
       - name: Upload build artifacts (dry run)

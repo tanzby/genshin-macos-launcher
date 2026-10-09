@@ -45,7 +45,7 @@ let package = Package(
     .testTarget(name: "PlatformTests", dependencies: ["Platform"]),
     .testTarget(name: "WineTests", dependencies: ["Wine"]),
     .testTarget(name: "LauncherTests", dependencies: ["Launcher"]),
-    .testTarget(name: "GenshinCNTests", dependencies: ["GenshinCN", "Launcher"]),
+    .testTarget(name: "GenshinCNTests", dependencies: ["GenshinCN", "Launcher", "Wine"]),
   ],
   swiftLanguageModes: [.v6]
 )
