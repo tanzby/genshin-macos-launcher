@@ -91,6 +91,19 @@ public struct WineLayout: Sendable, Equatable {
   /// DXMT files that replace the stock ones in `x86_64-windows`.
   static let dxmtWindowsFiles = ["d3d10core.dll", "d3d11.dll", "dxgi.dll", "winemetal.dll"]
 
+  /// Written by `GameSession` before it mutates anything; deleted after the restore. Its presence means a crash.
+  public var launchJournal: URL { root.appending(path: "launch-journal.json", directoryHint: .notDirectory) }
+  public var configBatch: URL { root.appending(path: "config.bat", directoryHint: .notDirectory) }
+  public var logsDirectory: URL { root.appending(path: "logs", directoryHint: .isDirectory) }
+  public var gameHostApp: URL { root.appending(path: "YaaglGame.app", directoryHint: .isDirectory) }
+  /// `lib/wine/x86_64-unix/wine`: Wine execs this for every new Windows process. The Game Mode shim replaces it.
+  public var unixWine: URL { unixLibraryDirectory.appending(path: "wine", directoryHint: .notDirectory) }
+  /// The original `wine`, renamed by the Game Mode shim install.
+  public var unixWineHost: URL { unixLibraryDirectory.appending(path: "wine-host", directoryHint: .notDirectory) }
+  public var prefixWindows: URL {
+    prefixDirectory.appending(path: "drive_c/windows", directoryHint: .isDirectory)
+  }
+
   public var wineBootLog: URL { root.appending(path: "wineboot.log", directoryHint: .notDirectory) }
   public var wineCfgLog: URL { root.appending(path: "winecfg.log", directoryHint: .notDirectory) }
 

@@ -68,7 +68,53 @@ public struct SystemProcessRunner: ProcessRunning {
         }
       }
     } onCancel: {
-      if process.isRunning { process.terminate() }
+      Self.terminate(process)
+    }
+  }
+
+  public func runLogging(
+    _ executable: URL,
+    arguments: [String],
+    environment: [String: String],
+    workingDirectory: URL?,
+    logFile: URL
+  ) async throws -> Int32 {
+    guard isAllowed(executable) else {
+      throw ProcessRunnerError.executableNotAllowed(executable.path)
+    }
+    try Data().write(to: logFile)
+    let handle = try FileHandle(forWritingTo: logFile)
+    defer { try? handle.close() }
+    let process = Process()
+    process.executableURL = executable
+    process.arguments = arguments
+    process.environment = ProcessInfo.processInfo.environment.merging(environment) { _, new in new }
+    process.currentDirectoryURL = workingDirectory
+    process.standardOutput = handle
+    process.standardError = handle
+    process.standardInput = FileHandle.nullDevice
+
+    return try await withTaskCancellationHandler {
+      try await withCheckedThrowingContinuation { continuation in
+        process.terminationHandler = { continuation.resume(returning: $0.terminationStatus) }
+        do {
+          try process.run()
+          if Task.isCancelled { process.terminate() }
+        } catch {
+          continuation.resume(throwing: error)
+        }
+      }
+    } onCancel: {
+      Self.terminate(process)
+    }
+  }
+
+  /// SIGTERM, then SIGKILL if the process is still there after a grace period (Wine loaders can ignore TERM).
+  static func terminate(_ process: Process, after grace: TimeInterval = 5) {
+    guard process.isRunning else { return }
+    process.terminate()
+    DispatchQueue.global().asyncAfter(deadline: .now() + grace) {
+      if process.isRunning { kill(process.processIdentifier, SIGKILL) }
     }
   }
 }

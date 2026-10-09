@@ -1,20 +1,6 @@
 import Foundation
 import Platform
 
-/// Everything a game needs from Wine for one launch, as plain values. The game module builds it;
-/// `GameSession` only executes it, so this module stays game-agnostic.
-public struct LaunchRecipe: Sendable, Equatable {
-  public var environment: [String: String]
-  public var registryFile: String
-  public var batchFile: String
-
-  public init(environment: [String: String] = [:], registryFile: String = "", batchFile: String = "") {
-    self.environment = environment
-    self.registryFile = registryFile
-    self.batchFile = batchFile
-  }
-}
-
 /// Owns the pinned Wine runtime and prefix.
 public actor WineRuntime {
   /// The one Wine version the app installs (ADR 0001).
@@ -76,9 +62,4 @@ public actor WineRuntime {
       task.cancel()
     }
   }
-}
-
-/// Executes a `LaunchRecipe`: launch mutations, run, wait, restore.
-public struct GameSession: Sendable {
-  public init() {}
 }
