@@ -14,6 +14,10 @@ public enum SophonError: Error, Equatable, Sendable {
   case ambiguousCategory(String)
   case decompressionFailed
   case invalidManifest(String)
+  /// A manifest path is absolute or escapes the game directory (INS-011).
+  case unsafePath(String)
+  /// A decompressed chunk or an assembled file did not match its manifest digest or size.
+  case checksumMismatch(path: String)
 }
 
 extension SophonError: LocalizedError {
@@ -27,6 +31,8 @@ extension SophonError: LocalizedError {
     case .ambiguousCategory(let name): "More than one Sophon category matches \(name)"
     case .decompressionFailed: "Sophon data could not be decompressed"
     case .invalidManifest(let reason): "Invalid Sophon manifest: \(reason)"
+    case .unsafePath(let path): "Sophon manifest path escapes the game directory: \(path)"
+    case .checksumMismatch(let path): "File is corrupt after download: \(path)"
     }
   }
 }
