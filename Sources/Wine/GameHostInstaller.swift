@@ -78,7 +78,6 @@ struct GameHostInstaller {
       && fileManager.fileExists(atPath: bundleExecutable.path)
       && fileManager.contentsEqual(atPath: bundleHostCopy.path, andPath: host.path)
     if !hostCopyCurrent {
-      try replace(host, with: bundleHostCopy)
       try replace(host, with: bundleExecutable)
       // The signing identifier must equal the bundle id, or every getaddrinfo stalls for ~35 s.
       let result = try await runner.run(
@@ -101,7 +100,17 @@ struct GameHostInstaller {
     }
 
     // 4. LaunchServices only needs to hear about it when something changed.
-    if changed { try launchServices.register(appAt: layout.gameHostApp) }
+    if changed {
+      do {
+        try launchServices.register(appAt: layout.gameHostApp)
+      } catch {
+        // Make the next launch redo the registration instead of believing the bundle is current.
+        try? fileManager.removeItem(at: infoPlist)
+        throw error
+      }
+    }
+    // The marker comes last: it says "signed, written and registered" (a failure above retries next launch).
+    if !hostCopyCurrent { try replace(host, with: bundleHostCopy) }
   }
 
   static func infoPlist(displayName: String) -> [String: Any] {

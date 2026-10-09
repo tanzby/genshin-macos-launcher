@@ -68,7 +68,8 @@ public struct GameSession: Sendable {
     do {
       // A journal left by a crash holds the player's real registry values. Replay it before reading
       // "originals", or the forced values of the crashed session would be saved as the originals.
-      await recover()
+      // Run it uncancellable: a half-done restore in a cancelled task would still delete the journal.
+      await Task { await recover() }.value
       try Task.checkCancellation()
       let hostEnvironment = await GameHostInstaller(
         layout: layout, runner: runner, launchServices: launchServices, helpers: helpers

@@ -246,6 +246,34 @@ private func expectNoGameHostVariables(_ f: LaunchFixture, sourceLocation: Sourc
     }
   }
 
+  @Test func LCH_025_aFailedCodesignIsRetriedOnTheNextLaunchInsteadOfTrustedAsCurrent() async throws {
+    try await withLaunchFixture(helperOptions) { f in
+      f.runner.responder.value = { call in
+        call.kind == .codesign ? ProcessResult(exitCode: 1, output: "codesign: failed") : nil
+      }
+      _ = await f.session.launch(makeLaunchRecipe())
+      f.runner.responder.value = nil
+
+      _ = await f.session.launch(makeLaunchRecipe())
+
+      #expect(f.runner.calls(.codesign).count == 2)
+      #expect(f.runner.gameCalls.last?.environment["YAAGL_GAME_HOST_EXE"] == f.macOSWine.path)
+    }
+  }
+
+  @Test func LCH_025_aFailedRegistrationIsRetriedOnTheNextLaunch() async throws {
+    try await withLaunchFixture(helperOptions) { f in
+      f.services.failure.value = FakeFailure(message: "lsregister failed")
+      _ = await f.session.launch(makeLaunchRecipe())
+      f.services.failure.value = nil
+
+      _ = await f.session.launch(makeLaunchRecipe())
+
+      #expect(f.services.registered.count == 2)
+      #expect(f.runner.gameCalls.last?.environment["YAAGL_GAME_HOST_EXE"] == f.macOSWine.path)
+    }
+  }
+
   @Test func LCH_025_aChangedWineHostRebuildsTheBundleSignsAndRegistersAgain() async throws {
     try await withLaunchFixture(helperOptions) { f in
       _ = await f.session.launch(makeLaunchRecipe())

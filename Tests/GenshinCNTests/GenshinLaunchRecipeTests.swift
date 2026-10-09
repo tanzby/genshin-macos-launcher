@@ -285,3 +285,14 @@ private func edits(_ recipe: LaunchRecipe, key: String) -> [RegistryEdit] {
     #expect(recipe.moveAside.first?.path == "/Games/原神 GI/YuanShen_Data/upload_crash.exe")
   }
 }
+
+@Suite("GenshinLaunchRecipe invalid resolution") struct GenshinLaunchRecipeInvalidResolutionTests {
+  @Test func LCH_008_outOfRangeResolutionIsSkippedWithoutTrapping() {
+    for bad in [(-1, 1080), (1920, 0), (Int.max, 1080)] {
+      let recipe = make(
+        .init(metalFX: true, customResolution: .init(width: bad.0, height: bad.1)))
+      #expect(edits(recipe, key: miHoYoKey).filter { $0.name != hdrName }.isEmpty)
+      #expect(recipe.environment["DXMT_METALFX_SPATIAL_SWAPCHAIN"] == "1")
+    }
+  }
+}

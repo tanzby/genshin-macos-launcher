@@ -6,7 +6,7 @@ import Testing
 @Suite struct ProcessTableTests {
   @Test func WIN_018_systemTableSeesOwnProcessWithArgumentsAndCwd() {
     let own = getpid()
-    let records = SystemProcessTable().processes(includeOpenPaths: false)
+    let records = SystemProcessTable().processes(includeOpenPaths: true)
     let me = records.first { $0.pid == own }
     #expect(me != nil)
     #expect(me?.arguments.isEmpty == false)

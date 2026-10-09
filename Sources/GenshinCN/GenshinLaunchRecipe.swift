@@ -71,7 +71,14 @@ public enum GenshinLaunchRecipe {
     protonExtras protonExtrasDirectory: URL
   ) -> LaunchRecipe {
     // MetalFX only takes effect at the display's native size (LCH-004).
-    let metalFX = settings.metalFX && settings.customResolution == nil
+    // Out-of-range values are skipped like the TS launcher did (LCH-008); the settings UI validates input.
+    let resolution = settings.customResolution.flatMap { resolution -> (UInt32, UInt32)? in
+      guard let width = UInt32(exactly: resolution.width), let height = UInt32(exactly: resolution.height),
+        width > 0, height > 0
+      else { return nil }
+      return (width, height)
+    }
+    let metalFX = settings.metalFX && resolution == nil
 
     var environment = [
       "WINE_ENABLE_TIMEOUT_FIX": "1",
@@ -101,11 +108,11 @@ public enum GenshinLaunchRecipe {
       settings.hdr
         ? RegistryEdit(key: gameKey, name: hdrValue, action: .set(.dword(1)), restoresOnExit: true)
         : RegistryEdit(key: gameKey, name: hdrValue, action: .delete, restoresOnExit: false))
-    if let resolution = settings.customResolution {
+    if let resolution {
       registry += [
         RegistryEdit(key: gameKey, name: fullscreenValue, action: .set(.dword(0)), restoresOnExit: true),
-        RegistryEdit(key: gameKey, name: widthValue, action: .set(.dword(UInt32(resolution.width))), restoresOnExit: true),
-        RegistryEdit(key: gameKey, name: heightValue, action: .set(.dword(UInt32(resolution.height))), restoresOnExit: true),
+        RegistryEdit(key: gameKey, name: widthValue, action: .set(.dword(resolution.0)), restoresOnExit: true),
+        RegistryEdit(key: gameKey, name: heightValue, action: .set(.dword(resolution.1)), restoresOnExit: true),
       ]
     }
 

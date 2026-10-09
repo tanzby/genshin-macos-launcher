@@ -6,8 +6,9 @@ public struct ProcessRecord: Sendable, Equatable {
   public var pid: Int32
   /// The process's argv as it holds it in memory. Wine rewrites it to the Windows command line.
   public var arguments: [String]
+  /// Working directory and open files are only filled when asked for (a syscall per process or fd).
   public var workingDirectory: String?
-  /// Paths of files the process has open. Only filled when asked for (it costs a syscall per fd).
+  /// Paths of files the process has open.
   public var openPaths: [String]
 
   public init(pid: Int32, arguments: [String], workingDirectory: String? = nil, openPaths: [String] = []) {
@@ -45,7 +46,7 @@ public struct SystemProcessTable: ProcessTable {
         ProcessRecord(
           pid: pid,
           arguments: Self.arguments(of: pid),
-          workingDirectory: Self.workingDirectory(of: pid),
+          workingDirectory: includeOpenPaths ? Self.workingDirectory(of: pid) : nil,
           openPaths: includeOpenPaths ? Self.openPaths(of: pid) : []))
     }
     return result
