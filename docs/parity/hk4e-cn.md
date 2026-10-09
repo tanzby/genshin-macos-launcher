@@ -54,7 +54,7 @@
 
 | 规则 ID | 标题 | 处置 | 依据 | 验收层 | 对应测试 |
 |---|---|---|---|---|---|
-| APP-001 | 应用启动顺序 | 改写 | [#28](https://github.com/tanzby/yet-another-anime-game-launcher/issues/28) B20 删死数据 / ADR 0002 启动顺序 | 组件 |  |
+| APP-001 | 应用启动顺序 | 改写 | [#28](https://github.com/tanzby/yet-another-anime-game-launcher/issues/28) B20 删死数据 / ADR 0002 启动顺序 | 组件 | `APP_001_*`（LauncherWineTests：Wine 就绪先于读取游戏状态；清场、hosts、Rosetta 步骤归各自的票） |
 | APP-002 | 数据目录的位置与解析 | 改写 | ADR 0001/0002 / [#27](https://github.com/tanzby/yet-another-anime-game-launcher/issues/27) (removexattr 不提权) | 组件 | `APP_002_*`（DataDirectoryTests） |
 | APP-003 | 启动时把 App bundle 同步到数据目录 | 作废 | [#17](https://github.com/tanzby/yet-another-anime-game-launcher/issues/17)/[#13](https://github.com/tanzby/yet-another-anime-game-launcher/issues/13) 无 sidecar/Neutralino | — |  |
 | APP-004 | 部分路径依赖进程当前目录 | 改写 | [#28](https://github.com/tanzby/yet-another-anime-game-launcher/issues/28) C 负面用例 | 组件 |  |
@@ -215,7 +215,7 @@
 | WIN-002 | 默认的 Wine 版本 | 改写 | [#29](https://github.com/tanzby/yet-another-anime-game-launcher/issues/29)/ADR 0001 | 单元 | WineStatusTests（固定 Wine / DXMT 版本） |
 | WIN-003 | 判断 Wine 是否就绪 | 改写 | [#29](https://github.com/tanzby/yet-another-anime-game-launcher/issues/29)/ADR 0001 | 单元 | WineStatusTests（磁盘与版本戳判定） |
 | WIN-004 | wine_tag 不在清单中时强制重装 | 改写 | [#29](https://github.com/tanzby/yet-another-anime-game-launcher/issues/29)/ADR 0001 | 单元 | WineStatusTests（旧 tag 即不符；不依赖 shim 文件） |
-| WIN-005 | 启动时按 Wine 状态分流 | 改写 | ADR 0001/0002 / [#27](https://github.com/tanzby/yet-another-anime-game-launcher/issues/27) (removexattr 不提权) | 单元 |  |
+| WIN-005 | 启动时按 Wine 状态分流 | 改写 | ADR 0001/0002 / [#27](https://github.com/tanzby/yet-another-anime-game-launcher/issues/27) (removexattr 不提权) | 单元 | `WIN_005_*`（LauncherWineTests：Wine 未就绪即准备、已就绪跳过、暂停 / 继续、出错回空闲可重试、不写 job.json） |
 | WIN-006 | 安装或切换 Wine 时先删除 prefix | 改写 | [#29](https://github.com/tanzby/yet-another-anime-game-launcher/issues/29)/ADR 0001 | 单元 | WineInstallTests（重装先下后删，prefix 一并重建）、WineInstallResumeTests（空间预检在下载与删除之前） |
 | WIN-007 | 下载 Wine 安装包并判断格式 | 照搬 | Wine 运行时行为不变 | 单元 | WineInstallTests、WineInstallResumeTests（并行下载、稳定路径）、DownloaderTests、DownloaderResumeTests（Range 续传） |
 | WIN-008 | 解压规则 | 照搬 | Wine 运行时行为不变 | 单元 | WineInstallTests、WineInstallResumeTests（失败带 tar/ditto 输出）、SystemProcessRunnerTests |

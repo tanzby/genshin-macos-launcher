@@ -57,7 +57,7 @@ protocol GameClient: Sendable {
 - **取消必须等停稳。** `JobCoordinator` 持有作业的 Task：暂停是 cancel 之后 `await task.value`，作业真正停下后才允许重跑，等待期间 UI 显示「正在暂停…」。`AsyncThrowingStream` 用 `onTermination` 取消内部 Task。zstd 解压、MD5、HDiffPatch 是阻塞的 C 调用，不占协作线程池，放在专用队列执行；在文件边界和 HPatch 输入流的读回调处检查取消（读回调能否作为中断点，由 Sophon 实现票验证）。
 - **「已完成」的判据**：续传时，目标文件大小一致即跳过（与 TS 一致）；整文件 MD5 只在 `repair(reliable)` 做。`config.ini` 的版本号在下完并校验之后才写。
 - **安装的前置条件**：目录为空，或只含 `.yaagl-tmp`（带 `job.json`）和中断安装留下的半成品。TS 的「必须为空」与幂等重跑冲突，因此放宽。
-- **Wine 准备不是持久化的 Pending Job。** 它发生在游戏目录存在之前，状态由 `<data>/wine/` 的版本戳推导：版本戳缺失或与固定版本不一致，就重新准备（下载走 `Downloader` 的 `resumeData`）。只有游戏作业（install、update、preDownload、repair）写 `job.json`。
+- **Wine 准备不是持久化的 Pending Job。** 它发生在游戏目录存在之前，状态由 `<data>/wine/` 的版本戳推导：版本戳缺失或与固定版本不一致，就重新准备（下载走 `Downloader` 的 `resumeData`）。只有游戏作业（install、update、preDownload、repair）写 `job.json`。`LauncherModel` 通过 `WinePreparing` 缝（生产实现 `WineRuntime`，测试用 Fake）把它接进状态机：`LauncherPhase.preparingWine` 占用独占槽，暂停 = 取消并等停稳，出错回空闲、`primaryAction == .prepareWine`、可重试；Wine 未就绪时 install、update、repair、预下载和启动都返回 `wineNotReady`。`bootstrap()` 按启动顺序先准备 Wine，就绪后才读取游戏状态。
 - **长作业与睡眠**：下载、更新、修复期间持有 `ProcessInfo.beginActivity`，避免 App Nap 和空闲睡眠打断。
 - **进度**：`Sophon` 对外只暴露收窄枚举 `SophonProgress`（`preparing`、`downloading(done,total)`、`verifying(done,total)`、`patching(done,total)`、`finalizing`）。操作形状是 `SophonClient.run(_:in:) -> AsyncThrowingStream<SophonProgress, Error>`，取消语义见下。生产端限流，每秒最多 4 条。速度和剩余时间由 `Launcher` 用滑动窗口计算，`Sophon` 不算。`Platform` 的下载（Wine 与 DXMT）有自己的进度类型，`Launcher` 把它们和 `SophonProgress` 一起映射成统一的 `JobProgress`。
 - **Sophon 接口**：`onlineInfo() async throws -> OnlineInfo`（最新版本、安装大小、可增量更新的旧版本、`preDownload: 目标版本?`，分支为 null 是 `nil`，不是异常）；已装版本检测（`globalgamemanagers` 正则与 `config.ini` 取较小值）也在 `Sophon`，因为 `config.ini` 由它写。
