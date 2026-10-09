@@ -35,7 +35,9 @@ struct PendingJobStore: Sendable {
     try JSONEncoder().encode(job).write(to: fileURL, options: .atomic)
   }
 
-  func clear() {
+  /// False when the file is still there afterwards; a stale marker would keep blocking launch.
+  func clear() -> Bool {
     try? FileManager.default.removeItem(at: fileURL)
+    return !FileManager.default.fileExists(atPath: fileURL.path)
   }
 }

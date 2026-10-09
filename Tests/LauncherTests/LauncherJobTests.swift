@@ -517,6 +517,19 @@ private final class Queried: Sendable {
     #expect(h.model.pendingJob == nil)
   }
 
+  @Test func INS_015_failureToRemoveJobFileIsReportedNotHidden() async throws {
+    let h = await Harness(status: Status.notInstalled)
+    let run = try await h.begin(.install)
+    let tmp = h.jobFileURL.deletingLastPathComponent()
+    try FileManager.default.setAttributes([.posixPermissions: 0o555], ofItemAtPath: tmp.path)
+    defer { try? FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: tmp.path) }
+    h.fake.setStatus(Status.installed)
+    h.fake.finish(run: run)
+    await h.model.waitUntilIdle()
+    #expect(h.model.lastError == .unexpected("job.json could not be removed"))
+    #expect(h.model.phase == .idle)
+  }
+
   @Test(arguments: ["not json at all {{", "", #"{"schemaVersion":1}"#, #"{"schemaVersion":1,"kind":"bogus"}"#])
   func INS_015_corruptJobFileIsIgnoredWithoutCrash(_ contents: String) async throws {
     let h = await Harness(status: Status.installed, preexistingJobFile: contents)

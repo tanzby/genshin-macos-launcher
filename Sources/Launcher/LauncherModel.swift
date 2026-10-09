@@ -232,10 +232,17 @@ public final class LauncherModel {
       lastError = error
       eventSink.yield(.failed(job, error))
     } else {
-      store.clear()
+      let cleared = store.clear()
       pendingJob = nil
       await refresh()
-      eventSink.yield(.finished(job))
+      if cleared {
+        eventSink.yield(.finished(job))
+      } else {
+        // The job is done, but the stale marker would keep blocking launch; surface it instead of hiding it.
+        let error = LauncherError.unexpected("job.json could not be removed")
+        lastError = error
+        eventSink.yield(.failed(job, error))
+      }
     }
     ProcessInfo.processInfo.endActivity(activity)
     progress = nil
