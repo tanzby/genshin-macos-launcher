@@ -108,7 +108,7 @@ extension WineRuntime {
       URL(filePath: path), arguments: arguments, environment: [:], workingDirectory: layout.root)
     guard result.exitCode == 0 else {
       throw WineInstallError.extractionFailed(
-        tool: URL(filePath: path).lastPathComponent, exitCode: result.exitCode)
+        tool: URL(filePath: path).lastPathComponent, exitCode: result.exitCode, output: result.output)
     }
   }
 

@@ -189,13 +189,13 @@ private let thumbprint = "F09065E2D57F005BBD975DDCF9EB63F570764F17"
     }
   }
 
-  @Test("WIN-008 tar exiting non-zero throws extractionFailed(tool: tar, exitCode: 2)")
+  @Test("WIN-008 tar exiting non-zero throws extractionFailed with tar's output")
   func tarFailure() async throws {
     try await withWineTempDirectory { dir in
       var options = WineHarnessOptions()
       options.tarExitCode = 2
       let h = try makeWineHarness(in: dir, options: options)
-      await #expect(throws: WineInstallError.extractionFailed(tool: "tar", exitCode: 2)) {
+      await #expect(throws: WineInstallError.extractionFailed(tool: "tar", exitCode: 2, output: "tar: stub failure")) {
         try await h.install()
       }
       #expect(!wineExists(h.layout.stampFile))

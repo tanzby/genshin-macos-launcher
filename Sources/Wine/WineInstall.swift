@@ -8,12 +8,20 @@ public struct WineDistribution: Sendable, Equatable {
   public var sha256: String
   /// Directory inside the archive that holds the Wine tree, stripped on extraction. `nil` = whole archive.
   public var winePath: String?
+  /// Size of the download in bytes, for the free-space preflight.
+  public var archiveSize: Int64
+  /// Size of the unpacked runtime in bytes.
+  public var installedSize: Int64
 
-  public init(id: String, url: URL, sha256: String, winePath: String? = nil) {
+  public init(
+    id: String, url: URL, sha256: String, winePath: String? = nil, archiveSize: Int64 = 0, installedSize: Int64 = 0
+  ) {
     self.id = id
     self.url = url
     self.sha256 = sha256
     self.winePath = winePath
+    self.archiveSize = archiveSize
+    self.installedSize = installedSize
   }
 
   public static let pinned = WineDistribution(
@@ -23,7 +31,9 @@ public struct WineDistribution: Sendable, Equatable {
         "https://github.com/yaagl/anime-game-wine/releases/download/wine-crossover-11.0-1-signed/wine-crossover-11.0-1-osx64-signed.tar.xz"
     )!,
     sha256: "89fa7e90fb626523a90d5867a03c6be785d017176739c6320a3b86c7838c3a35",
-    winePath: "wine"
+    winePath: "wine",
+    archiveSize: 456_021_524,
+    installedSize: 2_000_000_000
   )
 }
 
@@ -33,12 +43,14 @@ public struct DXMTRelease: Sendable, Equatable {
   public var commit: String
   public var zipURL: URL
   public var sha256: String
+  public var archiveSize: Int64
 
-  public init(version: String, commit: String, zipURL: URL, sha256: String) {
+  public init(version: String, commit: String, zipURL: URL, sha256: String, archiveSize: Int64 = 0) {
     self.version = version
     self.commit = commit
     self.zipURL = zipURL
     self.sha256 = sha256
+    self.archiveSize = archiveSize
   }
 
   public static let pinned = DXMTRelease(
@@ -48,7 +60,8 @@ public struct DXMTRelease: Sendable, Equatable {
       string:
         "https://github.com/yaagl/anime-game-wine/releases/download/dxmt-654f547/dxmt-654f547ffab4e0c395ee368aad52bb4586b04576.zip"
     )!,
-    sha256: "fbc0721fb72ebafd2bad0dbdd3d13a52056fd10c4a9a699cee2689363823255b"
+    sha256: "fbc0721fb72ebafd2bad0dbdd3d13a52056fd10c4a9a699cee2689363823255b",
+    archiveSize: 32_603_639
   )
 }
 
@@ -104,6 +117,8 @@ public struct WineLayout: Sendable, Equatable {
     prefixDirectory.appending(path: "drive_c/windows", directoryHint: .isDirectory)
   }
 
+  /// Archives being downloaded; partial files here let an interrupted install resume.
+  public var downloadsDirectory: URL { root.appending(path: "downloads", directoryHint: .isDirectory) }
   public var wineBootLog: URL { root.appending(path: "wineboot.log", directoryHint: .notDirectory) }
   public var wineCfgLog: URL { root.appending(path: "winecfg.log", directoryHint: .notDirectory) }
 
@@ -143,7 +158,9 @@ public enum WineInstallProgress: Sendable, Equatable {
 
 public enum WineInstallError: Error, Equatable {
   /// A system tool (`tar`, `ditto`) exited non-zero.
-  case extractionFailed(tool: String, exitCode: Int32)
+  case extractionFailed(tool: String, exitCode: Int32, output: String)
+  /// Not enough free space on the data volume; raised before anything is downloaded or deleted.
+  case insufficientDiskSpace(required: Int64, available: Int64)
   case dxmtArchiveInvalid
   /// `wineboot` or `winecfg` failed; the log is at `logURL`.
   case prefixInitializationFailed(logURL: URL)
