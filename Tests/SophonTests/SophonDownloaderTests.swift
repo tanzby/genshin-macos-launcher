@@ -1201,6 +1201,36 @@ private final class Rig: @unchecked Sendable {
     #expect(rig.requests.isEmpty)
   }
 
+  @Test func REP_003_cancellingTheScanThrowsEvenWhenEveryFileIsMissing() async throws {
+    let rig = try Rig()
+    defer { rig.remove() }
+    let files = (0..<20).map { SyntheticFile("Data/m\($0).bin", sizes: [1_000]).file }
+    let downloader = rig.downloader()
+    let game = rig.sandbox.game
+    let task = Task {
+      while !Task.isCancelled { await Task.yield() }
+      return try await downloader.findDamagedFiles(in: files, gameDirectory: game, progress: { _ in })
+    }
+    task.cancel()
+    await #expect(throws: CancellationError.self) { try await task.value }
+  }
+
+  @Test func INS_011_pathsDifferingOnlyInCaseAreOneFile() async throws {
+    let rig = try Rig()
+    defer { rig.remove() }
+    let a = SyntheticFile("Data/a.bin", sizes: [3_000])
+    let upper = SophonFile(
+      path: "Data/A.bin", isDirectory: false, size: a.file.size, md5: "00" + a.file.md5.dropFirst(2),
+      chunks: a.file.chunks)
+    rig.cdn.serve(a)
+    await #expect {
+      try await rig.install([a.file, upper])
+    } throws: { error in
+      if case SophonError.invalidManifest = error { return true } else { return false }
+    }
+    #expect(rig.requests.isEmpty)
+  }
+
   // MARK: progress
 
   @Test func INS_008_progressEndsAtTotalCompressedSizeIncludingFilesAlreadyInPlace() async throws {

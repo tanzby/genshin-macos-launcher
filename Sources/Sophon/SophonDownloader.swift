@@ -67,7 +67,8 @@ public struct SophonDownloader: Sendable {
         }
       }
       // `a/b`, `a/./b` and `a//b` are one file. Equal entries collapse; conflicting ones are refused.
-      let key = destination.standardizedFileURL.path
+      // macOS volumes are case-insensitive by default, so `A.bin` and `a.bin` are one file too.
+      let key = destination.standardizedFileURL.path.lowercased()
       if let existing = seen[key] {
         guard existing.caseInsensitiveCompare(file.md5) == .orderedSame else {
           throw SophonError.invalidManifest("conflicting entries for \(file.path)")
@@ -134,7 +135,7 @@ public struct SophonDownloader: Sendable {
       var next = 0
       var results = [Bool](repeating: false, count: candidates.count)
       func submit() {
-        guard next < candidates.count else { return }
+        guard next < candidates.count, !Task.isCancelled else { return }
         let index = next
         next += 1
         group.addTask {
@@ -150,6 +151,7 @@ public struct SophonDownloader: Sendable {
       }
       return results
     }
+    try Task.checkCancellation()
     progress(.verifying(done: total, total: total))
     return zip(candidates, flags).filter { !$1 }.map(\.0)
   }
@@ -571,14 +573,18 @@ enum Offload {
   static let queue = DispatchQueue(label: "yaagl.sophon.blocking", qos: .utility, attributes: .concurrent)
 
   static func run<T: Sendable>(_ work: @escaping @Sendable (CancelFlag) throws -> T) async throws -> T {
+    try Task.checkCancellation()
     let flag = CancelFlag()
-    return try await withTaskCancellationHandler {
+    let result = try await withTaskCancellationHandler {
       try await withCheckedThrowingContinuation { continuation in
         queue.async { continuation.resume(with: Result { try work(flag) }) }
       }
     } onCancel: {
       flag.set()
     }
+    // Work that finished without looking at the flag (a missing file) must not hide a pause.
+    try Task.checkCancellation()
+    return result
   }
 
   static func run<T: Sendable>(_ work: @escaping @Sendable (CancelFlag) -> T) async -> T {
