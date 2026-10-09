@@ -1231,6 +1231,20 @@ private final class Rig: @unchecked Sendable {
     #expect(rig.requests.isEmpty)
   }
 
+  @Test func INS_011_aFileAndAFolderWithTheSameNameAreRefusedBeforeAnyRequest() async throws {
+    let rig = try Rig()
+    defer { rig.remove() }
+    let plain = SyntheticFile("Data/a", sizes: [3_000])
+    let nested = SyntheticFile("Data/a/b.bin", sizes: [3_000])
+    rig.cdn.serve(plain, nested)
+    await #expect {
+      try await rig.install([plain.file, nested.file])
+    } throws: { error in
+      if case SophonError.invalidManifest = error { return true } else { return false }
+    }
+    #expect(rig.requests.isEmpty)
+  }
+
   // MARK: progress
 
   @Test func INS_008_progressEndsAtTotalCompressedSizeIncludingFilesAlreadyInPlace() async throws {

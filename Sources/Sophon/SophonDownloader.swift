@@ -78,6 +78,15 @@ public struct SophonDownloader: Sendable {
         targets.append((file, destination))
       }
     }
+    // A file cannot also be a folder: `a` together with `a/b` can never both land on disk.
+    let taken = Set(seen.keys)
+    for key in taken {
+      var ancestor = (key as NSString).deletingLastPathComponent
+      while ancestor.count > 1 {
+        if taken.contains(ancestor) { throw SophonError.invalidManifest("\(ancestor) is both a file and a folder") }
+        ancestor = (ancestor as NSString).deletingLastPathComponent
+      }
+    }
     for file in files where file.isDirectory {
       let directory = try SophonPathPolicy.resolve(file.path, in: gameDirectory)
       try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
@@ -194,10 +203,11 @@ public struct SophonDownloader: Sendable {
     }
     var delay = config.retryDelay
     var attempt = 1
+    let chunkProgress = reporter.progress(forFile: file)
     while true {
       try Task.checkCancellation()
       do {
-        try await worker.fetch(file, to: destination, reporter: reporter)
+        try await worker.fetch(file, to: destination, reporter: chunkProgress)
         return
       } catch {
         if error is CancellationError || (error as? URLError)?.code == .cancelled {
@@ -236,17 +246,7 @@ private struct FileWorker: Sendable {
   var chunkRoot: URL { tempDirectory.appending(path: "chunks", directoryHint: .isDirectory) }
   var assemblyRoot: URL { tempDirectory.appending(path: "assembling", directoryHint: .isDirectory) }
 
-  func fetch(_ file: SophonFile, to destination: URL, reporter overall: ProgressReporter) async throws {
-    let reporter = overall.scope()
-    do {
-      try await assemble(file, to: destination, reporter: reporter)
-    } catch {
-      reporter.rollback()
-      throw error
-    }
-  }
-
-  private func assemble(_ file: SophonFile, to destination: URL, reporter: AttemptProgress) async throws {
+  func fetch(_ file: SophonFile, to destination: URL, reporter: ChunkProgress) async throws {
     let key = SophonDownloaderLayout.fileKey(for: file.path)
     let chunkDirectory = chunkRoot.appending(path: key, directoryHint: .isDirectory)
     let assembly = assemblyRoot.appending(path: key + ".part")
@@ -271,17 +271,17 @@ private struct FileWorker: Sendable {
       }
       guard let (plain, plainMD5) = decoded else {
         try? fileManager.removeItem(at: cached)
-        reporter.add(-Int64(chunk.compressedSize))
+        reporter.set(chunk.id, 0)
         throw SophonError.checksumMismatch(path: file.path)
       }
       guard plain.count == Int(chunk.uncompressedSize) else {
         try? fileManager.removeItem(at: cached)
-        reporter.add(-Int64(chunk.compressedSize))
+        reporter.set(chunk.id, 0)
         throw SophonError.invalidManifest("chunk \(chunk.id) does not hold \(chunk.uncompressedSize) bytes")
       }
       guard plainMD5.caseInsensitiveCompare(chunk.md5) == .orderedSame else {
         try? fileManager.removeItem(at: cached)
-        reporter.add(-Int64(chunk.compressedSize))
+        reporter.set(chunk.id, 0)
         throw SophonError.checksumMismatch(path: file.path)
       }
       try handle.seek(toOffset: chunk.offset)
@@ -308,7 +308,7 @@ private struct FileWorker: Sendable {
   }
 
   /// Makes `cached` hold the complete compressed chunk, resuming with `Range` when part of it is there.
-  private func downloadChunk(_ chunk: SophonChunk, to cached: URL, reporter: AttemptProgress) async throws -> Data {
+  private func downloadChunk(_ chunk: SophonChunk, to cached: URL, reporter: ChunkProgress) async throws -> Data {
     let fileManager = FileManager.default
     let expected = Int64(chunk.compressedSize)
     var have = Self.size(of: cached)
@@ -317,7 +317,7 @@ private struct FileWorker: Sendable {
       have = 0
     }
     if have == expected {
-      reporter.add(expected)
+      reporter.set(chunk.id, expected)
       return try Data(contentsOf: cached)
     }
 
@@ -329,7 +329,7 @@ private struct FileWorker: Sendable {
     if have > 0 { request.setValue("bytes=\(have)-", forHTTPHeaderField: "Range") }
 
     // Cached bytes count as done from the start, so the corrections below stay consistent.
-    reporter.add(have)
+    reporter.set(chunk.id, have)
     let stream = ChunkStream(session: session, request: request, expected: expected, have: have, name: chunk.id)
     defer { stream.cancel() }
     var handle: FileHandle?
@@ -343,11 +343,11 @@ private struct FileWorker: Sendable {
           case 206 where have > 0: break
           case 200:
             // The server ignored Range (or we asked for everything): start over.
-            reporter.add(-have)
+            reporter.set(chunk.id, 0)
             have = 0
           case 416:
             try? fileManager.removeItem(at: cached)
-            reporter.add(-have)
+            reporter.set(chunk.id, 0)
             throw SophonError.http(status: 416)
           default:
             throw SophonError.http(status: http.statusCode)
@@ -365,12 +365,12 @@ private struct FileWorker: Sendable {
             try? handle?.close()
             handle = nil
             try? fileManager.removeItem(at: cached)
-            reporter.add(-(written - Int64(block.count)))
+            reporter.set(chunk.id, 0)
             throw SophonError.checksumMismatch(path: chunk.id)
           }
           // Written as it arrives: after a broken connection the next attempt resumes from here.
           try handle?.write(contentsOf: block)
-          reporter.add(Int64(block.count))
+          reporter.set(chunk.id, written)
         }
       }
     } catch let error as URLError {
@@ -390,7 +390,7 @@ private struct FileWorker: Sendable {
     guard Int64(data.count) == expected else {
       // Short or long body: drop it so the next attempt starts clean.
       try? fileManager.removeItem(at: cached)
-      reporter.add(-Int64(data.count))
+      reporter.set(chunk.id, 0)
       throw SophonError.checksumMismatch(path: chunk.id)
     }
     return data
@@ -470,22 +470,19 @@ private final class ChunkStream: NSObject, URLSessionDataDelegate, @unchecked Se
   }
 }
 
-/// Bytes one attempt at one file has counted. A failed attempt gives them back, because the retry
-/// counts the cached part again.
-private final class AttemptProgress: @unchecked Sendable {
+/// What each chunk of one file has contributed to the overall count. It outlives a failed attempt:
+/// the retry sets the same chunk's value again, so cached bytes are never counted twice and the
+/// total only goes down when data is really thrown away.
+private final class ChunkProgress: @unchecked Sendable {
   private let reporter: ProgressReporter
-  private var counted: Int64 = 0
+  private var counted: [String: Int64] = [:]
 
   init(reporter: ProgressReporter) { self.reporter = reporter }
 
-  func add(_ bytes: Int64) {
-    counted += bytes
-    reporter.add(bytes)
-  }
-
-  func rollback() {
-    reporter.add(-counted)
-    counted = 0
+  func set(_ chunkID: String, _ bytes: Int64) {
+    let old = counted[chunkID] ?? 0
+    counted[chunkID] = bytes
+    reporter.add(bytes - old)
   }
 }
 
@@ -518,7 +515,7 @@ private final class ProgressReporter: @unchecked Sendable {
   /// The closing report is never throttled.
   func finish(_ event: SophonProgress) { lock.withLock { report(event) } }
 
-  func scope() -> AttemptProgress { AttemptProgress(reporter: self) }
+  func progress(forFile file: SophonFile) -> ChunkProgress { ChunkProgress(reporter: self) }
 }
 
 /// Thread-safe, throttled `.verifying` reporter.
