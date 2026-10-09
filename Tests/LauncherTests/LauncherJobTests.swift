@@ -685,6 +685,19 @@ private final class Queried: Sendable {
     #expect(h.model.pendingJob?.kind == .update)
   }
 
+  @Test func INS_015_unwritableJobFileRefusesToStartTheJob() async throws {
+    let h = await Harness(status: Status.installed)
+    let tmp = h.jobFileURL.deletingLastPathComponent()
+    try FileManager.default.createDirectory(at: tmp, withIntermediateDirectories: true)
+    try FileManager.default.setAttributes([.posixPermissions: 0o555], ofItemAtPath: tmp.path)
+    defer { try? FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: tmp.path) }
+    await #expect(throws: LauncherError.unexpected("job.json could not be written")) {
+      try await h.model.start(.repair)
+    }
+    #expect(h.fake.runs.isEmpty)
+    #expect(h.model.phase == .idle)
+  }
+
   @Test func PRG_006_pauseCancelsPreDownload() async throws {
     let h = await Harness(status: Status.preDownloadable)
     let run = try await h.begin(.preDownload)

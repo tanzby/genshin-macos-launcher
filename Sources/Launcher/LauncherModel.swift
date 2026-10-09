@@ -152,18 +152,19 @@ public final class LauncherModel {
     // One Task covers preflight and the job, so pause()/shutdown() always find a handle to cancel and await.
     let (ready, readySink) = AsyncThrowingStream<Void, Error>.makeStream()
     exclusiveTask = Task {
+      let stream: AsyncThrowingStream<JobProgress, Error>
       do {
         await stopPreDownload()
         try Task.checkCancellation()
         try await checkDiskSpace(for: job, in: store.gameDirectory)
         try Task.checkCancellation()
+        stream = try begin(job, store: store)
       } catch {
         exclusive = .idle
         exclusiveTask = nil
         readySink.finish(throwing: error)
         return
       }
-      let stream = begin(job, store: store)
       readySink.finish()
       await drive(job, stream: stream, store: store)
     }
@@ -181,6 +182,7 @@ public final class LauncherModel {
     lastError = nil
     let (ready, readySink) = AsyncThrowingStream<Void, Error>.makeStream()
     preDownloadTask = Task {
+      let stream: AsyncThrowingStream<JobProgress, Error>
       do {
         try await checkDiskSpace(for: .preDownload, in: store.gameDirectory)
         try Task.checkCancellation()
@@ -188,32 +190,29 @@ public final class LauncherModel {
         guard exclusive == .idle || exclusive == .launching || exclusive == .running else {
           throw LauncherError.busy
         }
+        stream = try begin(.preDownload, store: store)
       } catch {
         isPreDownloading = false
         preDownloadTask = nil
         readySink.finish(throwing: error)
         return
       }
-      let stream = begin(.preDownload, store: store)
       readySink.finish()
       await drive(.preDownload, stream: stream, store: store)
     }
     do { for try await _ in ready {} } catch is CancellationError { return }
   }
 
-  private func begin(_ job: GameJob, store: PendingJobStore) -> AsyncThrowingStream<JobProgress, Error> {
+  private func begin(_ job: GameJob, store: PendingJobStore) throws -> AsyncThrowingStream<JobProgress, Error> {
     let pending = PendingJob(kind: job, targetVersion: status?.remoteVersion)
     // A pre-download must not replace the marker of an unfinished install/update/repair: that one blocks launch.
     if job == .preDownload, let existing = store.load(), existing.kind != .preDownload {
       progress = .preparing
       return client.run(job)
     }
-    do {
-      try store.save(pending)
-      pendingJob = pending
-    } catch {
-      // Without job.json the job still runs; it just cannot be offered as "continue" after a restart.
-    }
+    // Without a marker an interrupted job could neither be continued nor block launching: refuse to start.
+    do { try store.save(pending) } catch { throw LauncherError.unexpected("job.json could not be written") }
+    pendingJob = pending
     progress = .preparing
     return client.run(job)
   }
