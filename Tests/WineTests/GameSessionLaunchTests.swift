@@ -232,8 +232,9 @@ private func expectFilesBack(_ urls: [URL], sourceLocation: SourceLocation = #_s
 
       #expect(result == .exited)
       #expect(f.sleeper.durations.contains(.seconds(15)))
-      #expect(f.runner.killCount == 2)
-      #expect(f.table.killed == [9001])
+      // The watchdog closes the prefix itself (a loader may ignore SIGTERM) and the cleanup does it again.
+      #expect(f.runner.killCount >= 2)
+      #expect(Set(f.table.killed) == [9001])
       let trace = f.trace.all
       let game = try #require(trace.firstIndex(of: "GAME"))
       let kill = try #require(trace.lastIndex(of: "wineserver -k"))
@@ -409,8 +410,9 @@ private func expectFilesBack(_ urls: [URL], sourceLocation: SourceLocation = #_s
       // one poll per simulated second, 120 simulated seconds
       #expect((118...122).contains(f.table.probeCount))
       #expect(f.sleeper.durations.filter { $0 == .seconds(1) }.count >= 118)
-      #expect(f.runner.killCount == 2)
-      #expect(f.table.killed == [9001])
+      // The watchdog closes the prefix itself (a loader may ignore SIGTERM) and the cleanup does it again.
+      #expect(f.runner.killCount >= 2)
+      #expect(Set(f.table.killed) == [9001])
       let trace = f.trace.all
       let game = try #require(trace.firstIndex(of: "GAME"))
       let sweep = try #require(trace.firstIndex(of: "kill 9001"))

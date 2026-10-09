@@ -568,3 +568,30 @@ private func writeJournal(_ journal: LaunchJournal, for f: LaunchFixture) throws
     }
   }
 }
+
+extension GameSessionJournalTests {
+  @Test func LCH_038_aRestoreThatFailsKeepsTheItemInTheJournalForTheNextRecover() async throws {
+    try await withLaunchFixture { f in
+      let key = LaunchRegistry.miHoYoKey
+      f.runner.setRegistry(key, LaunchRegistry.widthName, .dword(2560))
+      try writeJournal(
+        LaunchJournal(registry: [.init(key: key, name: LaunchRegistry.widthName, original: .dword(1280))]), for: f)
+      f.runner.responder.value = { call in
+        call.kind == .regAdd ? ProcessResult(exitCode: 1, output: "reg: failed") : nil
+      }
+
+      await f.session.recover()
+
+      let data = try Data(contentsOf: f.layout.launchJournal)
+      let kept = try JSONDecoder().decode(LaunchJournal.self, from: data)
+      #expect(kept.registry.map(\.name) == [LaunchRegistry.widthName])
+      #expect(kept.registry.first?.original == .dword(1280))
+
+      f.runner.responder.value = nil
+      await f.session.recover()
+
+      #expect(f.runner.registryValue(key, LaunchRegistry.widthName) == .dword(1280))
+      #expect(!FileManager.default.fileExists(atPath: f.layout.launchJournal.path))
+    }
+  }
+}

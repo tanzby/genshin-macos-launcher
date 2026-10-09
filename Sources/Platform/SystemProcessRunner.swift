@@ -68,7 +68,7 @@ public struct SystemProcessRunner: ProcessRunning {
         }
       }
     } onCancel: {
-      if process.isRunning { process.terminate() }
+      Self.terminate(process)
     }
   }
 
@@ -105,7 +105,16 @@ public struct SystemProcessRunner: ProcessRunning {
         }
       }
     } onCancel: {
-      if process.isRunning { process.terminate() }
+      Self.terminate(process)
+    }
+  }
+
+  /// SIGTERM, then SIGKILL if the process is still there after a grace period (Wine loaders can ignore TERM).
+  static func terminate(_ process: Process, after grace: TimeInterval = 5) {
+    guard process.isRunning else { return }
+    process.terminate()
+    DispatchQueue.global().asyncAfter(deadline: .now() + grace) {
+      if process.isRunning { kill(process.processIdentifier, SIGKILL) }
     }
   }
 }

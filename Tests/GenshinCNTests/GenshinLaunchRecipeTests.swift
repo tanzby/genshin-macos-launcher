@@ -296,3 +296,11 @@ private func edits(_ recipe: LaunchRecipe, key: String) -> [RegistryEdit] {
     }
   }
 }
+
+@Suite("GenshinLaunchRecipe game directory") struct GenshinLaunchRecipeGameDirectoryTests {
+  @Test func LCH_010_directoriesWithQuotesOrLineBreaksAreUnsupported() {
+    #expect(GenshinLaunchRecipe.isSupported(gameDirectory: URL(filePath: "/Games/原神 GI")))
+    #expect(!GenshinLaunchRecipe.isSupported(gameDirectory: URL(filePath: "/Games/a\"b")))
+    #expect(!GenshinLaunchRecipe.isSupported(gameDirectory: URL(filePath: "/Games/a\nb")))
+  }
+}

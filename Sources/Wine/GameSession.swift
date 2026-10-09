@@ -76,8 +76,14 @@ public struct GameSession: Sendable {
       ).prepare(for: recipe)
       try Task.checkCancellation()
 
-      var journal = LaunchJournal(movedAside: recipe.moveAside.map(\.path))
+      // Items a previous restore could not finish stay in the journal with their real originals; the
+      // values on disk now are not the player's.
+      var journal = readJournal() ?? LaunchJournal()
+      for path in recipe.moveAside.map(\.path) where !journal.movedAside.contains(path) {
+        journal.movedAside.append(path)
+      }
       for edit in recipe.registry where edit.restoresOnExit {
+        if journal.registry.contains(where: { $0.key == edit.key && $0.name == edit.name }) { continue }
         journal.registry.append(
           .init(key: edit.key, name: edit.name, original: try await queryRegistry(key: edit.key, name: edit.name)))
       }
@@ -124,6 +130,8 @@ public struct GameSession: Sendable {
       if elapsed >= timing.startupTimeout {
         flags.markTimedOut()
         work.cancel()
+        // A loader that ignores SIGTERM must not hold the timeout hostage: close the prefix from here too.
+        await shutdownPrefix()
         return
       }
     }
@@ -247,32 +255,53 @@ public struct GameSession: Sendable {
     try encoder.encode(journal).write(to: layout.launchJournal, options: .atomic)
   }
 
-  /// Puts everything the journal records back, item by item against the disk's actual state, then deletes it.
+  private func readJournal() -> LaunchJournal? {
+    guard let data = try? Data(contentsOf: layout.launchJournal) else { return nil }
+    if let journal = try? JSONDecoder().decode(LaunchJournal.self, from: data) { return journal }
+    log.error("unreadable launch journal, set aside for inspection")
+    let aside = layout.launchJournal.deletingLastPathComponent().appending(path: "launch-journal.corrupt.json")
+    try? FileManager.default.removeItem(at: aside)
+    try? FileManager.default.moveItem(at: layout.launchJournal, to: aside)
+    return nil
+  }
+
+  /// Puts everything the journal records back, item by item against the disk's actual state. Items that
+  /// fail stay in the journal for the next `recover()`; it is deleted only when nothing is left.
   private func restoreFromJournal() async {
     let fileManager = FileManager.default
-    guard let data = try? Data(contentsOf: layout.launchJournal) else { return }
-    guard let journal = try? JSONDecoder().decode(LaunchJournal.self, from: data) else {
-      log.error("unreadable launch journal, leaving it for inspection")
-      return
-    }
+    guard let journal = readJournal() else { return }
+    var remaining = LaunchJournal()
     for path in journal.movedAside {
       let backup = path + ".bak"
       guard fileManager.fileExists(atPath: backup) else { continue }
-      if fileManager.fileExists(atPath: path) {
-        try? fileManager.removeItem(atPath: backup)  // the live file wins
-      } else {
-        try? fileManager.moveItem(atPath: backup, toPath: path)
+      do {
+        if fileManager.fileExists(atPath: path) {
+          try fileManager.removeItem(atPath: backup)  // the live file wins
+        } else {
+          try fileManager.moveItem(atPath: backup, toPath: path)
+        }
+      } catch {
+        log.error("could not restore \(path, privacy: .public): \(String(describing: error), privacy: .public)")
+        remaining.movedAside.append(path)
       }
     }
     for entry in journal.registry {
+      var restored = false
       if let original = entry.original {
-        _ = try? await reg(["add", entry.key, "/v", entry.name] + Self.registryArguments(original) + ["/f"])
+        let result = try? await reg(["add", entry.key, "/v", entry.name] + Self.registryArguments(original) + ["/f"])
+        restored = result?.exitCode == 0
       } else {
-        _ = try? await reg(["delete", entry.key, "/v", entry.name, "/f"])
+        // Deleting a value that is not there exits non-zero; only a launch failure counts as not restored.
+        restored = (try? await reg(["delete", entry.key, "/v", entry.name, "/f"])) != nil
       }
+      if !restored { remaining.registry.append(entry) }
     }
     if !journal.registry.isEmpty { _ = try? await wineserver("-w") }
-    try? fileManager.removeItem(at: layout.launchJournal)
+    if remaining.movedAside.isEmpty && remaining.registry.isEmpty {
+      try? fileManager.removeItem(at: layout.launchJournal)
+    } else {
+      try? writeJournal(remaining)
+    }
   }
 
   // MARK: - Registry

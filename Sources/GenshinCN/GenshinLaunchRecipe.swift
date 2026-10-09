@@ -64,6 +64,12 @@ public enum GenshinLaunchRecipe {
     ("lsteamclient32.dll", "syswow64/lsteamclient.dll"),
   ]
 
+  /// `cmd` cannot take a double quote or a line break inside the quoted paths of `config.bat`. The game client
+  /// must reject such a game directory before launching.
+  public static func isSupported(gameDirectory: URL) -> Bool {
+    !gameDirectory.path.contains { $0 == "\"" || $0.isNewline }
+  }
+
   public static func make(
     settings: GenshinLaunchSettings,
     gameDirectory: URL,
