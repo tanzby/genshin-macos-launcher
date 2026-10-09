@@ -892,6 +892,24 @@ private final class Rig: @unchecked Sendable {
     #expect(!rig.sandbox.exists(file.file.path))
   }
 
+  @Test func INS_009_aBodyLongerThanTheManifestSaysIsRejectedAndNotKept() async throws {
+    let rig = try Rig()
+    defer { rig.remove() }
+    let file = SyntheticFile("Data/long.bin", sizes: [20_000])
+    rig.cdn.serve(file)
+    let frame = file.pieces[0].frame
+    rig.cdn.script(chunk: file.pieces[0].id) { _ in
+      .response(status: 200, body: frame + Data(repeating: 0xAA, count: 5_000))
+    }
+
+    await #expect(throws: SophonError.checksumMismatch(path: file.pieces[0].id)) {
+      try await rig.install([file.file], downloader: rig.downloader(maxAttempts: 1))
+    }
+
+    #expect(rig.cachedFiles(mentioning: file.file.chunks[0]).isEmpty)
+    #expect(!rig.sandbox.exists(file.file.path))
+  }
+
   @Test func INS_010_http404IsNotRetried() async throws {
     let rig = try Rig()
     defer { rig.remove() }

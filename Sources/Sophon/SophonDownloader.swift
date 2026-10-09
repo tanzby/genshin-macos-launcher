@@ -316,7 +316,9 @@ private struct FileWorker: Sendable {
     // Cached bytes count as done from the start, so the corrections below stay consistent.
     reporter.add(have)
     let stream = ChunkStream(session: session, request: request)
+    defer { stream.cancel() }
     var handle: FileHandle?
+    var written: Int64 = 0
     defer { try? handle?.close() }
     do {
       for try await event in stream.events {
@@ -336,11 +338,21 @@ private struct FileWorker: Sendable {
             throw SophonError.http(status: http.statusCode)
           }
           if have == 0 { fileManager.createFile(atPath: cached.path, contents: nil) }
+          written = have
           let opened = try FileHandle(forWritingTo: cached)
           try opened.seek(toOffset: UInt64(have))
           handle = opened
         case .data(let block):
           try Task.checkCancellation()
+          // A body longer than the manifest says is not this chunk: stop before it fills the disk.
+          written += Int64(block.count)
+          guard written <= expected else {
+            try? handle?.close()
+            handle = nil
+            try? fileManager.removeItem(at: cached)
+            reporter.add(-(written - Int64(block.count)))
+            throw SophonError.checksumMismatch(path: chunk.id)
+          }
           // Written as it arrives: after a broken connection the next attempt resumes from here.
           try handle?.write(contentsOf: block)
           reporter.add(Int64(block.count))
@@ -379,13 +391,21 @@ private final class ChunkStream: NSObject, URLSessionDataDelegate, @unchecked Se
   let events: AsyncThrowingStream<Event, any Error>
   private let continuation: AsyncThrowingStream<Event, any Error>.Continuation
 
+  private let task: URLSessionDataTask
+
   init(session: URLSession, request: URLRequest) {
     (events, continuation) = AsyncThrowingStream.makeStream()
+    task = session.dataTask(with: request)
     super.init()
-    let task = session.dataTask(with: request)
     task.delegate = self
-    continuation.onTermination = { _ in task.cancel() }
+    continuation.onTermination = { [task] _ in task.cancel() }
     task.resume()
+  }
+
+  /// Stops the request and releases the delegate; safe to call after it has finished.
+  func cancel() {
+    task.cancel()
+    continuation.finish()
   }
 
   func urlSession(
