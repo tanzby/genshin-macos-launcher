@@ -1111,6 +1111,40 @@ private final class Rig: @unchecked Sendable {
     #expect(!rig.sandbox.exists("good.bin"))
   }
 
+  @Test func INS_011_chunkOffsetNearUInt64MaxIsAnInvalidManifestNotACrash() async throws {
+    let rig = try Rig()
+    defer { rig.remove() }
+    let base = SyntheticFile("big.bin", sizes: [3_000])
+    let c = base.file.chunks[0]
+    let huge = SophonChunk(
+      id: c.id, md5: c.md5, offset: UInt64.max - 10, compressedSize: c.compressedSize,
+      uncompressedSize: c.uncompressedSize, xxhash: c.xxhash, compressedMD5: c.compressedMD5)
+    rig.cdn.serve(base)
+    await #expect {
+      try await rig.install([base.file.replacing(chunks: [huge])])
+    } throws: { error in
+      if case SophonError.invalidManifest = error { return true } else { return false }
+    }
+    #expect(rig.requests.isEmpty)
+  }
+
+  @Test func INS_011_aRepeatedPathWithAnUnsafeChunkStillFailsBeforeAnyRequest() async throws {
+    let rig = try Rig()
+    defer { rig.remove() }
+    let good = SyntheticFile("dup.bin", sizes: [3_000])
+    let c = good.file.chunks[0]
+    let evilChunk = SophonChunk(
+      id: "../evil", md5: c.md5, offset: c.offset, compressedSize: c.compressedSize,
+      uncompressedSize: c.uncompressedSize, xxhash: c.xxhash, compressedMD5: c.compressedMD5)
+    rig.cdn.serve(good)
+    await #expect {
+      try await rig.install([good.file, good.file.replacing(chunks: [evilChunk])])
+    } throws: { error in
+      if case SophonError.invalidManifest = error { return true } else { return false }
+    }
+    #expect(rig.requests.isEmpty)
+  }
+
   // MARK: progress
 
   @Test func INS_008_progressEndsAtTotalCompressedSizeIncludingFilesAlreadyInPlace() async throws {

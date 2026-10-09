@@ -50,17 +50,19 @@ public struct SophonDownloader: Sendable {
     var seen = Set<String>()
     for file in files {
       let destination = try SophonPathPolicy.resolve(file.path, in: gameDirectory)
-      if file.isDirectory || !seen.insert(file.path).inserted { continue }
+      if file.isDirectory { continue }
+      // Every entry is checked, also a repeated path: only the first one is downloaded.
       for chunk in file.chunks {
         // A chunk id becomes a file name; it must not be able to leave the cache directory.
         guard SophonDownloaderLayout.isSafeName(chunk.id) else {
           throw SophonError.invalidManifest("unsafe chunk id for \(file.path)")
         }
-        guard chunk.offset + UInt64(chunk.uncompressedSize) <= UInt64(file.size) else {
+        let (end, overflow) = chunk.offset.addingReportingOverflow(UInt64(chunk.uncompressedSize))
+        guard !overflow, end <= UInt64(file.size) else {
           throw SophonError.invalidManifest("chunk \(chunk.id) exceeds the size of \(file.path)")
         }
       }
-      targets.append((file, destination))
+      if seen.insert(file.path).inserted { targets.append((file, destination)) }
     }
     for file in files where file.isDirectory {
       let directory = try SophonPathPolicy.resolve(file.path, in: gameDirectory)
@@ -123,7 +125,7 @@ public struct SophonDownloader: Sendable {
         let index = next
         next += 1
         group.addTask {
-          let intact = try Self.isIntact(candidates[index], at: destinations[index])
+          let intact = try await Offload.run { try Self.isIntact(candidates[index], at: destinations[index], cancelled: $0) }
           counter.add(candidates[index].size)
           return (index, intact)
         }
@@ -160,18 +162,18 @@ public struct SophonDownloader: Sendable {
   }
 
   /// Size and MD5 both match. A size-only check lets corrupted files of the right size survive.
-  static func isIntact(_ file: SophonFile, at url: URL) throws -> Bool {
+  static func isIntact(_ file: SophonFile, at url: URL, cancelled: CancelFlag) throws -> Bool {
     guard let size = (try? FileManager.default.attributesOfItem(atPath: url.path))?[.size] as? NSNumber,
       size.int64Value == file.size
     else { return false }
-    return try MD5Hasher.hex(ofFileAt: url).caseInsensitiveCompare(file.md5) == .orderedSame
+    return try MD5Hasher.hex(ofFileAt: url, cancelled: cancelled).caseInsensitiveCompare(file.md5) == .orderedSame
   }
 
   private static func process(
     _ file: SophonFile, to destination: URL, worker: FileWorker, reporter: ProgressReporter,
     config: SophonDownloadConfiguration
   ) async throws {
-    if try isIntact(file, at: destination) {
+    if try await Offload.run({ try isIntact(file, at: destination, cancelled: $0) }) {
       reporter.add(compressedSize(of: file))
       return
     }
@@ -248,10 +250,11 @@ private struct FileWorker: Sendable {
       try Task.checkCancellation()
       let cached = chunkDirectory.appending(path: chunk.id)
       let compressed = try await downloadChunk(chunk, to: cached, reporter: reporter)
-      let plain: Data
-      do {
-        plain = try Zstd.decompress(compressed, maxOutputSize: 64 << 20)
-      } catch {
+      // zstd and MD5 are blocking C-speed work: keep them off the cooperative pool (ADR 0002).
+      let decoded = await Offload.run { _ in
+        (try? Zstd.decompress(compressed, maxOutputSize: 64 << 20)).map { ($0, MD5Hasher.hex(of: $0)) }
+      }
+      guard let (plain, plainMD5) = decoded else {
         try? fileManager.removeItem(at: cached)
         reporter.add(-Int64(chunk.compressedSize))
         throw SophonError.checksumMismatch(path: file.path)
@@ -261,7 +264,7 @@ private struct FileWorker: Sendable {
         reporter.add(-Int64(chunk.compressedSize))
         throw SophonError.invalidManifest("chunk \(chunk.id) does not hold \(chunk.uncompressedSize) bytes")
       }
-      guard MD5Hasher.hex(of: plain).caseInsensitiveCompare(chunk.md5) == .orderedSame else {
+      guard plainMD5.caseInsensitiveCompare(chunk.md5) == .orderedSame else {
         try? fileManager.removeItem(at: cached)
         reporter.add(-Int64(chunk.compressedSize))
         throw SophonError.checksumMismatch(path: file.path)
@@ -272,7 +275,8 @@ private struct FileWorker: Sendable {
     try handle.synchronize()
     try handle.close()
 
-    guard try MD5Hasher.hex(ofFileAt: assembly).caseInsensitiveCompare(file.md5) == .orderedSame else {
+    let assembledMD5 = try await Offload.run { try MD5Hasher.hex(ofFileAt: assembly, cancelled: $0) }
+    guard assembledMD5.caseInsensitiveCompare(file.md5) == .orderedSame else {
       try? fileManager.removeItem(at: assembly)
       throw SophonError.checksumMismatch(path: file.path)
     }
@@ -493,18 +497,49 @@ enum SophonDownloaderLayout {
   }
 }
 
+/// Set when the awaiting task is cancelled, so blocking work on `Offload.queue` can stop early.
+final class CancelFlag: @unchecked Sendable {
+  private let lock = NSLock()
+  private var value = false
+  var isSet: Bool { lock.withLock { value } }
+  func set() { lock.withLock { value = true } }
+}
+
+/// Runs blocking work on a dedicated concurrent queue and resumes when it has finished. Callers are
+/// already bounded by their task groups, so the queue never holds more than that many items.
+enum Offload {
+  static let queue = DispatchQueue(label: "yaagl.sophon.blocking", qos: .utility, attributes: .concurrent)
+
+  static func run<T: Sendable>(_ work: @escaping @Sendable (CancelFlag) throws -> T) async throws -> T {
+    let flag = CancelFlag()
+    return try await withTaskCancellationHandler {
+      try await withCheckedThrowingContinuation { continuation in
+        queue.async { continuation.resume(with: Result { try work(flag) }) }
+      }
+    } onCancel: {
+      flag.set()
+    }
+  }
+
+  static func run<T: Sendable>(_ work: @escaping @Sendable (CancelFlag) -> T) async -> T {
+    await withCheckedContinuation { continuation in
+      queue.async { continuation.resume(returning: work(CancelFlag())) }
+    }
+  }
+}
+
 enum MD5Hasher {
   static func hex(of data: Data) -> String {
     Insecure.MD5.hash(data: data).map { String(format: "%02x", $0) }.joined()
   }
 
   /// Streams the file in 1 MiB steps, checking for cancellation between steps.
-  static func hex(ofFileAt url: URL) throws -> String {
+  static func hex(ofFileAt url: URL, cancelled: CancelFlag) throws -> String {
     let handle = try FileHandle(forReadingFrom: url)
     defer { try? handle.close() }
     var hasher = Insecure.MD5()
     while let block = try handle.read(upToCount: 1 << 20), !block.isEmpty {
-      try Task.checkCancellation()
+      if cancelled.isSet { throw CancellationError() }
       hasher.update(data: block)
     }
     return hasher.finalize().map { String(format: "%02x", $0) }.joined()
