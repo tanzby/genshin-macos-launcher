@@ -80,8 +80,6 @@ public final class LauncherModel {
 
   private var exclusiveTask: Task<Void, Never>?
   private var preDownloadTask: Task<Void, Never>?
-  private var exclusivePreflight: Task<Void, Error>?
-  private var preDownloadPreflight: Task<Void, Error>?
   private var launchGate: LaunchGate?
   private var launchWork: Task<LaunchOutcome, Error>?
 
@@ -150,9 +148,9 @@ public final class LauncherModel {
     guard let store else { throw LauncherError.noGameDirectory }
     exclusive = job.exclusivePhase  // claim before any await so nothing else can slip in
     lastError = nil
-    // The preflight is a Task the model owns, so pause() and shutdown() can cancel it and wait for it.
-    let preflight = Task<Void, Error> {
-      defer { exclusivePreflight = nil }
+    // One Task covers preflight and the job, so pause()/shutdown() always find a handle to cancel and await.
+    let (ready, readySink) = AsyncThrowingStream<Void, Error>.makeStream()
+    exclusiveTask = Task {
       do {
         await stopPreDownload()
         try Task.checkCancellation()
@@ -160,13 +158,15 @@ public final class LauncherModel {
         try Task.checkCancellation()
       } catch {
         exclusive = .idle
-        throw error
+        exclusiveTask = nil
+        readySink.finish(throwing: error)
+        return
       }
+      let stream = begin(job, store: store)
+      readySink.finish()
+      await drive(job, stream: stream, store: store)
     }
-    exclusivePreflight = preflight
-    do { try await preflight.value } catch is CancellationError { return }  // paused before the job began
-    let stream = begin(job, store: store)
-    exclusiveTask = Task { await self.drive(job, stream: stream, store: store) }
+    do { for try await _ in ready {} } catch is CancellationError { return }  // paused before the job began
   }
 
   private func startPreDownload() async throws {
@@ -178,8 +178,8 @@ public final class LauncherModel {
     guard let store else { throw LauncherError.noGameDirectory }
     isPreDownloading = true
     lastError = nil
-    let preflight = Task<Void, Error> {
-      defer { preDownloadPreflight = nil }
+    let (ready, readySink) = AsyncThrowingStream<Void, Error>.makeStream()
+    preDownloadTask = Task {
       do {
         try await checkDiskSpace(for: .preDownload, in: store.gameDirectory)
         try Task.checkCancellation()
@@ -189,13 +189,15 @@ public final class LauncherModel {
         }
       } catch {
         isPreDownloading = false
-        throw error
+        preDownloadTask = nil
+        readySink.finish(throwing: error)
+        return
       }
+      let stream = begin(.preDownload, store: store)
+      readySink.finish()
+      await drive(.preDownload, stream: stream, store: store)
     }
-    preDownloadPreflight = preflight
-    do { try await preflight.value } catch is CancellationError { return }
-    let stream = begin(.preDownload, store: store)
-    preDownloadTask = Task { await self.drive(.preDownload, stream: stream, store: store) }
+    do { for try await _ in ready {} } catch is CancellationError { return }
   }
 
   private func begin(_ job: GameJob, store: PendingJobStore) -> AsyncThrowingStream<JobProgress, Error> {
@@ -246,22 +248,17 @@ public final class LauncherModel {
     }
   }
 
-  /// Cancels the preflight and job Tasks of the chosen slots and returns once all of them have stopped.
+  /// Cancels the chosen slots' Tasks and returns once all of them have stopped.
   private func cancelAndWait(exclusive: Bool, preDownload: Bool) async {
-    var preflights: [Task<Void, Error>] = []
-    var jobs: [Task<Void, Never>] = []
-    if exclusive { preflights += [exclusivePreflight].compactMap { $0 }; jobs += [exclusiveTask].compactMap { $0 } }
-    if preDownload { preflights += [preDownloadPreflight].compactMap { $0 }; jobs += [preDownloadTask].compactMap { $0 } }
-    for task in preflights { task.cancel() }
-    for task in jobs { task.cancel() }
-    for task in preflights { _ = await task.result }
-    for task in jobs { await task.value }
+    var tasks: [Task<Void, Never>] = []
+    if exclusive { tasks += [exclusiveTask].compactMap { $0 } }
+    if preDownload { tasks += [preDownloadTask].compactMap { $0 } }
+    for task in tasks { task.cancel() }
+    for task in tasks { await task.value }
   }
 
   private func stopPreDownload() async {
-    guard let task = preDownloadTask else { return }
-    task.cancel()
-    await task.value
+    await cancelAndWait(exclusive: false, preDownload: true)
   }
 
   private func checkDiskSpace(for job: GameJob, in directory: URL) async throws {
@@ -284,9 +281,7 @@ public final class LauncherModel {
     // Only download jobs are pausable; cancelling a launch Task alone would leave `await` hanging until the game exits.
     let pausable: Set<LauncherPhase> = [.installing, .updating, .repairing]
     let exclusivePause = pausable.contains(exclusive)
-    guard exclusivePause ? (exclusivePreflight != nil || exclusiveTask != nil)
-      : (preDownloadPreflight != nil || preDownloadTask != nil)
-    else { return }
+    guard exclusivePause ? exclusiveTask != nil : preDownloadTask != nil else { return }
     isPausing = true
     await cancelAndWait(exclusive: exclusivePause, preDownload: !exclusivePause)
     isPausing = false
@@ -319,7 +314,8 @@ public final class LauncherModel {
     let client = client
     let options = LaunchOptions(gameDirectory: gameDirectory)
     let onStarted: @Sendable () -> Void = { [weak self] in
-      gate.markStarted()
+      // Only the callback that beats the timeout may switch the phase to running.
+      guard gate.markStarted() else { return }
       Task { @MainActor in self?.noteStarted(gate) }
     }
     let work = Task { try await client.launch(options, onStarted: onStarted) }
@@ -367,9 +363,6 @@ public final class LauncherModel {
 
   /// Test hook: returns once no job or launch Task is outstanding.
   func waitUntilIdle() async {
-    while let task = exclusivePreflight ?? preDownloadPreflight {
-      _ = await task.result
-    }
     while let task = exclusiveTask ?? preDownloadTask {
       await task.value
     }
@@ -406,7 +399,13 @@ private final class LaunchGate: Sendable {
   private enum State { case waiting, started, expired }
   private let state = Mutex(State.waiting)
 
-  func markStarted() { state.withLock { if $0 == .waiting { $0 = .started } } }
+  /// True when the game process won the race against the timeout.
+  func markStarted() -> Bool {
+    state.withLock {
+      if $0 == .waiting { $0 = .started }
+      return $0 == .started
+    }
+  }
 
   /// True when the timeout won the race.
   func expire() -> Bool {
