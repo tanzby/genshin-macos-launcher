@@ -12,9 +12,12 @@ public struct WineDistribution: Sendable, Equatable {
   public var archiveSize: Int64
   /// Size of the unpacked runtime in bytes.
   public var installedSize: Int64
+  /// Size of a fresh prefix after `wineboot`, created after the old runtime is gone.
+  public var prefixSize: Int64
 
   public init(
-    id: String, url: URL, sha256: String, winePath: String? = nil, archiveSize: Int64 = 0, installedSize: Int64 = 0
+    id: String, url: URL, sha256: String, winePath: String? = nil, archiveSize: Int64 = 0, installedSize: Int64 = 0,
+    prefixSize: Int64 = 0
   ) {
     self.id = id
     self.url = url
@@ -22,6 +25,7 @@ public struct WineDistribution: Sendable, Equatable {
     self.winePath = winePath
     self.archiveSize = archiveSize
     self.installedSize = installedSize
+    self.prefixSize = prefixSize
   }
 
   public static let pinned = WineDistribution(
@@ -33,7 +37,8 @@ public struct WineDistribution: Sendable, Equatable {
     sha256: "89fa7e90fb626523a90d5867a03c6be785d017176739c6320a3b86c7838c3a35",
     winePath: "wine",
     archiveSize: 456_021_524,
-    installedSize: 2_000_000_000
+    installedSize: 2_100_000_000,
+    prefixSize: 600_000_000
   )
 }
 

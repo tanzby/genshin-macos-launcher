@@ -49,8 +49,9 @@ extension WineRuntime {
 
     // 0. Free space, before anything is downloaded or deleted (WIN-006). An unreadable volume does not block.
     //    On the data volume at the same time: the Wine archive and the unpacked runtime, plus the DXMT zip,
-    //    its tar.gz and the unpacked files (taken as 4 x the zip).
-    let required = distribution.archiveSize + 4 * dxmt.archiveSize + distribution.installedSize
+    //    its tar.gz and the unpacked files (taken as 4 x the zip), and the new prefix `wineboot` fills.
+    let required =
+      distribution.archiveSize + 4 * dxmt.archiveSize + distribution.installedSize + distribution.prefixSize
     if let available = availableSpace(layout.root), available < required {
       throw WineInstallError.insufficientDiskSpace(required: required, available: available)
     }
