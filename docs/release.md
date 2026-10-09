@@ -4,6 +4,8 @@ Push a semver tag from `main` (`1.0.0-rc.1`, ..., `1.0.0`). `.github/workflows/r
 
 - `CFBundleShortVersionString` is the tag. `CFBundleVersion` is `github.run_number`, a plain integer that only grows, so Sparkle ordering never depends on rc suffixes.
 - Without the `SPARKLE_ED_PRIVATE_KEY` secret, or while `SUPublicEDKey` in `project.yml` is empty, a tag run is a dry run: it builds and uploads the files as a workflow artifact and publishes nothing. The Actions tab's "Run workflow" is always a dry run.
+- Before publishing, `scripts/release/verify-ed-signature.swift` checks the appcast signature against the `SUPublicEDKey` built into the app, so a secret holding the wrong private key fails the run instead of shipping an update every client rejects.
+- Debug builds never start the updater.
 - Before `1.0.0`, check that a real `rc.N` to `rc.N+1` update works through the live feed.
 
 ## EdDSA key (maintainer only, agents never touch it)
