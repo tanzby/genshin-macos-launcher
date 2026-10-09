@@ -47,7 +47,7 @@ public struct SophonDownloader: Sendable {
     // Validate everything first: a hostile manifest must fail before the first request.
     let chunkBase = try Self.chunkBase(of: ref)
     var targets: [(file: SophonFile, destination: URL)] = []
-    var seen = Set<String>()
+    var seen: [String: String] = [:]  // standardised destination -> file MD5
     for file in files {
       let destination = try SophonPathPolicy.resolve(file.path, in: gameDirectory)
       if file.isDirectory { continue }
@@ -57,12 +57,25 @@ public struct SophonDownloader: Sendable {
         guard SophonDownloaderLayout.isSafeName(chunk.id) else {
           throw SophonError.invalidManifest("unsafe chunk id for \(file.path)")
         }
+        // Chunks are read and decoded whole; real ones are about 1 MiB, so anything big is hostile.
+        guard chunk.compressedSize <= SophonDownloaderLayout.maxChunkSize,
+          chunk.uncompressedSize <= SophonDownloaderLayout.maxChunkSize
+        else { throw SophonError.invalidManifest("chunk \(chunk.id) is too large") }
         let (end, overflow) = chunk.offset.addingReportingOverflow(UInt64(chunk.uncompressedSize))
         guard !overflow, end <= UInt64(file.size) else {
           throw SophonError.invalidManifest("chunk \(chunk.id) exceeds the size of \(file.path)")
         }
       }
-      if seen.insert(file.path).inserted { targets.append((file, destination)) }
+      // `a/b`, `a/./b` and `a//b` are one file. Equal entries collapse; conflicting ones are refused.
+      let key = destination.standardizedFileURL.path
+      if let existing = seen[key] {
+        guard existing.caseInsensitiveCompare(file.md5) == .orderedSame else {
+          throw SophonError.invalidManifest("conflicting entries for \(file.path)")
+        }
+      } else {
+        seen[key] = file.md5
+        targets.append((file, destination))
+      }
     }
     for file in files where file.isDirectory {
       let directory = try SophonPathPolicy.resolve(file.path, in: gameDirectory)
@@ -252,7 +265,7 @@ private struct FileWorker: Sendable {
       let compressed = try await downloadChunk(chunk, to: cached, reporter: reporter)
       // zstd and MD5 are blocking C-speed work: keep them off the cooperative pool (ADR 0002).
       let decoded = await Offload.run { _ in
-        (try? Zstd.decompress(compressed, maxOutputSize: 64 << 20)).map { ($0, MD5Hasher.hex(of: $0)) }
+        (try? Zstd.decompress(compressed, maxOutputSize: Int(SophonDownloaderLayout.maxChunkSize))).map { ($0, MD5Hasher.hex(of: $0)) }
       }
       guard let (plain, plainMD5) = decoded else {
         try? fileManager.removeItem(at: cached)
@@ -315,7 +328,7 @@ private struct FileWorker: Sendable {
 
     // Cached bytes count as done from the start, so the corrections below stay consistent.
     reporter.add(have)
-    let stream = ChunkStream(session: session, request: request)
+    let stream = ChunkStream(session: session, request: request, expected: expected, have: have, name: chunk.id)
     defer { stream.cancel() }
     var handle: FileHandle?
     var written: Int64 = 0
@@ -361,6 +374,12 @@ private struct FileWorker: Sendable {
     } catch let error as URLError {
       if error.code == .cancelled { throw CancellationError() }
       throw SophonError.transport(code: error.code.rawValue)
+    } catch SophonError.checksumMismatch(let name) {
+      // The body outgrew the chunk: what is on disk is not a prefix worth resuming.
+      try? handle?.close()
+      handle = nil
+      try? fileManager.removeItem(at: cached)
+      throw SophonError.checksumMismatch(path: name)
     }
     try handle?.close()
     handle = nil
@@ -393,7 +412,17 @@ private final class ChunkStream: NSObject, URLSessionDataDelegate, @unchecked Se
 
   private let task: URLSessionDataTask
 
-  init(session: URLSession, request: URLRequest) {
+  private let expected: Int64
+  private let have: Int64
+  private var byteLimit: Int64
+  private let name: String
+  private var received: Int64 = 0
+
+  init(session: URLSession, request: URLRequest, expected: Int64, have: Int64, name: String) {
+    self.expected = expected
+    self.have = have
+    byteLimit = expected - have
+    self.name = name
     (events, continuation) = AsyncThrowingStream.makeStream()
     task = session.dataTask(with: request)
     super.init()
@@ -417,11 +446,20 @@ private final class ChunkStream: NSObject, URLSessionDataDelegate, @unchecked Se
       completionHandler(.cancel)
       return
     }
+    // A 200 carries the whole chunk even when we asked to resume.
+    if http.statusCode == 200 { byteLimit = expected }
     continuation.yield(.response(http))
     completionHandler(.allow)
   }
 
   func urlSession(_ session: URLSession, dataTask: URLSessionDataTask, didReceive data: Data) {
+    // Delegate callbacks are serial. Stop a body that outgrows the chunk before it piles up in the stream.
+    received += Int64(data.count)
+    if received > byteLimit && byteLimit >= 0 {
+      continuation.finish(throwing: SophonError.checksumMismatch(path: name))
+      dataTask.cancel()
+      return
+    }
     continuation.yield(.data(data))
   }
 
@@ -510,6 +548,8 @@ private final class VerifyCounter: @unchecked Sendable {
 enum SophonDownloaderLayout {
   /// Temp-directory name of one file: a digest of the whole relative path, never the basename.
   static func fileKey(for path: String) -> String { MD5Hasher.hex(of: Data(path.utf8)) }
+
+  static let maxChunkSize: UInt32 = 64 << 20
 
   static func isSafeName(_ name: String) -> Bool {
     !name.isEmpty && !name.contains("/") && !name.contains("\\") && !name.contains("..")

@@ -1163,6 +1163,44 @@ private final class Rig: @unchecked Sendable {
     #expect(rig.requests.isEmpty)
   }
 
+  @Test func INS_011_aliasedPathsWithConflictingContentAreRefusedAndEqualOnesCollapse() async throws {
+    let rig = try Rig()
+    defer { rig.remove() }
+    let a = SyntheticFile("Data/a.bin", sizes: [3_000])
+    rig.cdn.serve(a)
+    let alias = SophonFile(
+      path: "Data/./a.bin", isDirectory: false, size: a.file.size, md5: "00" + a.file.md5.dropFirst(2),
+      chunks: a.file.chunks)
+    await #expect {
+      try await rig.install([a.file, alias])
+    } throws: { error in
+      if case SophonError.invalidManifest = error { return true } else { return false }
+    }
+    #expect(rig.requests.isEmpty)
+
+    let same = SophonFile(
+      path: "Data//a.bin", isDirectory: false, size: a.file.size, md5: a.file.md5, chunks: a.file.chunks)
+    try await rig.install([a.file, same])
+    #expect(rig.requests.count == 1)
+    #expect(rig.sandbox.read(a.file.path) == a.plain)
+  }
+
+  @Test func INS_008_chunkLargerThanTheSanityCapIsAnInvalidManifest() async throws {
+    let rig = try Rig()
+    defer { rig.remove() }
+    let base = SyntheticFile("huge.bin", sizes: [3_000])
+    let c = base.file.chunks[0]
+    let huge = SophonChunk(
+      id: c.id, md5: c.md5, offset: 0, compressedSize: UInt32.max,
+      uncompressedSize: c.uncompressedSize, xxhash: c.xxhash, compressedMD5: c.compressedMD5)
+    await #expect {
+      try await rig.install([base.file.replacing(chunks: [huge])])
+    } throws: { error in
+      if case SophonError.invalidManifest = error { return true } else { return false }
+    }
+    #expect(rig.requests.isEmpty)
+  }
+
   // MARK: progress
 
   @Test func INS_008_progressEndsAtTotalCompressedSizeIncludingFilesAlreadyInPlace() async throws {
