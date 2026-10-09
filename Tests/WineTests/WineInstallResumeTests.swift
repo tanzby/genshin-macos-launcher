@@ -41,6 +41,27 @@ import Testing
     }
   }
 
+  @Test("WIN-006 bytes of an archive already on disk are not counted again")
+  func existingArchiveBytesAreDeducted() async throws {
+    try await withWineTempDirectory { dir in
+      var options = WineHarnessOptions()
+      options.availableBytes =
+        wineFixtureArchiveSize + 4 * wineFixtureDXMTArchiveSize + wineFixtureInstalledSize + wineFixturePrefixSize - 1000
+      let h = try makeWineHarness(in: dir, options: options)
+
+      // Without a leftover the same free space is not enough ...
+      await #expect(throws: WineInstallError.self) { try await h.install() }
+
+      // ... with 600 + 400 bytes of a finished and a partial Wine archive it is.
+      try FileManager.default.createDirectory(at: h.layout.downloadsDirectory, withIntermediateDirectories: true)
+      let name = "wine-\(h.fixtures.distribution.sha256.prefix(16)).archive"
+      try Data(count: 600).write(to: h.layout.downloadsDirectory.appending(path: name))
+      try Data(count: 400).write(to: h.layout.downloadsDirectory.appending(path: name + ".part"))
+      try await h.install()
+      #expect(await h.runtime.status() == .ready)
+    }
+  }
+
   @Test("WIN-006 an unknown free-space reading does not block the install")
   func unknownSpaceDoesNotBlock() async throws {
     try await withWineTempDirectory { dir in

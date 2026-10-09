@@ -47,23 +47,28 @@ extension WineRuntime {
     try fileManager.createDirectory(at: scratch, withIntermediateDirectories: true)
     defer { try? fileManager.removeItem(at: scratch) }
 
+    // Archives sit at a stable path with a name derived from the checksum: an interrupted download resumes there
+    // on the next attempt (WIN-007).
+    let wineArchive = layout.downloadsDirectory.appending(
+      path: "wine-\(distribution.sha256.prefix(16)).archive", directoryHint: .notDirectory)
+    let dxmtArchive = layout.downloadsDirectory.appending(
+      path: "dxmt-\(dxmt.sha256.prefix(16)).zip", directoryHint: .notDirectory)
+
     // 0. Free space, before anything is downloaded or deleted (WIN-006). An unreadable volume does not block.
-    //    On the data volume at the same time: the Wine archive and the unpacked runtime, plus the DXMT zip,
-    //    its tar.gz and the unpacked files (taken as 4 x the zip), and the new prefix `wineboot` fills.
+    //    On the data volume at the same time: the two archives, the unpacked runtime, the DXMT tar.gz and
+    //    unpacked files (taken as 3 x the zip) and the new prefix `wineboot` fills. Bytes of an archive that
+    //    is already there (finished or partial) are on the volume and no longer needed.
     let required =
-      distribution.archiveSize + 4 * dxmt.archiveSize + distribution.installedSize + distribution.prefixSize
+      max(0, distribution.archiveSize - Self.bytesOnDisk(of: wineArchive))
+      + max(0, dxmt.archiveSize - Self.bytesOnDisk(of: dxmtArchive)) + 3 * dxmt.archiveSize
+      + distribution.installedSize + distribution.prefixSize
     if let available = availableSpace(layout.root), available < required {
       throw WineInstallError.insufficientDiskSpace(required: required, available: available)
     }
 
     // 1. Download and verify both archives before touching the working install, so a network failure leaves
-    //    the existing runtime and prefix alone. They go to a stable path with a name derived from the checksum:
-    //    an interrupted download resumes there on the next attempt (WIN-007), and the two run in parallel.
+    //    the existing runtime and prefix alone. The two run in parallel.
     try fileManager.createDirectory(at: layout.downloadsDirectory, withIntermediateDirectories: true)
-    let wineArchive = layout.downloadsDirectory.appending(
-      path: "wine-\(distribution.sha256.prefix(16)).archive", directoryHint: .notDirectory)
-    let dxmtArchive = layout.downloadsDirectory.appending(
-      path: "dxmt-\(dxmt.sha256.prefix(16)).zip", directoryHint: .notDirectory)
     let downloader = downloader, distribution = distribution, dxmt = dxmt
     do {
       try await withThrowingTaskGroup(of: Void.self) { group in
@@ -195,6 +200,11 @@ extension WineRuntime {
   }
 
   static let toolOutputLimit = 2000
+
+  /// Size of a finished download plus its `.part`, 0 if neither exists.
+  static func bytesOnDisk(of archive: URL) -> Int64 {
+    Downloader.fileSize(archive) + Downloader.fileSize(URL(filePath: archive.path + ".part"))
+  }
 
   private func removeIfEmpty(_ directory: URL) {
     let entries = (try? FileManager.default.contentsOfDirectory(atPath: directory.path)) ?? []

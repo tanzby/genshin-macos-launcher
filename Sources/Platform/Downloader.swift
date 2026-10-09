@@ -117,7 +117,7 @@ public struct Downloader: Downloading {
     return delegate.total
   }
 
-  static func fileSize(_ url: URL) -> Int64 {
+  public static func fileSize(_ url: URL) -> Int64 {
     ((try? FileManager.default.attributesOfItem(atPath: url.path)[.size] as? Int64) ?? nil) ?? 0
   }
 
