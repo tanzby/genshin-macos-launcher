@@ -52,6 +52,10 @@ public struct SophonDownloader: Sendable {
       let destination = try SophonPathPolicy.resolve(file.path, in: gameDirectory)
       if file.isDirectory || !seen.insert(file.path).inserted { continue }
       for chunk in file.chunks {
+        // A chunk id becomes a file name; it must not be able to leave the cache directory.
+        guard SophonDownloaderLayout.isSafeName(chunk.id) else {
+          throw SophonError.invalidManifest("unsafe chunk id for \(file.path)")
+        }
         guard chunk.offset + UInt64(chunk.uncompressedSize) <= UInt64(file.size) else {
           throw SophonError.invalidManifest("chunk \(chunk.id) exceeds the size of \(file.path)")
         }
@@ -215,7 +219,17 @@ private struct FileWorker: Sendable {
   var chunkRoot: URL { tempDirectory.appending(path: "chunks", directoryHint: .isDirectory) }
   var assemblyRoot: URL { tempDirectory.appending(path: "assembling", directoryHint: .isDirectory) }
 
-  func fetch(_ file: SophonFile, to destination: URL, reporter: ProgressReporter) async throws {
+  func fetch(_ file: SophonFile, to destination: URL, reporter overall: ProgressReporter) async throws {
+    let reporter = overall.scope()
+    do {
+      try await assemble(file, to: destination, reporter: reporter)
+    } catch {
+      reporter.rollback()
+      throw error
+    }
+  }
+
+  private func assemble(_ file: SophonFile, to destination: URL, reporter: AttemptProgress) async throws {
     let key = SophonDownloaderLayout.fileKey(for: file.path)
     let chunkDirectory = chunkRoot.appending(path: key, directoryHint: .isDirectory)
     let assembly = assemblyRoot.appending(path: key + ".part")
@@ -232,10 +246,6 @@ private struct FileWorker: Sendable {
 
     for chunk in file.chunks {
       try Task.checkCancellation()
-      // A chunk id becomes a file name; it must not be able to leave the cache directory.
-      guard !chunk.id.isEmpty, !chunk.id.contains("/"), !chunk.id.contains("\\"), !chunk.id.contains(".."),
-        !chunk.id.contains("\0")
-      else { throw SophonError.invalidManifest("unsafe chunk id for \(file.path)") }
       let cached = chunkDirectory.appending(path: chunk.id)
       let compressed = try await downloadChunk(chunk, to: cached, reporter: reporter)
       let plain: Data
@@ -279,7 +289,7 @@ private struct FileWorker: Sendable {
   }
 
   /// Makes `cached` hold the complete compressed chunk, resuming with `Range` when part of it is there.
-  private func downloadChunk(_ chunk: SophonChunk, to cached: URL, reporter: ProgressReporter) async throws -> Data {
+  private func downloadChunk(_ chunk: SophonChunk, to cached: URL, reporter: AttemptProgress) async throws -> Data {
     let fileManager = FileManager.default
     let expected = Int64(chunk.compressedSize)
     var have = Self.size(of: cached)
@@ -396,6 +406,25 @@ private final class ChunkStream: NSObject, URLSessionDataDelegate, @unchecked Se
   }
 }
 
+/// Bytes one attempt at one file has counted. A failed attempt gives them back, because the retry
+/// counts the cached part again.
+private final class AttemptProgress: @unchecked Sendable {
+  private let reporter: ProgressReporter
+  private var counted: Int64 = 0
+
+  init(reporter: ProgressReporter) { self.reporter = reporter }
+
+  func add(_ bytes: Int64) {
+    counted += bytes
+    reporter.add(bytes)
+  }
+
+  func rollback() {
+    reporter.add(-counted)
+    counted = 0
+  }
+}
+
 /// Counts compressed bytes and forwards `.downloading` at most once per interval.
 private final class ProgressReporter: @unchecked Sendable {
   private let total: Int64
@@ -412,18 +441,20 @@ private final class ProgressReporter: @unchecked Sendable {
   }
 
   func add(_ bytes: Int64) {
-    let event: SophonProgress? = lock.withLock {
+    // The callback runs under the lock so reports reach the caller in the order they were made.
+    lock.withLock {
       done = max(0, min(total, done + bytes))
       let now = ContinuousClock.now
-      if let last, now - last < interval { return nil }
+      if let last, now - last < interval { return }
       last = now
-      return .downloading(done: done, total: total)
+      report(.downloading(done: done, total: total))
     }
-    if let event { report(event) }
   }
 
   /// The closing report is never throttled.
-  func finish(_ event: SophonProgress) { report(event) }
+  func finish(_ event: SophonProgress) { lock.withLock { report(event) } }
+
+  func scope() -> AttemptProgress { AttemptProgress(reporter: self) }
 }
 
 /// Thread-safe, throttled `.verifying` reporter.
@@ -442,20 +473,24 @@ private final class VerifyCounter: @unchecked Sendable {
   }
 
   func add(_ bytes: Int64) {
-    let event: SophonProgress? = lock.withLock {
+    lock.withLock {
       done += bytes
       let now = ContinuousClock.now
-      guard now - last >= interval else { return nil }
+      guard now - last >= interval else { return }
       last = now
-      return .verifying(done: done, total: total)
+      report(.verifying(done: done, total: total))
     }
-    if let event { report(event) }
   }
 }
 
 enum SophonDownloaderLayout {
   /// Temp-directory name of one file: a digest of the whole relative path, never the basename.
   static func fileKey(for path: String) -> String { MD5Hasher.hex(of: Data(path.utf8)) }
+
+  static func isSafeName(_ name: String) -> Bool {
+    !name.isEmpty && !name.contains("/") && !name.contains("\\") && !name.contains("..")
+      && !name.contains("\0")
+  }
 }
 
 enum MD5Hasher {

@@ -1089,6 +1089,28 @@ private final class Rig: @unchecked Sendable {
     #expect(Sandbox.regularFiles(in: rig.sandbox.root).isEmpty)
   }
 
+  @Test(arguments: ["../x", "a/b", "..", ""])
+  func INS_011_unsafeChunkIDInALaterFileFailsBeforeAnyRequest(id: String) async throws {
+    let rig = try Rig()
+    defer { rig.remove() }
+    let good = SyntheticFile("good.bin", sizes: [3_000])
+    let other = SyntheticFile("later.bin", sizes: [3_000])
+    let c = other.file.chunks[0]
+    let evilChunk = SophonChunk(
+      id: id, md5: c.md5, offset: c.offset, compressedSize: c.compressedSize,
+      uncompressedSize: c.uncompressedSize, xxhash: c.xxhash, compressedMD5: c.compressedMD5)
+    let evil = other.file.replacing(chunks: [evilChunk])
+    rig.cdn.serve(good, other)
+
+    await #expect {
+      try await rig.install([good.file, evil])
+    } throws: { error in
+      if case SophonError.invalidManifest = error { return true } else { return false }
+    }
+    #expect(rig.requests.isEmpty)
+    #expect(!rig.sandbox.exists("good.bin"))
+  }
+
   // MARK: progress
 
   @Test func INS_008_progressEndsAtTotalCompressedSizeIncludingFilesAlreadyInPlace() async throws {
