@@ -81,6 +81,7 @@ public final class LauncherModel {
   private var exclusiveTask: Task<Void, Never>?
   private var preDownloadTask: Task<Void, Never>?
   private var launchGate: LaunchGate?
+  private var isShuttingDown = false
   private var launchWork: Task<LaunchOutcome, Error>?
 
   public init(
@@ -131,7 +132,7 @@ public final class LauncherModel {
   // MARK: Jobs
 
   public func start(_ job: GameJob) async throws {
-    guard !isPausing else { throw LauncherError.busy }
+    guard !isPausing, !isShuttingDown else { throw LauncherError.busy }
     if job == .preDownload {
       try await startPreDownload()
     } else {
@@ -301,6 +302,7 @@ public final class LauncherModel {
 
   /// App quit: cancel everything, wait for it to stop, keep `job.json`.
   public func shutdown() async {
+    isShuttingDown = true  // before the first suspension, so nothing new can start while we wait
     launchWork?.cancel()
     await cancelAndWait(exclusive: true, preDownload: true)
   }
@@ -308,7 +310,7 @@ public final class LauncherModel {
   // MARK: Launch
 
   public func launch() async throws {
-    guard exclusive == .idle, !isPausing else { throw LauncherError.busy }
+    guard exclusive == .idle, !isPausing, !isShuttingDown else { throw LauncherError.busy }
     guard let status, status.localVersion != nil else { throw LauncherError.notInstalled }
     guard let gameDirectory else { throw LauncherError.noGameDirectory }
     if let kind = store?.load()?.kind, kind != .preDownload { throw LauncherError.pendingJob(kind) }

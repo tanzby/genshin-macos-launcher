@@ -660,6 +660,18 @@ private final class Queried: Sendable {
     #expect(h.fake.runs.isEmpty)
   }
 
+  @Test func PRG_006_nothingStartsWhileShutdownWaits() async throws {
+    let h = await Harness(status: Status.preDownloadable)
+    try await h.beginLaunch()
+    let stopping = Task { await h.model.shutdown() }
+    await Task.yield()
+    await #expect(throws: LauncherError.busy) { try await h.model.start(.preDownload) }
+    await #expect(throws: LauncherError.busy) { try await h.model.launch() }
+    await stopping.value
+    #expect(h.model.phase == .idle)
+    #expect(h.fake.runs.isEmpty)
+  }
+
   @Test func PRG_006_pauseCancelsPreDownload() async throws {
     let h = await Harness(status: Status.preDownloadable)
     let run = try await h.begin(.preDownload)
