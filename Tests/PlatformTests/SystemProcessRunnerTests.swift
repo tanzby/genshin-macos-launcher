@@ -188,7 +188,7 @@ private func writeScript(_ body: String, named name: String = "tool.sh", in dir:
 @Suite("WIN-018 SystemProcessRunner cancellation", .timeLimit(.minutes(1))) struct SystemProcessRunnerCancellationTests {
   /// A loader that ignores SIGTERM, like a stuck Wine.
   private func stubbornScript(in dir: URL) throws -> URL {
-    try writeScript("trap '' TERM\nsleep 30", in: dir)
+    try writeScript("trap '' TERM\nexec sleep 30", in: dir)
   }
 
   @Test func WIN_018_aTaskCancelledBeforeTheProcessStartsStillKillsATermIgnoringProcess() async throws {
