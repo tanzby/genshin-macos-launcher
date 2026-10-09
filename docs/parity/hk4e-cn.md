@@ -116,11 +116,11 @@
 | INS-004 | 全新安装前的磁盘空间检查 | 改写 | [#28](https://github.com/tanzby/yet-another-anime-game-launcher/issues/28) A4 | 组件 | `INS_004_*` |
 | INS-005 | Sophon 安装的前置条件与 config.ini 模板 | 照搬 | TS 行为不变，但依 ADR 0002 在 Sophon/Launcher 重做 | 单元 |  |
 | INS-006 | config.ini 中 game_version 的两次写入 | 照搬 | TS 行为不变，但依 ADR 0002 在 Sophon/Launcher 重做 | 单元 |  |
-| INS-007 | 下载顺序与并发 | 照搬 | 行为不变（流程由 Launcher + Fake GameClient 承载） | 组件 |  |
-| INS-008 | 单个文件的 chunk 下载、组装与校验 | 改写 | [#28](https://github.com/tanzby/yet-another-anime-game-launcher/issues/28) C 负面用例 | 单元 |  |
-| INS-009 | chunk 和 ldiff 的断点续传 | 改写 | [#28](https://github.com/tanzby/yet-another-anime-game-launcher/issues/28) C 负面用例 | 单元 |  |
-| INS-010 | 文件级重试 | 改写 | [#28](https://github.com/tanzby/yet-another-anime-game-launcher/issues/28) C 负面用例 | 单元 |  |
-| INS-011 | 文件路径安全校验 | 照搬 | TS 行为不变，但依 ADR 0002 在 Sophon/Launcher 重做 | 单元 |  |
+| INS-007 | 下载顺序与并发 | 照搬 | 行为不变（流程由 Launcher + Fake GameClient 承载） | 组件 | `INS_007_*`（SophonDownloaderTests） |
+| INS-008 | 单个文件的 chunk 下载、组装与校验 | 改写 | [#28](https://github.com/tanzby/yet-another-anime-game-launcher/issues/28) C 负面用例 | 单元 | `INS_008_*`（SophonDownloaderTests） |
+| INS-009 | chunk 和 ldiff 的断点续传 | 改写 | [#28](https://github.com/tanzby/yet-another-anime-game-launcher/issues/28) C 负面用例 | 单元 | `INS_009_*`（SophonDownloaderTests） |
+| INS-010 | 文件级重试 | 改写 | [#28](https://github.com/tanzby/yet-another-anime-game-launcher/issues/28) C 负面用例 | 单元 | `INS_010_*`（SophonDownloaderTests） |
+| INS-011 | 文件路径安全校验 | 照搬 | TS 行为不变，但依 ADR 0002 在 Sophon/Launcher 重做 | 单元 | `INS_011_*`（SophonDownloaderTests） |
 | INS-012 | 选中已有目录：旧版本，可以增量更新 | 照搬 | TS 行为不变，但依 ADR 0002 在 Sophon/Launcher 重做 | 组件 |  |
 | INS-013 | 选中已有目录：版本太旧 | 照搬 | TS 行为不变，但依 ADR 0002 在 Sophon/Launcher 重做 | 组件 |  |
 | INS-014 | 选中已有目录：已是最新版 | 照搬 | TS 行为不变，但依 ADR 0002 在 Sophon/Launcher 重做 | 组件 |  |
@@ -176,8 +176,8 @@
 | PRG-006 | 取消功能没有接入 | 改写 | [#21](https://github.com/tanzby/yet-another-anime-game-launcher/issues/21) SwiftUI 主界面 / 设置窗口重新设计 | 单元 | `PRG_006_*` |
 | REP-001 | 修复的入口 | 照搬 | TS 行为不变，但依 ADR 0002 在 Sophon/Launcher 重做 | 单元 |  |
 | REP-002 | 前置条件：版本必须是最新 | 照搬 | TS 行为不变，但依 ADR 0002 在 Sophon/Launcher 重做 | 单元 | `REP_002_*`（Launcher 侧前置条件） |
-| REP-003 | 文件校验 | 照搬 | TS 行为不变，但依 ADR 0002 在 Sophon/Launcher 重做 | 单元 |  |
-| REP-004 | 修复不了"大小对、MD5 错"的文件 | 改写 | [#26](https://github.com/tanzby/yet-another-anime-game-launcher/issues/26) | 单元 |  |
+| REP-003 | 文件校验 | 照搬 | TS 行为不变，但依 ADR 0002 在 Sophon/Launcher 重做 | 单元 | `REP_003_*`（SophonDownloaderTests） |
+| REP-004 | 修复不了"大小对、MD5 错"的文件 | 改写 | [#26](https://github.com/tanzby/yet-another-anime-game-launcher/issues/26) | 单元 | `REP_004_*`（SophonDownloaderTests） |
 | REP-005 | hk4e 的完整性检查不清除 `patched` | 改写 | [#28](https://github.com/tanzby/yet-another-anime-game-launcher/issues/28) B12：DXMT 不再注入，修复后无需清标记 | 单元 |  |
 | UPD-001 | 应用版本号的来源 | 作废 | [#19](https://github.com/tanzby/yet-another-anime-game-launcher/issues/19) Sparkle 取代 TS updater | — |  |
 | UPD-002 | 开发版跳过自更新 | 作废 | [#19](https://github.com/tanzby/yet-another-anime-game-launcher/issues/19) Sparkle 取代 TS updater | — |  |
