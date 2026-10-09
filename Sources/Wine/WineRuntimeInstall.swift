@@ -106,7 +106,6 @@ extension WineRuntime {
       arguments += ["--strip-components=\(depth)", winePath]
     }
     try await runTool("/usr/bin/tar", arguments)
-    try? fileManager.removeItem(at: wineArchive)
 
     // 4. Root certificate, before wineboot (WIN-009).
     progress(.configuring)

@@ -120,6 +120,7 @@ import Testing
       await #expect(throws: WineInstallError.self) { try await h.install() }
       let kept = try FileManager.default.contentsOfDirectory(atPath: h.layout.downloadsDirectory.path)
       #expect(kept.contains { $0.hasPrefix("dxmt-") })
+      #expect(kept.contains { $0.hasPrefix("wine-") })
     }
   }
 
