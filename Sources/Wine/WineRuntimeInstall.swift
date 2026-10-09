@@ -47,16 +47,43 @@ extension WineRuntime {
     try fileManager.createDirectory(at: scratch, withIntermediateDirectories: true)
     defer { try? fileManager.removeItem(at: scratch) }
 
-    // 1. Download and verify both archives before touching the working install, so a network
-    //    failure leaves the existing runtime and prefix alone.
-    let wineArchive = scratch.appending(path: "wine-archive", directoryHint: .notDirectory)
-    let dxmtArchive = scratch.appending(path: "dxmt.zip", directoryHint: .notDirectory)
-    try await downloader.download(from: distribution.url, to: wineArchive, sha256: distribution.sha256) {
-      progress(.downloadingWine($0))
+    // 0. Free space, before anything is downloaded or deleted (WIN-006). An unreadable volume does not block.
+    //    On the data volume at the same time: the Wine archive and the unpacked runtime, plus the DXMT zip,
+    //    its tar.gz and the unpacked files (taken as 4 x the zip).
+    let required = distribution.archiveSize + 4 * dxmt.archiveSize + distribution.installedSize
+    if let available = availableSpace(layout.root), available < required {
+      throw WineInstallError.insufficientDiskSpace(required: required, available: available)
     }
-    try await downloader.download(from: dxmt.zipURL, to: dxmtArchive, sha256: dxmt.sha256) {
-      progress(.downloadingDXMT($0))
+
+    // 1. Download and verify both archives before touching the working install, so a network failure leaves
+    //    the existing runtime and prefix alone. They go to a stable path with a name derived from the checksum:
+    //    an interrupted download resumes there on the next attempt (WIN-007), and the two run in parallel.
+    try fileManager.createDirectory(at: layout.downloadsDirectory, withIntermediateDirectories: true)
+    let wineArchive = layout.downloadsDirectory.appending(
+      path: "wine-\(distribution.sha256.prefix(16)).archive", directoryHint: .notDirectory)
+    let dxmtArchive = layout.downloadsDirectory.appending(
+      path: "dxmt-\(dxmt.sha256.prefix(16)).zip", directoryHint: .notDirectory)
+    let downloader = downloader, distribution = distribution, dxmt = dxmt
+    do {
+      try await withThrowingTaskGroup(of: Void.self) { group in
+        group.addTask {
+          try await downloader.download(from: distribution.url, to: wineArchive, sha256: distribution.sha256) {
+            progress(.downloadingWine($0))
+          }
+        }
+        group.addTask {
+          try await downloader.download(from: dxmt.zipURL, to: dxmtArchive, sha256: dxmt.sha256) {
+            progress(.downloadingDXMT($0))
+          }
+        }
+        try await group.waitForAll()
+      }
+    } catch {
+      // Partial files stay for the next attempt; an empty directory does not.
+      removeIfEmpty(layout.downloadsDirectory)
+      throw error
     }
+    defer { try? fileManager.removeItem(at: layout.downloadsDirectory) }
 
     // 2. Unpack DXMT into scratch while nothing is destroyed yet; an invalid archive fails early.
     let dxmtFiles = try await unpackDXMT(zip: dxmtArchive, in: scratch)
@@ -108,7 +135,8 @@ extension WineRuntime {
       URL(filePath: path), arguments: arguments, environment: [:], workingDirectory: layout.root)
     guard result.exitCode == 0 else {
       throw WineInstallError.extractionFailed(
-        tool: URL(filePath: path).lastPathComponent, exitCode: result.exitCode, output: result.output)
+        tool: URL(filePath: path).lastPathComponent, exitCode: result.exitCode,
+        output: String(result.output.suffix(Self.toolOutputLimit)))
     }
   }
 
@@ -162,6 +190,13 @@ extension WineRuntime {
   private func replace(_ source: URL, with destination: URL) throws {
     try removeIfPresent(destination)
     try FileManager.default.copyItem(at: source, to: destination)
+  }
+
+  static let toolOutputLimit = 2000
+
+  private func removeIfEmpty(_ directory: URL) {
+    let entries = (try? FileManager.default.contentsOfDirectory(atPath: directory.path)) ?? []
+    if entries.isEmpty { try? FileManager.default.removeItem(at: directory) }
   }
 
   private func removeIfPresent(_ url: URL) throws {

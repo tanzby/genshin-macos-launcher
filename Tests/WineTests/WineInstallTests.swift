@@ -51,7 +51,8 @@ private let thumbprint = "F09065E2D57F005BBD975DDCF9EB63F570764F17"
       #expect(!wineExists(h.layout.prefixDirectory))
       #expect(await h.runtime.status() == .needsInstall(.notInstalled))
       #expect(h.runner.wineCalls.isEmpty)
-      #expect(try FileManager.default.contentsOfDirectory(atPath: h.root.path).isEmpty)
+      // Only the finished DXMT archive stays, in downloads/, for the next attempt.
+      #expect(try FileManager.default.contentsOfDirectory(atPath: h.root.path) == ["downloads"])
     }
   }
 
@@ -442,16 +443,19 @@ private let thumbprint = "F09065E2D57F005BBD975DDCF9EB63F570764F17"
     }
   }
 
-  @Test("WIN-014 progress arrives as downloadingWine, downloadingDXMT, extracting, configuring, initializingPrefix, installingDXMT, finalizing")
+  @Test("WIN-014 progress arrives as downloads (in parallel), extracting, configuring, initializingPrefix, installingDXMT, finalizing")
   func progressOrder() async throws {
     try await withWineTempDirectory { dir in
       let h = try makeWineHarness(in: dir)
       let collector = WineProgressCollector()
       try await h.runtime.ensureInstalled(progress: collector.callback)
+      // The two downloads run at the same time, so their reports may interleave; both come first.
+      let stages = collector.collapsed
+      let downloads = stages.prefix { $0.hasPrefix("downloading") }
+      #expect(Set(downloads) == ["downloadingWine", "downloadingDXMT"])
       #expect(
-        collector.collapsed == [
-          "downloadingWine", "downloadingDXMT", "extracting", "configuring", "initializingPrefix",
-          "installingDXMT", "finalizing",
+        Array(stages.dropFirst(downloads.count)) == [
+          "extracting", "configuring", "initializingPrefix", "installingDXMT", "finalizing",
         ])
     }
   }

@@ -88,8 +88,9 @@ struct WineFixtures {
   var dxmt: DXMTRelease
 }
 
-/// Declared sizes of the fixture archives (the real files are a few KB). Required space = 2 x archive + installed.
+/// Declared sizes of the fixture archives (the real files are a few KB). Required space = wine archive + 4 x DXMT archive (zip, tar.gz, unpacked) + installed.
 let wineFixtureArchiveSize: Int64 = 450_000_000
+let wineFixtureDXMTArchiveSize: Int64 = 30_000_000
 let wineFixtureInstalledSize: Int64 = 2_000_000_000
 
 let wineFixtureCommit = "abc1234def5678abc1234def5678abc1234def56"
@@ -160,7 +161,7 @@ func makeWineFixtures(in directory: URL, options: WineFixtureOptions = .init()) 
     dxmt: DXMTRelease(
       version: "abc1234", commit: wineFixtureCommit,
       zipURL: URL(string: "https://fixtures.invalid/dxmt-\(wineFixtureCommit).zip")!, sha256: dxmtSHA,
-      archiveSize: wineFixtureArchiveSize))
+      archiveSize: wineFixtureDXMTArchiveSize))
 }
 
 // MARK: - Stub downloader

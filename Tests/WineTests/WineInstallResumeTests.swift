@@ -16,7 +16,7 @@ import Testing
       try h.writeFile("wine/sentinel.txt")
       try h.writeFile("wineprefix/sentinel.txt")
 
-      let required = 2 * wineFixtureArchiveSize + wineFixtureInstalledSize
+      let required = wineFixtureArchiveSize + 4 * wineFixtureDXMTArchiveSize + wineFixtureInstalledSize
       await #expect(
         throws: WineInstallError.insufficientDiskSpace(required: required, available: 1_000_000_000)
       ) { try await h.install() }
@@ -32,7 +32,7 @@ import Testing
   func exactSpaceIsEnough() async throws {
     try await withWineTempDirectory { dir in
       var options = WineHarnessOptions()
-      options.availableBytes = 2 * wineFixtureArchiveSize + wineFixtureInstalledSize
+      options.availableBytes = wineFixtureArchiveSize + 4 * wineFixtureDXMTArchiveSize + wineFixtureInstalledSize
       let h = try makeWineHarness(in: dir, options: options)
       try await h.install()
       #expect(await h.runtime.status() == .ready)

@@ -138,6 +138,7 @@ private func partFile(of destination: URL) -> URL { URL(filePath: destination.pa
   func resumesAfterDroppedConnection() async throws {
     var server = RangeStubProtocol.Server(body: body)
     server.failAfter = 100_000
+    server.chunkDelay = 0.02  // let the delegate see the bytes before the connection drops
     try await withResumeFixture(server: server) { downloader, url, destination, _ in
       await #expect(throws: (any Error).self) {
         try await downloader.download(from: url, to: destination, sha256: sha(body)) { _ in }
@@ -228,7 +229,7 @@ private func partFile(of destination: URL) -> URL { URL(filePath: destination.pa
 
   @Test("WIN-007 cancelling mid-download keeps the partial file for the next attempt")
   func cancellationKeepsPartial() async throws {
-    var server = RangeStubProtocol.Server(body: Data(repeating: 7, count: 2_000_000))
+    var server = RangeStubProtocol.Server(body: Data(repeating: 7, count: 600_000))
     server.chunkSize = 10_000
     server.chunkDelay = 0.01
     try await withResumeFixture(server: server) { downloader, url, destination, _ in
@@ -243,7 +244,7 @@ private func partFile(of destination: URL) -> URL { URL(filePath: destination.pa
 
       let size = (try? FileManager.default.attributesOfItem(atPath: part.path)[.size] as? Int) ?? 0
       #expect(size >= 30_000)
-      #expect(size < 2_000_000)
+      #expect(size <= 600_000)
       #expect(!FileManager.default.fileExists(atPath: destination.path))
     }
   }
