@@ -71,6 +71,43 @@ public struct SystemProcessRunner: ProcessRunning {
       if process.isRunning { process.terminate() }
     }
   }
+
+  public func runLogging(
+    _ executable: URL,
+    arguments: [String],
+    environment: [String: String],
+    workingDirectory: URL?,
+    logFile: URL
+  ) async throws -> Int32 {
+    guard isAllowed(executable) else {
+      throw ProcessRunnerError.executableNotAllowed(executable.path)
+    }
+    try Data().write(to: logFile)
+    let handle = try FileHandle(forWritingTo: logFile)
+    defer { try? handle.close() }
+    let process = Process()
+    process.executableURL = executable
+    process.arguments = arguments
+    process.environment = ProcessInfo.processInfo.environment.merging(environment) { _, new in new }
+    process.currentDirectoryURL = workingDirectory
+    process.standardOutput = handle
+    process.standardError = handle
+    process.standardInput = FileHandle.nullDevice
+
+    return try await withTaskCancellationHandler {
+      try await withCheckedThrowingContinuation { continuation in
+        process.terminationHandler = { continuation.resume(returning: $0.terminationStatus) }
+        do {
+          try process.run()
+          if Task.isCancelled { process.terminate() }
+        } catch {
+          continuation.resume(throwing: error)
+        }
+      }
+    } onCancel: {
+      if process.isRunning { process.terminate() }
+    }
+  }
 }
 
 private final class LockedData: @unchecked Sendable {
