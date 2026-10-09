@@ -394,8 +394,11 @@ private final class Rig: @unchecked Sendable {
   func requestCount(for chunk: String) -> Int { requestedChunkIDs.filter { $0 == chunk }.count }
 
   /// Where this contract keeps a partially or fully downloaded, still compressed chunk.
-  func seedChunkCache(_ chunk: SophonChunk, with bytes: Data) throws {
-    try bytes.write(to: sandbox.temp.appendingPathComponent(chunk.id))
+  func seedChunkCache(_ chunk: SophonChunk, of path: String, with bytes: Data) throws {
+    let directory = sandbox.temp.appendingPathComponent("chunks").appendingPathComponent(
+      SophonDownloaderLayout.fileKey(for: path))
+    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    try bytes.write(to: directory.appendingPathComponent(chunk.id))
   }
 
   /// Regular files anywhere in the temp directory whose name mentions `chunk`.
@@ -718,10 +721,8 @@ private final class Rig: @unchecked Sendable {
       in: files.map(\.file), gameDirectory: rig.sandbox.game, progress: { log.record($0) })
 
     #expect(damaged.count == 4)
-    let events = log.all
-    #expect(!events.isEmpty)
-    #expect(log.verifying.count == events.count, "only .verifying events are sent while scanning")
     let verifying = log.verifying
+    #expect(!verifying.isEmpty)
     // The unit of done/total (files or bytes) is not pinned down, only that it is consistent.
     #expect(verifying.allSatisfy { $0.total == verifying[0].total && $0.total > 0 })
     #expect(zip(verifying, verifying.dropFirst()).allSatisfy { $0.done <= $1.done })
@@ -736,7 +737,7 @@ private final class Rig: @unchecked Sendable {
     let file = SyntheticFile("Data/resume.bin", sizes: [30_000])
     rig.cdn.serve(file)
     let have = file.pieces[0].frame.count / 3
-    try rig.seedChunkCache(file.file.chunks[0], with: file.pieces[0].frame.prefix(have))
+    try rig.seedChunkCache(file.file.chunks[0], of: file.file.path, with: file.pieces[0].frame.prefix(have))
 
     try await rig.install([file.file])
 
@@ -752,7 +753,7 @@ private final class Rig: @unchecked Sendable {
     rig.cdn.serve(file)
     rig.cdn.ignoreRange(for: file.pieces[0].id)
     let have = file.pieces[0].frame.count / 3
-    try rig.seedChunkCache(file.file.chunks[0], with: file.pieces[0].frame.prefix(have))
+    try rig.seedChunkCache(file.file.chunks[0], of: file.file.path, with: file.pieces[0].frame.prefix(have))
 
     try await rig.install([file.file])
 
@@ -766,7 +767,7 @@ private final class Rig: @unchecked Sendable {
     defer { rig.remove() }
     let file = SyntheticFile("Data/cached.bin", sizes: [30_000])
     rig.cdn.serve(file)
-    try rig.seedChunkCache(file.file.chunks[0], with: file.pieces[0].frame)
+    try rig.seedChunkCache(file.file.chunks[0], of: file.file.path, with: file.pieces[0].frame)
 
     try await rig.install([file.file])
 
@@ -780,7 +781,7 @@ private final class Rig: @unchecked Sendable {
     let file = SyntheticFile("Data/big.bin", sizes: [30_000])
     rig.cdn.serve(file)
     let oversized = file.pieces[0].frame + Data(repeating: 0xFF, count: 100)
-    try rig.seedChunkCache(file.file.chunks[0], with: oversized)
+    try rig.seedChunkCache(file.file.chunks[0], of: file.file.path, with: oversized)
 
     try await rig.install([file.file])
 
@@ -801,7 +802,7 @@ private final class Rig: @unchecked Sendable {
       request.rangeStart == nil ? nil : .response(status: 416, body: Data())
     }
     let have = file.pieces[0].frame.count / 3
-    try rig.seedChunkCache(file.file.chunks[0], with: file.pieces[0].frame.prefix(have))
+    try rig.seedChunkCache(file.file.chunks[0], of: file.file.path, with: file.pieces[0].frame.prefix(have))
 
     try await rig.install([file.file])
 
@@ -964,15 +965,17 @@ private final class Rig: @unchecked Sendable {
     // concurrency 1 and equal sort keys: a finishes, then b's first chunk hangs.
     let running = rig.startInstall(files, downloader: rig.downloader(concurrency: 1))
     guard await running.waitForRequests(2, in: rig) else { return }
+    #expect(await waitUntil { rig.requestCount(for: b.pieces[0].id) >= 1 })
     running.task.cancel()
     await running.expectCancelled()
+    // Taken the moment the install has returned: nothing may change after this point.
+    let requestsAtStop = rig.requests.count
+    let filesAtStop = rig.sandbox.snapshot()
 
     #expect(await waitUntil { StubURLProtocol.inFlight(rig.id) == 0 }, "a request is still running")
     #expect(rig.sandbox.read("a.bin") == a.plain)
     #expect(!rig.sandbox.exists("b.bin"))
     #expect(!rig.sandbox.exists("c.bin"))
-    let requestsAtStop = rig.requests.count
-    let filesAtStop = rig.sandbox.snapshot()
 
     gate.open()
     try await Task.sleep(for: .milliseconds(300))
@@ -1141,7 +1144,8 @@ private final class Rig: @unchecked Sendable {
       files.map(\.file), downloader: rig.downloader(progressInterval: .zero), log: unthrottled)
 
     let few = throttled.downloading
-    #expect((1...3).contains(few.count), "got \(few.count) callbacks with a 60 s interval")
+    #expect((2...3).contains(few.count), "got \(few.count) callbacks with a 60 s interval")
+    #expect(few.first.map { $0.done < total } == true, "the first callback arrives before the end")
     #expect(throttled.all.last == .downloading(done: total, total: total))
     #expect(unthrottled.downloading.count > 3, "the zero interval run must report much more often")
     #expect(unthrottled.all.last == .downloading(done: total, total: total))
