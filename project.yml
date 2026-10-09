@@ -34,8 +34,8 @@ targets:
       path: build/Info.plist
       properties:
         SUFeedURL: https://github.com/tanzby/genshin-macos-launcher/releases/latest/download/appcast.xml
-        # EdDSA public key printed by generate_keys. Empty until the maintainer generates the key pair.
-        SUPublicEDKey: ""
+        # EdDSA public key printed by generate_keys (private key: login Keychain + CI secret SPARKLE_ED_PRIVATE_KEY).
+        SUPublicEDKey: "+bZH7ivQ9Rt952S3q3X8nYfrOCYGNA8V/5VrW1Cavkc="
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: io.github.tanzby.yaagl
