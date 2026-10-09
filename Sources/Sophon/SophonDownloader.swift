@@ -45,10 +45,12 @@ public struct SophonDownloader: Sendable {
     progress: @escaping @Sendable (SophonProgress) -> Void
   ) async throws {
     // Validate everything first: a hostile manifest must fail before the first request.
+    let chunkBase = try Self.chunkBase(of: ref)
     var targets: [(file: SophonFile, destination: URL)] = []
+    var seen = Set<String>()
     for file in files {
       let destination = try SophonPathPolicy.resolve(file.path, in: gameDirectory)
-      if file.isDirectory { continue }
+      if file.isDirectory || !seen.insert(file.path).inserted { continue }
       for chunk in file.chunks {
         guard chunk.offset + UInt64(chunk.uncompressedSize) <= UInt64(file.size) else {
           throw SophonError.invalidManifest("chunk \(chunk.id) exceeds the size of \(file.path)")
@@ -60,9 +62,8 @@ public struct SophonDownloader: Sendable {
       let directory = try SophonPathPolicy.resolve(file.path, in: gameDirectory)
       try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
     }
-    let chunkBase = try Self.chunkBase(of: ref)
 
-    let total = files.reduce(Int64(0)) { $0 + Self.compressedSize(of: $1) }
+    let total = targets.reduce(Int64(0)) { $0 + Self.compressedSize(of: $1.file) }
     let reporter = ProgressReporter(total: total, interval: configuration.progressInterval, report: progress)
     progress(.preparing)
 
@@ -104,22 +105,34 @@ public struct SophonDownloader: Sendable {
   ) async throws -> [SophonFile] {
     let candidates = files.filter { !$0.isDirectory }
     let total = candidates.reduce(Int64(0)) { $0 + $1.size }
-    var done: Int64 = 0
-    var damaged: [SophonFile] = []
+    let destinations = try candidates.map { try SophonPathPolicy.resolve($0.path, in: gameDirectory) }
+    let counter = VerifyCounter(total: total, interval: configuration.progressInterval, report: progress)
     progress(.verifying(done: 0, total: total))
-    var lastReport = ContinuousClock.now
-    for file in candidates {
-      try Task.checkCancellation()
-      let destination = try SophonPathPolicy.resolve(file.path, in: gameDirectory)
-      if !(try Self.isIntact(file, at: destination)) { damaged.append(file) }
-      done += file.size
-      if ContinuousClock.now - lastReport >= configuration.progressInterval {
-        progress(.verifying(done: done, total: total))
-        lastReport = .now
+    // REP-003: checking is disk and CPU bound, so it uses about as many workers as there are cores.
+    let limit = max(2, ProcessInfo.processInfo.activeProcessorCount - 4)
+
+    let flags = try await withThrowingTaskGroup(of: (Int, Bool).self) { group in
+      var next = 0
+      var results = [Bool](repeating: false, count: candidates.count)
+      func submit() {
+        guard next < candidates.count else { return }
+        let index = next
+        next += 1
+        group.addTask {
+          let intact = try Self.isIntact(candidates[index], at: destinations[index])
+          counter.add(candidates[index].size)
+          return (index, intact)
+        }
       }
+      for _ in 0..<limit { submit() }
+      while let (index, intact) = try await group.next() {
+        results[index] = intact
+        submit()
+      }
+      return results
     }
     progress(.verifying(done: total, total: total))
-    return damaged
+    return zip(candidates, flags).filter { !$1 }.map(\.0)
   }
 
   // MARK: - Internals
@@ -230,14 +243,17 @@ private struct FileWorker: Sendable {
         plain = try Zstd.decompress(compressed, maxOutputSize: 64 << 20)
       } catch {
         try? fileManager.removeItem(at: cached)
+        reporter.add(-Int64(chunk.compressedSize))
         throw SophonError.checksumMismatch(path: file.path)
       }
       guard plain.count == Int(chunk.uncompressedSize) else {
         try? fileManager.removeItem(at: cached)
+        reporter.add(-Int64(chunk.compressedSize))
         throw SophonError.invalidManifest("chunk \(chunk.id) does not hold \(chunk.uncompressedSize) bytes")
       }
       guard MD5Hasher.hex(of: plain).caseInsensitiveCompare(chunk.md5) == .orderedSame else {
         try? fileManager.removeItem(at: cached)
+        reporter.add(-Int64(chunk.compressedSize))
         throw SophonError.checksumMismatch(path: file.path)
       }
       try handle.seek(toOffset: chunk.offset)
@@ -283,59 +299,45 @@ private struct FileWorker: Sendable {
     request.timeoutInterval = 30
     if have > 0 { request.setValue("bytes=\(have)-", forHTTPHeaderField: "Range") }
 
-    let bytes: URLSession.AsyncBytes
-    let response: URLResponse
+    // Cached bytes count as done from the start, so the corrections below stay consistent.
+    reporter.add(have)
+    let stream = ChunkStream(session: session, request: request)
+    var handle: FileHandle?
+    defer { try? handle?.close() }
     do {
-      (bytes, response) = try await session.bytes(for: request)
-    } catch let error as URLError {
-      if error.code == .cancelled { throw CancellationError() }
-      throw SophonError.transport(code: error.code.rawValue)
-    }
-    guard let http = response as? HTTPURLResponse else { throw SophonError.malformedResponse }
-    switch http.statusCode {
-    case 206 where have > 0: break
-    case 200:
-      // The server ignored Range (or we asked for everything): start over.
-      if have > 0 { reporter.add(-have) }
-      have = 0
-    case 416:
-      try? fileManager.removeItem(at: cached)
-      reporter.add(-have)
-      throw SophonError.http(status: 416)
-    default:
-      throw SophonError.http(status: http.statusCode)
-    }
-
-    if have == 0 { fileManager.createFile(atPath: cached.path, contents: nil) }
-    let handle = try FileHandle(forWritingTo: cached)
-    defer { try? handle.close() }
-    try handle.seek(toOffset: UInt64(have))
-    var buffer = Data()
-    buffer.reserveCapacity(64 << 10)
-    do {
-      for try await byte in bytes {
-        buffer.append(byte)
-        if buffer.count >= 64 << 10 {
+      for try await event in stream.events {
+        switch event {
+        case .response(let http):
+          switch http.statusCode {
+          case 206 where have > 0: break
+          case 200:
+            // The server ignored Range (or we asked for everything): start over.
+            reporter.add(-have)
+            have = 0
+          case 416:
+            try? fileManager.removeItem(at: cached)
+            reporter.add(-have)
+            throw SophonError.http(status: 416)
+          default:
+            throw SophonError.http(status: http.statusCode)
+          }
+          if have == 0 { fileManager.createFile(atPath: cached.path, contents: nil) }
+          let opened = try FileHandle(forWritingTo: cached)
+          try opened.seek(toOffset: UInt64(have))
+          handle = opened
+        case .data(let block):
           try Task.checkCancellation()
-          try handle.write(contentsOf: buffer)
-          reporter.add(Int64(buffer.count))
-          buffer.removeAll(keepingCapacity: true)
+          // Written as it arrives: after a broken connection the next attempt resumes from here.
+          try handle?.write(contentsOf: block)
+          reporter.add(Int64(block.count))
         }
       }
     } catch let error as URLError {
-      // Keep what arrived: the next attempt resumes from it.
-      try? handle.write(contentsOf: buffer)
-      reporter.add(Int64(buffer.count))
       if error.code == .cancelled { throw CancellationError() }
       throw SophonError.transport(code: error.code.rawValue)
-    } catch {
-      try? handle.write(contentsOf: buffer)
-      reporter.add(Int64(buffer.count))
-      throw error
     }
-    try handle.write(contentsOf: buffer)
-    reporter.add(Int64(buffer.count))
-    try handle.close()
+    try handle?.close()
+    handle = nil
 
     let data = try Data(contentsOf: cached)
     guard Int64(data.count) == expected else {
@@ -349,6 +351,48 @@ private struct FileWorker: Sendable {
 
   private static func size(of url: URL) -> Int64 {
     ((try? FileManager.default.attributesOfItem(atPath: url.path))?[.size] as? NSNumber)?.int64Value ?? 0
+  }
+}
+
+/// One streaming GET. A delegate hands over each network block; `bytes(for:)` would cost an async
+/// hop per byte. Cancelling the consuming task cancels the request.
+private final class ChunkStream: NSObject, URLSessionDataDelegate, @unchecked Sendable {
+  enum Event: Sendable {
+    case response(HTTPURLResponse)
+    case data(Data)
+  }
+
+  let events: AsyncThrowingStream<Event, any Error>
+  private let continuation: AsyncThrowingStream<Event, any Error>.Continuation
+
+  init(session: URLSession, request: URLRequest) {
+    (events, continuation) = AsyncThrowingStream.makeStream()
+    super.init()
+    let task = session.dataTask(with: request)
+    task.delegate = self
+    continuation.onTermination = { _ in task.cancel() }
+    task.resume()
+  }
+
+  func urlSession(
+    _ session: URLSession, dataTask: URLSessionDataTask, didReceive response: URLResponse,
+    completionHandler: @escaping (URLSession.ResponseDisposition) -> Void
+  ) {
+    guard let http = response as? HTTPURLResponse else {
+      continuation.finish(throwing: SophonError.malformedResponse)
+      completionHandler(.cancel)
+      return
+    }
+    continuation.yield(.response(http))
+    completionHandler(.allow)
+  }
+
+  func urlSession(_ session: URLSession, dataTask: URLSessionDataTask, didReceive data: Data) {
+    continuation.yield(.data(data))
+  }
+
+  func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: (any Error)?) {
+    continuation.finish(throwing: error)
   }
 }
 
@@ -380,6 +424,33 @@ private final class ProgressReporter: @unchecked Sendable {
 
   /// The closing report is never throttled.
   func finish(_ event: SophonProgress) { report(event) }
+}
+
+/// Thread-safe, throttled `.verifying` reporter.
+private final class VerifyCounter: @unchecked Sendable {
+  private let total: Int64
+  private let interval: Duration
+  private let report: @Sendable (SophonProgress) -> Void
+  private let lock = NSLock()
+  private var done: Int64 = 0
+  private var last = ContinuousClock.now
+
+  init(total: Int64, interval: Duration, report: @escaping @Sendable (SophonProgress) -> Void) {
+    self.total = total
+    self.interval = interval
+    self.report = report
+  }
+
+  func add(_ bytes: Int64) {
+    let event: SophonProgress? = lock.withLock {
+      done += bytes
+      let now = ContinuousClock.now
+      guard now - last >= interval else { return nil }
+      last = now
+      return .verifying(done: done, total: total)
+    }
+    if let event { report(event) }
+  }
 }
 
 enum SophonDownloaderLayout {
