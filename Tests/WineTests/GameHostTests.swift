@@ -246,6 +246,23 @@ private func expectNoGameHostVariables(_ f: LaunchFixture, sourceLocation: Sourc
     }
   }
 
+  @Test func LCH_024_aShimThatCannotBeCopiedLeavesTheRealLoaderInPlace() async throws {
+    try await withLaunchFixture(helperOptions) { f in
+      let helpers = try #require(f.helpers)
+      let original = try Data(contentsOf: f.layout.unixWine)
+      try FileManager.default.setAttributes([.posixPermissions: 0o000], ofItemAtPath: helpers.shim.path)
+      try? FileManager.default.removeItem(at: f.layout.unixWineHost)  // first install: wine-host does not exist yet
+      defer { try? FileManager.default.setAttributes([.posixPermissions: 0o644], ofItemAtPath: helpers.shim.path) }
+
+      let result = await f.session.launch(makeLaunchRecipe())
+
+      #expect(result == .exited)
+      #expect(try Data(contentsOf: f.layout.unixWine) == original)  // Wine's entry point survived
+      #expect(!FileManager.default.fileExists(atPath: f.layout.unixWineHost.path))
+      expectNoGameHostVariables(f)
+    }
+  }
+
   @Test func LCH_025_aFailedCodesignIsRetriedOnTheNextLaunchInsteadOfTrustedAsCurrent() async throws {
     try await withLaunchFixture(helperOptions) { f in
       f.runner.responder.value = { call in

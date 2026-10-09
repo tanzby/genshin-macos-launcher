@@ -184,3 +184,60 @@ private func writeScript(_ body: String, named name: String = "tool.sh", in dir:
     if alive { kill(pid, SIGKILL) }
   }
 }
+
+@Suite("WIN-018 SystemProcessRunner cancellation", .timeLimit(.minutes(1))) struct SystemProcessRunnerCancellationTests {
+  /// A loader that ignores SIGTERM, like a stuck Wine.
+  private func stubbornScript(in dir: URL) throws -> URL {
+    try writeScript("trap '' TERM\nsleep 30", in: dir)
+  }
+
+  @Test func WIN_018_aTaskCancelledBeforeTheProcessStartsStillKillsATermIgnoringProcess() async throws {
+    let dir = try runnerTempDirectory()
+    defer { try? FileManager.default.removeItem(at: dir) }
+    let script = try stubbornScript(in: dir)
+    let runner = SystemProcessRunner(allowedRoots: [dir], terminationGrace: 0.3)
+    let log = dir.appending(path: "game.log")
+    let started = Date()
+
+    let task = Task { try await runner.runLogging(script, arguments: [], environment: [:], workingDirectory: nil, logFile: log) }
+    task.cancel()
+    let code = try await task.value
+
+    #expect(code != 0)
+    #expect(Date().timeIntervalSince(started) < 10)
+  }
+
+  @Test func WIN_018_aBufferedRunCancelledBeforeTheProcessStartsIsAlsoKilled() async throws {
+    let dir = try runnerTempDirectory()
+    defer { try? FileManager.default.removeItem(at: dir) }
+    let script = try stubbornScript(in: dir)
+    let runner = SystemProcessRunner(allowedRoots: [dir], terminationGrace: 0.3)
+    let started = Date()
+
+    let task = Task { try await runner.run(script, arguments: [], environment: [:], workingDirectory: nil) }
+    task.cancel()
+    let result = try await task.value
+
+    #expect(result.exitCode != 0)
+    #expect(Date().timeIntervalSince(started) < 10)
+  }
+
+  @Test func WIN_018_aTaskCancelledWhileRunningKillsATermIgnoringProcessAfterTheGrace() async throws {
+    let dir = try runnerTempDirectory()
+    defer { try? FileManager.default.removeItem(at: dir) }
+    let script = try stubbornScript(in: dir)
+    let runner = SystemProcessRunner(allowedRoots: [dir], terminationGrace: 0.3)
+    let started = Date()
+
+    let task = Task {
+      try await runner.runLogging(
+        script, arguments: [], environment: [:], workingDirectory: nil, logFile: dir.appending(path: "g.log"))
+    }
+    try await Task.sleep(for: .milliseconds(300))
+    task.cancel()
+    let code = try await task.value
+
+    #expect(code != 0)
+    #expect(Date().timeIntervalSince(started) < 10)
+  }
+}

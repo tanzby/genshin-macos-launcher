@@ -62,11 +62,20 @@ struct GameHostInstaller {
     let wine = layout.unixWine
     let host = layout.unixWineHost
     let wineIsShim = fileManager.fileExists(atPath: wine.path) && fileManager.contentsEqual(atPath: wine.path, andPath: helpers.shim.path)
+    let needsShim = !wineIsShim || !fileManager.fileExists(atPath: wine.path)
     if !fileManager.fileExists(atPath: host.path) {
       guard fileManager.fileExists(atPath: wine.path), !wineIsShim else { throw GameHostError.hostMissing }
+      // Stage the shim before the real loader is touched: a failed copy then leaves Wine fully intact.
+      let staged = try stage(helpers.shim, beside: wine)
       try fileManager.moveItem(at: wine, to: host)
-    }
-    if !wineIsShim || !fileManager.fileExists(atPath: wine.path) {
+      do {
+        try fileManager.moveItem(at: staged, to: wine)
+      } catch {
+        try? fileManager.moveItem(at: host, to: wine)
+        try? fileManager.removeItem(at: staged)
+        throw error
+      }
+    } else if needsShim {
       try replace(helpers.shim, with: wine)
     }
 
@@ -131,9 +140,33 @@ struct GameHostInstaller {
     ]
   }
 
+  /// Copies `source` next to `destination` under a temporary name, so the final step is a rename.
+  private func stage(_ source: URL, beside destination: URL) throws -> URL {
+    let fileManager = FileManager.default
+    let staged = destination.deletingLastPathComponent().appending(path: ".\(destination.lastPathComponent).yaagl-new")
+    if (try? staged.checkResourceIsReachable()) == true { try fileManager.removeItem(at: staged) }
+    do {
+      try fileManager.copyItem(at: source, to: staged)
+    } catch {
+      try? fileManager.removeItem(at: staged)
+      throw error
+    }
+    return staged
+  }
+
+  /// Atomic replace: a failed copy leaves the old `destination` in place.
   private func replace(_ source: URL, with destination: URL) throws {
     let fileManager = FileManager.default
-    if (try? destination.checkResourceIsReachable()) == true { try fileManager.removeItem(at: destination) }
-    try fileManager.copyItem(at: source, to: destination)
+    let staged = try stage(source, beside: destination)
+    do {
+      if (try? destination.checkResourceIsReachable()) == true {
+        _ = try fileManager.replaceItemAt(destination, withItemAt: staged)
+      } else {
+        try fileManager.moveItem(at: staged, to: destination)
+      }
+    } catch {
+      try? fileManager.removeItem(at: staged)
+      throw error
+    }
   }
 }
