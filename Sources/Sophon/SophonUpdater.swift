@@ -140,6 +140,8 @@ public struct SophonUpdater: Sendable {
       let patch: SophonPatch?
       let destination: URL
       let original: URL?
+      /// The same file in the chunk manifest (checked to exist and agree below).
+      let chunks: SophonFile
     }
 
     // Both manifests must describe the same release. If they disagree about a file, the chunk download
@@ -156,12 +158,14 @@ public struct SophonUpdater: Sendable {
     var candidates: [Candidate] = []
     for file in diff.files {
       let destination = try SophonPathPolicy.resolve(file.path, in: gameDirectory)
+      let chunks = chunkFiles[file.path]!  // checked above
       if file.patches.isEmpty {
-        candidates.append(Candidate(file: file, patch: nil, destination: destination, original: nil))
+        candidates.append(Candidate(file: file, patch: nil, destination: destination, original: nil, chunks: chunks))
       } else if let patch = file.patches[installedVersion] {
         let originalPath = patch.originalPath.isEmpty ? file.path : patch.originalPath
         let original = try SophonPathPolicy.resolve(originalPath, in: gameDirectory)
-        candidates.append(Candidate(file: file, patch: patch, destination: destination, original: original))
+        candidates.append(
+          Candidate(file: file, patch: patch, destination: destination, original: original, chunks: chunks))
       }
     }
     // A deletion names a file. One that is a folder holding new files would wipe them (and `removeItem`
@@ -179,7 +183,6 @@ public struct SophonUpdater: Sendable {
     progress(.verifying(done: 0, total: total))
     let limit = max(2, ProcessInfo.processInfo.activeProcessorCount - 4)
     var verdicts = [Verdict](repeating: .untouched, count: candidates.count)
-    let chunkOf = chunkFiles
     try await withThrowingTaskGroup(of: (Int, Verdict).self) { group in
       var next = 0
       func submit() {
@@ -190,16 +193,9 @@ public struct SophonUpdater: Sendable {
         group.addTask {
           let verdict: Verdict = try await Offload.run { cancelled in
             let newFile = candidate.file
+            let chunks = candidate.chunks
             // Patchless entries are new files: the chunk download skips the ones already in place.
-            guard let patch = candidate.patch else {
-              guard let chunks = chunkOf[newFile.path], !chunks.isDirectory else {
-                throw SophonError.invalidManifest("\(newFile.path) is not in the chunk manifest")
-              }
-              return .newFile(chunks)
-            }
-            guard let chunks = chunkOf[newFile.path], !chunks.isDirectory else {
-              throw SophonError.invalidManifest("\(newFile.path) is not in the chunk manifest")
-            }
+            guard let patch = candidate.patch else { return .newFile(chunks) }
             // One read serves both questions when the patch rewrites the file in place.
             let inPlace = candidate.original == candidate.destination
             let size = Self.size(of: candidate.destination)
@@ -313,6 +309,9 @@ public struct SophonUpdater: Sendable {
     progress: @escaping @Sendable (SophonProgress) -> Void
   ) async throws {
     try Self.validate(patches: plan.patches)
+    // Resolved up front: a bad deletion path must fail before anything is downloaded or changed.
+    let keep = Set(try plan.expectedFiles.map { try Self.key($0.path, in: gameDirectory) })
+    let doomed = try plan.deletions.filter { !keep.contains(try Self.key($0.path, in: gameDirectory)) }
     progress(.preparing)
     let ldiffDirectory = Self.ldiffDirectory(in: tempDirectory)
 
@@ -339,8 +338,6 @@ public struct SophonUpdater: Sendable {
     }
 
     // UPG-007: files the new version no longer has.
-    let keep = Set(try plan.expectedFiles.map { try Self.key($0.path, in: gameDirectory) })
-    let doomed = try plan.deletions.filter { !keep.contains(try Self.key($0.path, in: gameDirectory)) }
     for deleted in doomed {
       try Task.checkCancellation()
       let url = try SophonPathPolicy.resolve(deleted.path, in: gameDirectory)
