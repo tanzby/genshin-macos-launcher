@@ -324,6 +324,19 @@ private final class Harness {
     #expect(!FileManager.default.fileExists(atPath: h.jobFile.path))
   }
 
+  @Test func WIN_005_pauseBeforeTheInstallStartsNeverCallsEnsureInstalled() async throws {
+    // The Task may be cancelled while it still waits for a pre-download to stop; it must then not begin
+    // work that nobody wants (the real `ensureInstalled` would start cleaning up and touching the cache).
+    let h = Harness(wine: missing)
+    await h.model.refreshWine()
+    try await h.model.prepareWine()
+    await h.model.pause()
+    #expect(h.wine.installCount == 0)
+    #expect(h.model.phase == .idle)
+    #expect(h.model.lastError == nil)
+    #expect(h.model.primaryAction == .prepareWine)
+  }
+
   @Test func WIN_005_pauseIsNotReportedAsAFailure() async throws {
     let h = Harness(wine: missing)
     let (task, _) = try await h.bootstrapUntilPreparing()

@@ -398,6 +398,7 @@ public final class LauncherModel {
       group.addTask {
         defer { sink.finish() }
         do {
+          try Task.checkCancellation()  // paused while waiting for a pre-download: do not begin the install
           try await wine.ensureInstalled { sink.yield($0) }
           return nil
         } catch {
