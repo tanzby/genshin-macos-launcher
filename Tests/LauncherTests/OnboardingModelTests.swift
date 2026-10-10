@@ -100,4 +100,15 @@ private func settings() -> SettingsModel {
     #expect(model.step == .hosts)
     #expect(!model.allowsLaunch)
   }
+
+  @Test func WIN_011_aLaterSuccessfulReadClearsAnEarlierReadError() {
+    let hosts = FakeHosts(.current)
+    hosts.setStatus(.failure(PasswordCancelled()))
+    let model = OnboardingModel(hosts: hosts, settings: settings())
+    model.refresh()
+    #expect(model.hostsError != nil)
+    hosts.setStatus(.success(.current))
+    model.refresh()
+    #expect(model.hostsError == nil)
+  }
 }

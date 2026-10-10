@@ -77,7 +77,7 @@ private func freshDefaults() -> UserDefaults {
 
   @Test func CFG_015_proxyIsRejectedBeforeItIsSaved() {
     let settings = SettingsModel(defaults: freshDefaults())
-    for bad in ["", "localhost", "http://127.0.0.1:7890", "127.0.0.1:0", "127.0.0.1:99999", "a b:80", ":80", "host:port"] {
+    for bad in ["", "localhost", "http://127.0.0.1:7890", "127.0.0.1:0", "127.0.0.1:99999", "a b:80", ":80", "host:port", "127.0.0.1:+80", "127.0.0.1:-80"] {
       #expect(!settings.setProxyHost(bad), "\(bad)")
     }
     #expect(settings.proxyHost == "")

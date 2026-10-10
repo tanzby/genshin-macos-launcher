@@ -6,7 +6,6 @@ import SwiftUI
 struct CapsuleView: View {
   @Environment(MainController.self) private var controller
   @Environment(ProgressMeter.self) private var meter
-  @Environment(\.openSettings) private var openSettings
   let chooseGameDirectory: () -> Bool
 
   var body: some View {

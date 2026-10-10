@@ -177,7 +177,7 @@ private struct WinePage: View {
       }
       Section("Tools") {
         Button("Show Wine Prefix in Finder") {
-          NSWorkspace.shared.activateFileViewerSelecting([WineLayout(root: dataDirectory).prefixDirectory])
+          reveal(WineLayout(root: dataDirectory).prefixDirectory)
         }
       }
     }
@@ -192,10 +192,8 @@ private struct AdvancedPage: View {
   var body: some View {
     Form {
       Section("Folders") {
-        Button("Show Data Folder in Finder") { NSWorkspace.shared.open(dataDirectory) }
-        Button("Show Logs in Finder") {
-          NSWorkspace.shared.open(WineLayout(root: dataDirectory).logsDirectory)
-        }
+        Button("Show Data Folder in Finder") { reveal(dataDirectory) }
+        Button("Show Logs in Finder") { reveal(WineLayout(root: dataDirectory).logsDirectory) }
       }
       Section("Licenses") {
         ForEach(Credits.components, id: \.name) { component in
@@ -206,6 +204,12 @@ private struct AdvancedPage: View {
     .formStyle(.grouped)
     .navigationTitle("Advanced")
   }
+}
+
+/// Opens a folder in Finder, creating it first: the data folder does not exist before the first run.
+private func reveal(_ directory: URL) {
+  try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+  NSWorkspace.shared.open(directory)
 }
 
 extension Bundle {

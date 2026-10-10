@@ -40,7 +40,7 @@ enum ProxyAddress {
     guard let colon = value.lastIndex(of: ":") else { return nil }
     let host = String(value[..<colon])
     let port = String(value[value.index(after: colon)...])
-    guard let number = Int(port), (1...65535).contains(number), port.allSatisfy(\.isASCII) else { return nil }
+    guard let number = Int(port), (1...65535).contains(number), port.allSatisfy({ ("0"..."9").contains($0) }) else { return nil }
     if host.hasPrefix("[") && host.hasSuffix("]") {
       let inner = host.dropFirst().dropLast()
       guard !inner.isEmpty, inner.allSatisfy({ $0.isHexDigit || $0 == ":" || $0 == "." }) else { return nil }

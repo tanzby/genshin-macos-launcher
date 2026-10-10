@@ -39,11 +39,17 @@ public final class OnboardingModel {
 
   /// Re-reads `/etc/hosts` (no privileges needed). An unreadable file counts as "not in place".
   public func refresh() {
+    hostsError = readStatus()
+  }
+
+  /// Returns the read error's description, nil on success.
+  private func readStatus() -> String? {
     do {
       hostsStatus = try hosts.status()
+      return nil
     } catch {
       hostsStatus = nil
-      hostsError = String(describing: error)
+      return String(describing: error)
     }
   }
 
@@ -52,15 +58,15 @@ public final class OnboardingModel {
     guard !isApplyingHosts else { return }
     isApplyingHosts = true
     hostsError = nil
+    var applyError: String?
     do {
       try await hosts.apply()
     } catch {
-      hostsError = String(describing: error)
+      applyError = String(describing: error)
     }
     isApplyingHosts = false
-    let error = hostsError
-    refresh()
-    if hostsError == nil { hostsError = error }
+    let readError = readStatus()
+    hostsError = applyError ?? readError
   }
 
   public func useGameDirectory(_ url: URL) {
