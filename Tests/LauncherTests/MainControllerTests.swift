@@ -86,7 +86,7 @@ private func makeController(
     await controller.launcher.shutdown()
   }
 
-  @Test func HST_launchIsRefusedWithoutTheHostsBlock() async {
+  @Test func WIN_011_launchIsRefusedWithoutTheHostsBlock() async {
     let (controller, client, _) = makeController(hosts: .missing)
     await controller.refresh()
     #expect(!controller.presentation.buttonEnabled)

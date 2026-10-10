@@ -1,4 +1,5 @@
 import Foundation
+import Synchronization
 import Testing
 
 @testable import Launcher
@@ -200,5 +201,19 @@ private func snapshot(
     #expect(ByteFormat.wholeGiBRoundedUp(1 << 30) == 1)
     #expect(ByteFormat.wholeGiBRoundedUp((1 << 30) + 1) == 2)
     #expect(ByteFormat.wholeGiBRoundedUp(0) == 0)
+  }
+}
+
+@MainActor @Suite struct ProgressMeterTests {
+  @Test func PRG_002_meterReportsSpeedAndRemainingTime() {
+    let now = Mutex(0.0)
+    let meter = ProgressMeter(clock: { now.withLock { $0 } })
+    meter.update(.running(done: 0, total: 10_000))
+    now.withLock { $0 = 2 }
+    meter.update(.running(done: 2_000, total: 10_000))
+    #expect(meter.bytesPerSecond == 1_000)
+    #expect(meter.remaining == 8)
+    meter.update(nil)
+    #expect(meter.bytesPerSecond == nil && meter.remaining == nil)
   }
 }

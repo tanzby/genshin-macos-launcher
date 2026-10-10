@@ -34,7 +34,7 @@ private func settings() -> SettingsModel {
 }
 
 @MainActor @Suite struct OnboardingModelTests {
-  @Test func HST_hostsBlockIsTheFirstRequiredStep() {
+  @Test func WIN_011_hostsBlockIsTheFirstRequiredStep() {
     let model = OnboardingModel(hosts: FakeHosts(.missing), settings: settings())
     model.refresh()
     #expect(model.step == .hosts)
@@ -42,13 +42,13 @@ private func settings() -> SettingsModel {
     #expect(!model.allowsLaunch)
   }
 
-  @Test func HST_outdatedBlocklistCountsAsMissing() {
+  @Test func WIN_011_outdatedBlocklistCountsAsMissing() {
     let model = OnboardingModel(hosts: FakeHosts(.outdated), settings: settings())
     model.refresh()
     #expect(model.step == .hosts)
   }
 
-  @Test func HST_applyingMovesOnToTheGameDirectory() async {
+  @Test func WIN_011_applyingMovesOnToTheGameDirectory() async {
     let hosts = FakeHosts(.missing)
     let model = OnboardingModel(hosts: hosts, settings: settings())
     model.refresh()
@@ -59,7 +59,7 @@ private func settings() -> SettingsModel {
     #expect(model.allowsLaunch)
   }
 
-  @Test func HST_cancellingThePasswordDialogKeepsTheStepAndShowsAnError() async {
+  @Test func WIN_011_cancellingThePasswordDialogKeepsTheStepAndShowsAnError() async {
     let model = OnboardingModel(hosts: FakeHosts(.missing, applyError: PasswordCancelled()), settings: settings())
     model.refresh()
     await model.applyHosts()
@@ -68,7 +68,7 @@ private func settings() -> SettingsModel {
     #expect(!model.isApplyingHosts)
   }
 
-  @Test func HST_unreadableHostsFileBlocksLaunch() {
+  @Test func WIN_011_unreadableHostsFileBlocksLaunch() {
     let hosts = FakeHosts(.current)
     hosts.setStatus(.failure(PasswordCancelled()))
     let model = OnboardingModel(hosts: hosts, settings: settings())

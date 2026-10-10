@@ -43,6 +43,20 @@ private func freshDefaults() -> UserDefaults {
     #expect(second.effectiveProxy == "127.0.0.1:7890")
   }
 
+  @Test func CFG_011_metalHudPersistsAndDefaultsOff() { toggles(\.metalHUD) }
+  @Test func CFG_012_retinaPersistsAndDefaultsOff() { toggles(\.retina) }
+  @Test func CFG_013_leftCommandAsControlPersistsAndDefaultsOff() { toggles(\.leftCommandIsControl) }
+  @Test func CFG_021_hdrPersistsAndDefaultsOff() { toggles(\.hdr) }
+  @Test func CFG_029_metalFXPersistsAndDefaultsOff() { toggles(\.metalFX) }
+
+  private func toggles(_ key: ReferenceWritableKeyPath<SettingsModel, Bool>) {
+    let defaults = freshDefaults()
+    let first = SettingsModel(defaults: defaults)
+    #expect(first[keyPath: key] == false)
+    first[keyPath: key] = true
+    #expect(SettingsModel(defaults: defaults)[keyPath: key])
+  }
+
   @Test func CFG_001_clearingTheGameDirectoryRemovesTheKey() {
     let defaults = freshDefaults()
     let settings = SettingsModel(defaults: defaults)
