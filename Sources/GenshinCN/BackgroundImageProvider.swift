@@ -30,7 +30,7 @@ public struct BackgroundImageProvider: Sendable {
       if fileManager.fileExists(atPath: cached.path) { return .remote(cached) }
       if let downloaded = try? await download(remote, to: cached) { return .remote(downloaded) }
     }
-    return newestCachedFile().map { .remote(cacheDirectory.appending(path: $0.lastPathComponent)) }
+    return cachedFiles().first.map { .remote(cacheDirectory.appending(path: $0.lastPathComponent)) }
       ?? .bundledDefault
   }
 
@@ -101,18 +101,8 @@ public struct BackgroundImageProvider: Sendable {
     return destination
   }
 
+  /// The directory holds at most one image, so any entry is the newest.
   private func cachedFiles() -> [URL] {
-    (try? fileManager.contentsOfDirectory(
-      at: cacheDirectory, includingPropertiesForKeys: [.contentModificationDateKey])) ?? []
-  }
-
-  private func newestCachedFile() -> URL? {
-    cachedFiles().max { lhs, rhs in
-      let left = (try? lhs.resourceValues(forKeys: [.contentModificationDateKey]))?
-        .contentModificationDate ?? .distantPast
-      let right = (try? rhs.resourceValues(forKeys: [.contentModificationDateKey]))?
-        .contentModificationDate ?? .distantPast
-      return left < right
-    }
+    (try? fileManager.contentsOfDirectory(at: cacheDirectory, includingPropertiesForKeys: nil)) ?? []
   }
 }
