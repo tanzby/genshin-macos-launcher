@@ -170,9 +170,10 @@ public struct SophonUpdater: Sendable {
     }
     // A deletion names a file. One that is a folder holding new files would wipe them (and `removeItem`
     // is recursive), so a hostile manifest is refused before the first request.
-    let newPaths = try diff.files.map { try Self.key($0.path, in: gameDirectory) }
+    let caseSensitive = Self.isCaseSensitive(gameDirectory)
+    let newPaths = try diff.files.map { try Self.key($0.path, in: gameDirectory, caseSensitive: caseSensitive) }
     for deleted in diff.deletions[installedVersion] ?? [] {
-      let folder = try Self.key(deleted.path, in: gameDirectory)
+      let folder = try Self.key(deleted.path, in: gameDirectory, caseSensitive: caseSensitive)
       if newPaths.contains(where: { $0.hasPrefix(folder + "/") }) {
         throw SophonError.invalidManifest("\(deleted.path) is a folder of the new version")
       }
@@ -310,8 +311,11 @@ public struct SophonUpdater: Sendable {
   ) async throws {
     try Self.validate(patches: plan.patches)
     // Resolved up front: a bad deletion path must fail before anything is downloaded or changed.
-    let keep = Set(try plan.expectedFiles.map { try Self.key($0.path, in: gameDirectory) })
-    let doomed = try plan.deletions.filter { !keep.contains(try Self.key($0.path, in: gameDirectory)) }
+    let caseSensitive = Self.isCaseSensitive(gameDirectory)
+    let keep = Set(try plan.expectedFiles.map { try Self.key($0.path, in: gameDirectory, caseSensitive: caseSensitive) })
+    let doomed = try plan.deletions.filter {
+      !keep.contains(try Self.key($0.path, in: gameDirectory, caseSensitive: caseSensitive))
+    }
     progress(.preparing)
     let ldiffDirectory = Self.ldiffDirectory(in: tempDirectory)
 
@@ -399,8 +403,16 @@ public struct SophonUpdater: Sendable {
 
   /// The file a manifest path stands for, normalised (`a/./b`, `a//b`) and case-folded: macOS volumes are
   /// case-insensitive by default. Two paths with equal keys are one file.
-  static func key(_ path: String, in gameDirectory: URL) throws -> String {
-    try SophonPathPolicy.resolve(path, in: gameDirectory).standardizedFileURL.path.lowercased()
+  /// Case is folded only on case-insensitive volumes; on a case-sensitive one `A.bin` and `a.bin` differ.
+  static func key(_ path: String, in gameDirectory: URL, caseSensitive: Bool) throws -> String {
+    let resolved = try SophonPathPolicy.resolve(path, in: gameDirectory).standardizedFileURL.path
+    return caseSensitive ? resolved : resolved.lowercased()
+  }
+
+  /// Whether the volume holding `directory` tells `A.bin` from `a.bin` (default macOS volumes do not).
+  static func isCaseSensitive(_ directory: URL) -> Bool {
+    (try? directory.resourceValues(forKeys: [.volumeSupportsCaseSensitiveNamesKey]))?
+      .volumeSupportsCaseSensitiveNames ?? false
   }
 
   /// Size and MD5 both match. A missing file does not match.

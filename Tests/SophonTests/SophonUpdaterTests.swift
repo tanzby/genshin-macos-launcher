@@ -679,6 +679,13 @@ private func waitUntil(timeout: Duration = .seconds(5), _ condition: () -> Bool)
     }
   }
 
+  @Test func UPG_007_pathKeysFoldCaseOnlyOnCaseInsensitiveVolumes() throws {
+    let game = URL(fileURLWithPath: "/tmp/game", isDirectory: true)
+    #expect(try SophonUpdater.key("DATA/D.bin", in: game, caseSensitive: false) == "/tmp/game/data/d.bin")
+    #expect(try SophonUpdater.key("DATA/D.bin", in: game, caseSensitive: true) == "/tmp/game/DATA/D.bin")
+    #expect(try SophonUpdater.key("data/./d.bin", in: game, caseSensitive: true) == "/tmp/game/data/d.bin")
+  }
+
   @Test func UPG_007_aFolderDeletionIsRefusedAlsoWhenSpelledWithDotsOrOtherCase() async throws {
     try await withRig { rig in
       try rig.installOldVersion()
