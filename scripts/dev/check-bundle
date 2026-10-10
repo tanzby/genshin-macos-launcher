@@ -1,6 +1,6 @@
 #!/bin/sh
 # Asserts what a built Yaagl.app must contain: x86_64 helpers in Contents/Helpers/ and the
-# protonextras Windows files in Contents/Resources/protonextras/. Usage: check-bundle [Yaagl.app]
+# protonextras Windows files in Contents/Resources/protonextras/, plus the Sparkle defaults in Info.plist. Usage: check-bundle [Yaagl.app]
 set -eu
 cd "$(dirname "$0")/../.."
 app="${1:-build/DerivedData/Build/Products/Debug/Yaagl.app}"
@@ -14,4 +14,10 @@ done
 for extra in steam32.exe steam64.exe lsteamclient32.dll lsteamclient64.dll; do
   [ -f "$app/Contents/Resources/protonextras/$extra" ] || { echo "missing: protonextras/$extra"; fail=1; }
 done
+# Sparkle defaults: check on its own without the first-launch permission prompt, once a day.
+plist="$app/Contents/Info.plist"
+[ "$(/usr/libexec/PlistBuddy -c 'Print :SUEnableAutomaticChecks' "$plist" 2>/dev/null)" = "true" ] \
+  || { echo "Info.plist: SUEnableAutomaticChecks must be true"; fail=1; }
+[ "$(/usr/libexec/PlistBuddy -c 'Print :SUScheduledCheckInterval' "$plist" 2>/dev/null)" = "86400" ] \
+  || { echo "Info.plist: SUScheduledCheckInterval must be 86400"; fail=1; }
 exit $fail
