@@ -197,6 +197,7 @@ private final class Harness {
     // `bootstrap()` suspends inside `wine.status()`; nothing may slip in during that window.
     let h = Harness(wine: .ready)
     #expect(h.model.wineStatus == nil)
+    #expect(h.model.primaryAction == .prepareWine, "the main button must not offer an action that is rejected")
     for job in [GameJob.install, .update, .repair, .preDownload] {
       await #expect(throws: LauncherError.wineNotReady, "\(job)") { try await h.model.start(job) }
     }

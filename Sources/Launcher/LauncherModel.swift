@@ -75,7 +75,7 @@ public final class LauncherModel {
   }
 
   public var primaryAction: PrimaryAction {
-    isWineMissing ? .prepareWine : PrimaryAction.derive(status)
+    isWineNotReady ? .prepareWine : PrimaryAction.derive(status)
   }
 
   /// Wine is known to need preparation.
