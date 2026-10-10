@@ -98,8 +98,18 @@ final class FakeGameClient: GameClient, Sendable {
 
   // MARK: GameClient
 
+  /// When set, `status()` signals `statusQueries` and suspends until `statusGate` is pushed to (or cancelled).
+  let stallsStatus = Mutex(false)
+  let statusQueries = AsyncQueue<Void>()
+  let statusGate = AsyncQueue<Void>()
+
   func status() async throws -> GameStatus {
-    try state.withLock { s -> GameStatus in
+    if stallsStatus.withLock({ $0 }) {
+      statusQueries.push(())
+      _ = await statusGate.pop()
+      try Task.checkCancellation()
+    }
+    return try state.withLock { s -> GameStatus in
       s.statusCalls += 1
       return try s.status.get()
     }

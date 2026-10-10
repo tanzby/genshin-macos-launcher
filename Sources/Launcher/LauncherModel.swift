@@ -109,6 +109,7 @@ public final class LauncherModel {
   private var launchGate: LaunchGate?
   private var isShuttingDown = false
   private var launchWork: Task<LaunchOutcome, Error>?
+  private var statusRead: Task<Void, Never>?
 
   public init(
     client: any GameClient,
@@ -361,6 +362,7 @@ public final class LauncherModel {
   public func shutdown() async {
     isShuttingDown = true  // before the first suspension, so nothing new can start while we wait
     launchWork?.cancel()
+    statusRead?.cancel()
     await cancelAndWait(exclusive: true, preDownload: true)
   }
 
@@ -383,7 +385,7 @@ public final class LauncherModel {
   private func runWinePreparation(_ wine: any WinePreparing) async {
     let activity = ProcessInfo.processInfo.beginActivity(
       options: [.userInitiated, .idleSystemSleepDisabled], reason: "Yaagl Wine preparation")
-    let (updates, sink) = AsyncStream<WineInstallProgress>.makeStream(bufferingPolicy: .unbounded)
+    let (updates, sink) = AsyncStream<WineInstallProgress>.makeStream(bufferingPolicy: .bufferingNewest(1))  // only the latest progress matters
     var failure: Error?
     // A task group, so cancelling this Task cancels the install; `updates` ends when the install returns.
     await withTaskGroup(of: (any Error)?.self) { group in
@@ -415,7 +417,14 @@ public final class LauncherModel {
         eventSink.yield(.wineFailed(error))
       } else {
         progress = .preparing
-        await refresh()  // the game status is only read once Wine is ready
+        // The game status is only read once Wine is ready. Wine is installed by now, so a pause must not
+        // cancel this read (it would leave `status` nil and offer "install"); only shutdown does.
+        if !isShuttingDown {
+          let read = Task { await self.refresh() }
+          statusRead = read
+          await read.value
+          statusRead = nil
+        }
         eventSink.yield(.wineReady)
       }
     }

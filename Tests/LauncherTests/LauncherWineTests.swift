@@ -333,6 +333,27 @@ private final class Harness {
     #expect(try await h.log.next() == .wineReady)
   }
 
+  @Test func WIN_005_pauseWhileReadingGameStatusDoesNotLoseTheStatus() async throws {
+    // Once Wine is installed the remaining work is the game status read; a pause there must not turn the
+    // cancelled read into "no game installed".
+    let h = Harness(wine: missing)
+    h.fake.stallsStatus.withLock { $0 = true }
+    let (task, install) = try await h.bootstrapUntilPreparing()
+    h.wine.finish(install: install)
+    try await h.fake.statusQueries.pop("the game status query")
+    #expect(h.model.phase == .preparingWine)
+
+    let pause = Task { @MainActor in await h.model.pause() }
+    #expect(await h.waitUntil { h.model.isPausing })
+    h.fake.statusGate.push(())
+    await pause.value
+    await task.value
+    #expect(h.model.status == installed)
+    #expect(h.model.primaryAction == .launch)
+    #expect(h.model.phase == .idle)
+    #expect(try await h.log.next() == .wineReady)
+  }
+
   @Test func WIN_005_pausingWhileIdleIsANoOp() async throws {
     let h = Harness(wine: .ready)
     await h.model.bootstrap()
