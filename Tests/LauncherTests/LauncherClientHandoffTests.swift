@@ -6,23 +6,32 @@ import Testing
 // How the model hands the game directory and the settings snapshot to the GameClient (ticket #12).
 
 @MainActor
-@Suite(.disabled("bisect")) struct LauncherClientHandoffTests {
-  private let installed = GameStatus(localVersion: "5.6.0", remoteVersion: "5.6.0")
+private func waitForLaunch(_ fake: FakeGameClient) async {
+  try? await fake.nextLaunch()
+}
 
-  @Test func WIN_005_theGameDirectoryReachesTheClientAtInitAndOnEveryChange() async {
-    let fake = FakeGameClient(status: installed)
+@Suite struct LauncherClientHandoffTests {
+  @MainActor
+  @Test func WIN_005_theGameDirectoryReachesTheClientAtInitAndOnEveryChange() {
+    let fake = FakeGameClient(status: GameStatus(localVersion: "5.6.0", remoteVersion: "5.6.0"))
     let first = URL(filePath: "/Games/A")
+    let second = URL(filePath: "/Games/B")
     let model = LauncherModel(client: fake, gameDirectory: first)
 
-    model.gameDirectory = URL(filePath: "/Games/B")
-    model.gameDirectory = URL(filePath: "/Games/B")  // unchanged: not repeated
+    model.gameDirectory = second
+    model.gameDirectory = second  // unchanged: not repeated
     model.gameDirectory = nil
 
-    #expect(fake.gameDirectories == [first, URL(filePath: "/Games/B"), nil])
+    let seen = fake.gameDirectories
+    #expect(seen.count == 3)
+    #expect(seen[0] == first)
+    #expect(seen[1] == second)
+    #expect(seen[2] == nil)
   }
 
+  @MainActor
   @Test func LCH_005_launchPassesTheSettingsSnapshotFromTheProvider() async throws {
-    let fake = FakeGameClient(status: installed)
+    let fake = FakeGameClient(status: GameStatus(localVersion: "5.6.0", remoteVersion: "5.6.0"))
     let directory = FileManager.default.temporaryDirectory.appending(path: "handoff-\(UUID().uuidString)")
     try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
     defer { try? FileManager.default.removeItem(at: directory) }
@@ -31,12 +40,15 @@ import Testing
     await model.refresh()
 
     try await model.launch()
-    try await fake.nextLaunch()
+    await waitForLaunch(fake)
 
-    let options = try #require(fake.launchOptions.first)
-    #expect(options.gameDirectory == directory)
-    #expect(options.retina && options.hdr && !options.metalFX)
-    #expect(options.proxyHost == "127.0.0.1:7890")
+    let options = fake.launchOptions
+    #expect(options.count == 1)
+    #expect(options[0].gameDirectory == directory)
+    #expect(options[0].retina)
+    #expect(options[0].hdr)
+    #expect(!options[0].metalFX)
+    #expect(options[0].proxyHost == "127.0.0.1:7890")
     fake.finishLaunch(.exited)
     await model.waitUntilIdle()
   }

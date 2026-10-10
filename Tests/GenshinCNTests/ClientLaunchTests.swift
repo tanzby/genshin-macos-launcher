@@ -10,7 +10,7 @@ import Wine
 
 private let noop: @Sendable () -> Void = {}
 
-@Suite(.disabled("bisect")) struct ClientLaunchTests {
+@Suite struct ClientLaunchTests {
   private func installedRig() -> ClientRig {
     let release = FakeRelease.game("5.6.0")
     let rig = ClientRig(main: release)
@@ -144,7 +144,7 @@ final class Counter: @unchecked Sendable {
   var value: Int { lock.withLock { count } }
 }
 
-@Suite(.disabled("bisect")) struct LaunchSettingsMappingTests {
+@Suite struct LaunchSettingsMappingTests {
   @Test func LCH_004_launchOptionsMapOneToOneOntoTheRecipeSettings() {
     let options = LaunchOptions(
       gameDirectory: URL(filePath: "/Games/GI"), retina: true, leftCommandIsControl: true, metalHUD: true, hdr: true,
@@ -161,7 +161,7 @@ final class Counter: @unchecked Sendable {
   }
 }
 
-@Suite(.disabled("bisect")) struct ClientErrorMappingTests {
+@Suite struct ClientErrorMappingTests {
   @Test func APP_013_networkProblemsBecomeNetworkErrors() {
     #expect(GenshinCNClient.map(SophonError.transport(code: -1009)) as? GameClientError == .network)
     #expect(GenshinCNClient.map(SophonError.http(status: 503)) as? GameClientError == .network)
@@ -193,7 +193,7 @@ final class Counter: @unchecked Sendable {
   }
 }
 
-@Suite(.disabled("bisect")) struct JobSerializerTests {
+@Suite struct JobSerializerTests {
   @Test func ADR0002_aNewJobStartsOnlyAfterTheCancelledOneHasReallyStopped() async throws {
     let serializer = JobSerializer()
     let log = Log()
@@ -219,7 +219,7 @@ actor Log {
   func add(_ entry: String) { entries.append(entry) }
 }
 
-@Suite(.disabled("bisect")) struct BundledHelpersTests {
+@Suite struct BundledHelpersTests {
   @Test func LCH_022_theHelpersAreFoundInContentsHelpersAndMissingOnesMeanNoGameMode() throws {
     let app = FileManager.default.temporaryDirectory.appending(path: "Fake-\(UUID().uuidString).app")
     let helpers = app.appending(path: "Contents/Helpers")
