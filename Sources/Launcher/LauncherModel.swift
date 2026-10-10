@@ -64,9 +64,7 @@ public final class LauncherModel {
   public private(set) var progress: JobProgress?
   public private(set) var pendingJob: PendingJob?
   public private(set) var lastError: LauncherError?
-  public var gameDirectory: URL? {
-    didSet { if gameDirectory != oldValue { client.setGameDirectory(gameDirectory) } }
-  }
+  public var gameDirectory: URL?
   /// Snapshots the settings for a launch. The composition root replaces it with one that reads `SettingsModel`.
   public var makeLaunchOptions: @MainActor (URL) -> LaunchOptions = { LaunchOptions(gameDirectory: $0) }
 
@@ -127,7 +125,6 @@ public final class LauncherModel {
     self.client = client
     self.wine = wine
     self.gameDirectory = gameDirectory
-    client.setGameDirectory(gameDirectory)
     self.launchTimeout = launchTimeout
     self.chunkTempMargin = chunkTempMargin
     self.availableDiskSpace = availableDiskSpace
@@ -175,6 +172,7 @@ public final class LauncherModel {
 
   /// A failed query keeps the previous status: offline must not turn an installed game into "install".
   public func refresh() async {
+    client.setGameDirectory(gameDirectory)
     do {
       let fresh = try await client.status()
       status = fresh
@@ -192,6 +190,7 @@ public final class LauncherModel {
   // MARK: Jobs
 
   public func start(_ job: GameJob) async throws {
+    client.setGameDirectory(gameDirectory)
     guard !isPausing, !isShuttingDown else { throw LauncherError.busy }
     if job == .preDownload {
       try await startPreDownload()
@@ -449,6 +448,7 @@ public final class LauncherModel {
   // MARK: Launch
 
   public func launch() async throws {
+    client.setGameDirectory(gameDirectory)
     guard exclusive == .idle, !isPausing, !isShuttingDown else { throw LauncherError.busy }
     guard !isWineNotReady else { throw LauncherError.wineNotReady }
     guard let status, status.localVersion != nil else { throw LauncherError.notInstalled }

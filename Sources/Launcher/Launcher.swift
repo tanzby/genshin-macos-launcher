@@ -108,7 +108,7 @@ public protocol GameClient: Sendable {
   func launch(_ options: LaunchOptions, onStarted: @escaping @Sendable () -> Void) async throws -> LaunchOutcome
   func backgroundImage() async -> BackgroundImage
   /// The launcher tells the client which folder `status()`, `run(_:)` and `requiredDiskSpace(for:)` work on
-  /// (they take no path). Called on every change, also with `nil`.
+  /// (they take no path). Called with the current folder, also `nil`, before every refresh, job start and launch.
   func setGameDirectory(_ url: URL?)
 }
 

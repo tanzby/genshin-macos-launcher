@@ -12,15 +12,19 @@ private func waitForLaunch(_ fake: FakeGameClient) async {
 
 @Suite struct LauncherClientHandoffTests {
   @MainActor
-  @Test(.disabled("bisect")) func WIN_005_theGameDirectoryReachesTheClientAtInitAndOnEveryChange() {
+  @Test func WIN_005_theCurrentGameDirectoryReachesTheClientBeforeEveryRefreshStartAndLaunch() async throws {
     let fake = FakeGameClient(status: GameStatus(localVersion: "5.6.0", remoteVersion: "5.6.0"))
-    let first = URL(filePath: "/Games/A")
+    let first = FileManager.default.temporaryDirectory.appending(path: "handoff-\(UUID().uuidString)")
     let second = URL(filePath: "/Games/B")
+    try FileManager.default.createDirectory(at: first, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: first) }
     let model = LauncherModel(client: fake, gameDirectory: first)
 
+    await model.refresh()
     model.gameDirectory = second
-    model.gameDirectory = second  // unchanged: not repeated
+    await model.refresh()
     model.gameDirectory = nil
+    await model.refresh()
 
     let seen = fake.gameDirectories
     #expect(seen.count == 3)
@@ -30,7 +34,7 @@ private func waitForLaunch(_ fake: FakeGameClient) async {
   }
 
   @MainActor
-  @Test(.disabled("bisect")) func LCH_005_launchPassesTheSettingsSnapshotFromTheProvider() async throws {
+  @Test func LCH_005_launchPassesTheSettingsSnapshotFromTheProvider() async throws {
     let fake = FakeGameClient(status: GameStatus(localVersion: "5.6.0", remoteVersion: "5.6.0"))
     let directory = FileManager.default.temporaryDirectory.appending(path: "handoff-\(UUID().uuidString)")
     try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
