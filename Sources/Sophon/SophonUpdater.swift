@@ -138,8 +138,16 @@ public struct SophonUpdater: Sendable {
         immediate[index] = .untouched
       }
     }
+    // A deletion names a file. One that is a folder holding new files would wipe them (and `removeItem`
+    // is recursive), so a hostile manifest is refused before the first request.
+    let newPaths = diff.files.map { $0.path.lowercased() }
     for deleted in diff.deletions[installedVersion] ?? [] {
       _ = try SophonPathPolicy.resolve(deleted.path, in: gameDirectory)
+      var folder = deleted.path.lowercased()
+      while folder.hasSuffix("/") { folder.removeLast() }
+      if newPaths.contains(where: { $0.hasPrefix(folder + "/") }) {
+        throw SophonError.invalidManifest("\(deleted.path) is a folder of the new version")
+      }
     }
 
     let total = candidates.reduce(Int64(0)) { $0 + max($1.file.size, $1.patch?.originalSize ?? 0) }
@@ -298,9 +306,12 @@ public struct SophonUpdater: Sendable {
     for deleted in plan.deletions where !keep.contains(deleted.path.lowercased()) {
       try Task.checkCancellation()
       let url = try SophonPathPolicy.resolve(deleted.path, in: gameDirectory)
-      if Self.exists(url) {
-        try FileManager.default.removeItem(at: url)
+      // Only a file or a link goes. `attributesOfItem` does not follow links, and a folder is never removed.
+      guard let attributes = try? FileManager.default.attributesOfItem(atPath: url.path) else { continue }
+      guard attributes[.type] as? FileAttributeType != .typeDirectory else {
+        throw SophonError.invalidManifest("\(deleted.path) is a folder, not a file")
       }
+      try FileManager.default.removeItem(at: url)
     }
 
     // UPG-010: new, missing and damaged files, plus the ones whose patch failed.

@@ -584,6 +584,52 @@ private func waitUntil(timeout: Duration = .seconds(5), _ condition: () -> Bool)
     }
   }
 
+  @Test func UPG_007_aDeletionThatIsAFolderOfNewFilesIsRefusedBeforeAnyRequest() async throws {
+    try await withRig { rig in
+      try rig.installOldVersion()
+      for folder in ["data", "DATA/", "new"] {
+        var world = rig.world
+        world.deletions = [SophonDeletedFile(path: folder, size: 0, md5: "")]
+        await #expect(throws: SophonError.self) {
+          _ = try await rig.updater.plan(
+            from: World.installed, diff: world.diff, manifest: world.manifest, gameDirectory: rig.game)
+        }
+      }
+      #expect(rig.requests.isEmpty)
+      #expect(rig.exists("data/a.bin"))
+    }
+  }
+
+  @Test func UPG_007_aDeletionThatIsAFolderOnDiskIsNeverRemoved() async throws {
+    try await withRig { rig in
+      try rig.installOldVersion()
+      try rig.write("other/keep.bin", Data([1, 2, 3]))
+      var world = rig.world
+      world.deletions = [SophonDeletedFile(path: "other", size: 0, md5: "")]
+      let plan = try await rig.updater.plan(
+        from: World.installed, diff: world.diff, manifest: world.manifest, gameDirectory: rig.game)
+      await #expect(throws: SophonError.self) {
+        try await rig.updater.update(
+          plan, diff: world.diffRef, chunks: world.chunkRef, gameDirectory: rig.game, tempDirectory: rig.temp,
+          progress: { _ in })
+      }
+      #expect(rig.exists("other/keep.bin"))
+    }
+  }
+
+  @Test func UPG_007_aSymlinkIsRemovedWithoutTouchingItsTarget() async throws {
+    try await withRig { rig in
+      try rig.installOldVersion()
+      try rig.write("target/keep.bin", Data([9]))
+      try FileManager.default.removeItem(at: rig.game.appendingPathComponent("old/gone.bin"))
+      try FileManager.default.createSymbolicLink(
+        at: rig.game.appendingPathComponent("old/gone.bin"), withDestinationURL: rig.game.appendingPathComponent("target"))
+      try await rig.update(rig.plan())
+      #expect(FileManager.default.fileExists(atPath: rig.game.appendingPathComponent("old/gone.bin").path) == false)
+      #expect(rig.exists("target/keep.bin"))
+    }
+  }
+
   @Test func UPG_007_aDeletionOutsideTheGameDirectoryIsRefused() async throws {
     try await withRig { rig in
       try rig.installOldVersion()
@@ -684,11 +730,11 @@ private func waitUntil(timeout: Duration = .seconds(5), _ condition: () -> Bool)
     }
   }
 
-  @Test func UPG_011_anOldFileThatCannotBeRemovedFailsTheFinalCheck() async throws {
+  @Test func UPG_007_anOldFileThatCannotBeRemovedFailsTheUpdate() async throws {
     try await withRig { rig in
       try rig.installOldVersion()
       let plan = try await rig.plan()
-      // Immutable flag: removeItem fails, which is itself an error; both outcomes are "not done".
+      // Immutable flag: removeItem fails, so the update stops with an error.
       let url = rig.game.appendingPathComponent("old/gone.bin")
       try FileManager.default.setAttributes([.immutable: true], ofItemAtPath: url.path)
       defer { try? FileManager.default.setAttributes([.immutable: false], ofItemAtPath: url.path) }
@@ -861,6 +907,22 @@ private func waitUntil(timeout: Duration = .seconds(5), _ condition: () -> Bool)
       rig.cdn.holdLdiff(nil)
       try await rig.predownload(plan)
       #expect(SophonUpdater.isPredownloaded(World.target, in: rig.temp))
+    }
+  }
+
+  @Test func PRE_002_anInstallIntoTheSameTempDirectoryKeepsThePrefetchedChunks() async throws {
+    try await withRig { rig in
+      try rig.installOldVersion()
+      try await rig.predownload(rig.plan())
+      // A repair of an unrelated file runs between the pre-download and the update.
+      let other = rig.world.chunkFiles.first { $0.path == "data/d.bin" }!
+      try FileManager.default.removeItem(at: rig.game.appendingPathComponent("data/d.bin"))
+      try await SophonDownloader(session: rig.session).install(
+        [other], using: rig.world.chunkRef, into: rig.game, tempDirectory: rig.temp, progress: { _ in })
+      let before = rig.chunkRequests.count
+      try await rig.update(rig.plan())
+      #expect(rig.chunkRequests.count == before, "prefetched chunks of new/e.bin must still be cached")
+      #expect(rig.read("new/e.bin") == rig.world.contents["new/e.bin"])
     }
   }
 

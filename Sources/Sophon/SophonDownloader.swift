@@ -81,7 +81,8 @@ public struct SophonDownloader: Sendable {
       while try await group.next() != nil { _ = submit() }
     }
     reporter.finish(.downloading(done: total, total: total))
-    try? FileManager.default.removeItem(at: worker.chunkRoot)
+    // Only the empty cache folder goes: chunks of other files may be a pre-download waiting for its update.
+    rmdir(worker.chunkRoot.path)
     try? FileManager.default.removeItem(at: worker.assemblyRoot)
   }
 
