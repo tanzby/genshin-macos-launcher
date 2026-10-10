@@ -36,6 +36,8 @@ public struct SophonManifest: Sendable, Equatable {
     }
   }
 
+  init(files: [SophonFile]) { self.files = files }
+
   public init(zstdCompressed data: Data) throws {
     let raw = try Zstd.decompress(data)
     do {
@@ -105,6 +107,11 @@ public struct SophonDiffManifest: Sendable, Equatable {
   public let files: [SophonDiffFile]
   /// Files to delete, keyed by the old version being upgraded from.
   public let deletions: [String: [SophonDeletedFile]]
+
+  init(files: [SophonDiffFile], deletions: [String: [SophonDeletedFile]]) {
+    self.files = files
+    self.deletions = deletions
+  }
 
   public init(zstdCompressed data: Data) throws {
     let raw = try Zstd.decompress(data)

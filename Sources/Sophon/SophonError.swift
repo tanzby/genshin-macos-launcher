@@ -18,6 +18,12 @@ public enum SophonError: Error, Equatable, Sendable {
   case unsafePath(String)
   /// A decompressed chunk or an assembled file did not match its manifest digest or size.
   case checksumMismatch(path: String)
+  /// The installed version is not one the patch build upgrades from, so ldiff cannot be used.
+  case versionNotPatchable(String)
+  /// Applying an ldiff patch did not produce the file the manifest describes.
+  case patchFailed(path: String)
+  /// After an update a file is missing, has the wrong size, or an old file is still there (UPG-011).
+  case verificationFailed(path: String)
 }
 
 extension SophonError: LocalizedError {
@@ -33,6 +39,9 @@ extension SophonError: LocalizedError {
     case .invalidManifest(let reason): "Invalid Sophon manifest: \(reason)"
     case .unsafePath(let path): "Sophon manifest path escapes the game directory: \(path)"
     case .checksumMismatch(let path): "File is corrupt after download: \(path)"
+    case .versionNotPatchable(let version): "Version \(version) cannot be updated with ldiff patches"
+    case .patchFailed(let path): "Could not patch \(path)"
+    case .verificationFailed(let path): "File is missing, has the wrong size, or should be gone after the update: \(path)"
     }
   }
 }
