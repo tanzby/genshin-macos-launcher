@@ -31,6 +31,28 @@ private func makeController(
     #expect(controller.presentation.buttonEnabled)
   }
 
+  @Test func APP_010_reactivationRequeriesAfterAFailedFirstQuery() async {
+    let (controller, client, _) = makeController()
+    client.setStatusFailure(LauncherError.offline)
+    await controller.refresh()
+    #expect(!controller.presentation.buttonEnabled)
+    client.setStatus(GameStatus(localVersion: "5.0.0", remoteVersion: "5.0.0"))
+    await controller.refreshWhenIdle()
+    #expect(controller.presentation.button == .launch)
+    #expect(controller.presentation.buttonEnabled)
+  }
+
+  @Test func APP_010_reactivationLeavesARunningJobAlone() async throws {
+    let (controller, client, _) = makeController(status: GameStatus())
+    await controller.refresh()
+    await controller.perform(.install)
+    _ = try await client.nextRun()
+    let calls = client.statusCalls
+    await controller.refreshWhenIdle()
+    #expect(client.statusCalls == calls)
+    await controller.launcher.shutdown()
+  }
+
   @Test func CFG_009_gameDirectoryIsHandedToTheLauncher() async {
     let (controller, _, settings) = makeController(gameDirectory: nil)
     await controller.refresh()

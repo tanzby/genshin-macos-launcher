@@ -39,6 +39,14 @@ public final class MainController {
     hasLoaded = true
   }
 
+  /// For window activation: re-reads everything unless a job or the game is active, so coming back after the
+  /// network returned clears a stale "offline" without disturbing a running job.
+  public func refreshWhenIdle() async {
+    onboarding.refresh()
+    guard launcher.phase == .idle else { return }
+    await refresh()
+  }
+
   /// Installing needs a directory first; the view shows the picker when this is true.
   public func needsGameDirectory(for button: PrimaryButton) -> Bool {
     button == .install && (settings.gameDirectory == nil || !onboarding.gameDirectoryUsable)

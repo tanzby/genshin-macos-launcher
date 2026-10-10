@@ -32,7 +32,7 @@ struct MainView: View {
     .onChange(of: controller.launcher.progress) { _, progress in meter.update(progress) }
     .onChange(of: controller.settings.gameDirectory) { _, _ in Task { await controller.refresh() } }
     .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
-      controller.onboarding.refresh()
+      Task { await controller.refreshWhenIdle() }
     }
   }
 }
