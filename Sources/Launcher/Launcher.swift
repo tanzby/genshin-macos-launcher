@@ -30,6 +30,8 @@ public enum JobProgress: Sendable, Equatable {
   case preparing
   case running(done: Int64, total: Int64)
   case finalizing
+  /// Wine preparation: download (Wine, DXMT), extraction, prefix and DXMT setup.
+  case wine(WineInstallProgress)
 }
 
 /// A snapshot of the settings at launch time. Domain modules never read `UserDefaults`.
@@ -73,8 +75,22 @@ public protocol GameClient: Sendable {
   func backgroundImage() async -> BackgroundImage
 }
 
+/// The seam between the launcher and the Wine runtime. `WineRuntime` is the production implementation;
+/// tests use a Fake so the state machine never touches the disk or the network.
+public protocol WinePreparing: Sendable {
+  /// Whether the pinned Wine and DXMT are installed and intact. Looks at the disk (the version stamp).
+  func status() async -> WineStatus
+  /// Installs Wine, DXMT and the prefix when `status()` is not `.ready`. Must stop when its Task is
+  /// cancelled; downloads resume from their `.part` files on the next call.
+  func ensureInstalled(progress: @escaping @Sendable (WineInstallProgress) -> Void) async throws
+}
+
+extension WineRuntime: WinePreparing {}
+
 /// What the main button does next. A pure function of the launcher's state.
 public enum PrimaryAction: Sendable, Equatable {
+  /// Wine is missing or damaged; nothing else can run until it is prepared.
+  case prepareWine
   case install
   case update
   case launch
