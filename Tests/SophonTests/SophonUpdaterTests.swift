@@ -663,6 +663,36 @@ private func waitUntil(timeout: Duration = .seconds(5), _ condition: () -> Bool)
     }
   }
 
+  @Test func UPG_007_aDeletionSpelledDifferentlyFromANewFileIsStillKept() async throws {
+    try await withRig { rig in
+      try rig.installOldVersion()
+      for alias in ["data/./d.bin", "data//d.bin", "DATA/D.BIN"] {
+        var world = rig.world
+        world.deletions = [SophonDeletedFile(path: alias, size: 1, md5: "x")]
+        let plan = try await rig.updater.plan(
+          from: World.installed, diff: world.diff, manifest: world.manifest, gameDirectory: rig.game)
+        try await rig.updater.update(
+          plan, diff: world.diffRef, chunks: world.chunkRef, gameDirectory: rig.game, tempDirectory: rig.temp,
+          progress: { _ in })
+        #expect(rig.read("data/d.bin") == world.contents["data/d.bin"], "\(alias)")
+      }
+    }
+  }
+
+  @Test func UPG_007_aFolderDeletionIsRefusedAlsoWhenSpelledWithDotsOrOtherCase() async throws {
+    try await withRig { rig in
+      try rig.installOldVersion()
+      for alias in ["./data", "data/.", "DATA"] {
+        var world = rig.world
+        world.deletions = [SophonDeletedFile(path: alias, size: 0, md5: "")]
+        await #expect(throws: SophonError.self) {
+          _ = try await rig.updater.plan(
+            from: World.installed, diff: world.diff, manifest: world.manifest, gameDirectory: rig.game)
+        }
+      }
+    }
+  }
+
   @Test func UPG_007_aDeletionOutsideTheGameDirectoryIsRefused() async throws {
     try await withRig { rig in
       try rig.installOldVersion()

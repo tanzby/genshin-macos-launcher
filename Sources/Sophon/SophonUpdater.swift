@@ -166,11 +166,9 @@ public struct SophonUpdater: Sendable {
     }
     // A deletion names a file. One that is a folder holding new files would wipe them (and `removeItem`
     // is recursive), so a hostile manifest is refused before the first request.
-    let newPaths = diff.files.map { $0.path.lowercased() }
+    let newPaths = try diff.files.map { try Self.key($0.path, in: gameDirectory) }
     for deleted in diff.deletions[installedVersion] ?? [] {
-      _ = try SophonPathPolicy.resolve(deleted.path, in: gameDirectory)
-      var folder = deleted.path.lowercased()
-      while folder.hasSuffix("/") { folder.removeLast() }
+      let folder = try Self.key(deleted.path, in: gameDirectory)
       if newPaths.contains(where: { $0.hasPrefix(folder + "/") }) {
         throw SophonError.invalidManifest("\(deleted.path) is a folder of the new version")
       }
@@ -341,8 +339,9 @@ public struct SophonUpdater: Sendable {
     }
 
     // UPG-007: files the new version no longer has.
-    let keep = Set(plan.expectedFiles.map { $0.path.lowercased() })
-    for deleted in plan.deletions where !keep.contains(deleted.path.lowercased()) {
+    let keep = Set(try plan.expectedFiles.map { try Self.key($0.path, in: gameDirectory) })
+    let doomed = try plan.deletions.filter { !keep.contains(try Self.key($0.path, in: gameDirectory)) }
+    for deleted in doomed {
       try Task.checkCancellation()
       let url = try SophonPathPolicy.resolve(deleted.path, in: gameDirectory)
       // Only a file or a link goes. `attributesOfItem` does not follow links, and a folder is never removed.
@@ -365,7 +364,7 @@ public struct SophonUpdater: Sendable {
       let url = try SophonPathPolicy.resolve(file.path, in: gameDirectory)
       guard Self.size(of: url) == file.size else { throw SophonError.verificationFailed(path: file.path) }
     }
-    for deleted in plan.deletions where !keep.contains(deleted.path.lowercased()) {
+    for deleted in doomed {
       let url = try SophonPathPolicy.resolve(deleted.path, in: gameDirectory)
       if Self.exists(url) { throw SophonError.verificationFailed(path: deleted.path) }
     }
@@ -399,6 +398,12 @@ public struct SophonUpdater: Sendable {
       }
       sizes[patch.patchID] = patch.patchSize
     }
+  }
+
+  /// The file a manifest path stands for, normalised (`a/./b`, `a//b`) and case-folded: macOS volumes are
+  /// case-insensitive by default. Two paths with equal keys are one file.
+  static func key(_ path: String, in gameDirectory: URL) throws -> String {
+    try SophonPathPolicy.resolve(path, in: gameDirectory).standardizedFileURL.path.lowercased()
   }
 
   /// Size and MD5 both match. A missing file does not match.
