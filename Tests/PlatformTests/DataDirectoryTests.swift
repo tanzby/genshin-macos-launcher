@@ -28,6 +28,7 @@ import Testing
     #expect(directory.wine.path == "/data/Yaagl/wine")
     #expect(directory.winePrefix.path == "/data/Yaagl/wineprefix")
     #expect(directory.logs.path == "/data/Yaagl/logs")
+    #expect(directory.background.path == "/data/Yaagl/background")
     #expect(directory.nativeMarker.path == "/data/Yaagl/.yaagl-native")
   }
 
