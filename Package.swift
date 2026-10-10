@@ -49,7 +49,12 @@ let package = Package(
     .testTarget(name: "PlatformTests", dependencies: ["Platform"]),
     .testTarget(name: "WineTests", dependencies: ["Wine"]),
     .testTarget(name: "LauncherTests", dependencies: ["Launcher"]),
-    .testTarget(name: "GenshinCNTests", dependencies: ["GenshinCN", "Launcher", "Wine"]),
+    .testTarget(
+      name: "GenshinCNTests",
+      dependencies: [
+        "GenshinCN", "Launcher", "Wine", "Sophon", "Platform",
+        .product(name: "SwiftProtobuf", package: "swift-protobuf"),
+      ]),
   ],
   swiftLanguageModes: [.v6]
 )

@@ -58,6 +58,10 @@ targets:
         product: Launcher
       - package: YaaglKit
         product: GenshinCN
+      - package: YaaglKit
+        product: Platform
+      - package: YaaglKit
+        product: Wine
       - package: Sparkle
         product: Sparkle
       - target: YaaglWineShim

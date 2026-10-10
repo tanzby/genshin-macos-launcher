@@ -445,6 +445,39 @@ private func expectFilesBack(_ urls: [URL], sourceLocation: SourceLocation = #_s
     }
   }
 
+  @Test func LCH_036_onStartedFiresOnceWhenTheGameProcessAppearsAndNeverWhenItDoesNot() async throws {
+    try await withLaunchFixture { f in
+      f.table.probe.value = { number in number >= 3 ? [FakeProcessTable.gameRecord] : [] }
+      let table = f.table
+      f.runner.game.value = .custom { _ in
+        let deadline = ContinuousClock.now + .seconds(5)
+        while table.probeCount < 3 && ContinuousClock.now < deadline {
+          try await Task.sleep(for: .milliseconds(1))
+        }
+        try await Task.sleep(for: .milliseconds(40))
+        return 0
+      }
+      let calls = Locked(0)
+
+      let result = await f.makeSession(timing: f.sleeper.timing(startupTimeout: .seconds(10)))
+        .launch(makeLaunchRecipe(), onStarted: { calls.mutate { $0 += 1 } })
+
+      #expect(result == .exited)
+      #expect(calls.value == 1)
+    }
+
+    var options = LaunchFixtureOptions()
+    options.game = .hang
+    options.gameAppears = false
+    options.productionTiming = true
+    try await withLaunchFixture(options) { f in
+      let calls = Locked(0)
+      let result = await f.session.launch(makeLaunchRecipe(), onStarted: { calls.mutate { $0 += 1 } })
+      #expect(result == .startupTimedOut)
+      #expect(calls.value == 0)
+    }
+  }
+
   @Test func LCH_036_gameProbeMatchesTheSecondArgumentCaseInsensitively() async throws {
     try await withLaunchFixture { f in
       f.table.probe.value = { _ in
