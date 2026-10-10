@@ -72,10 +72,31 @@ public struct SophonUpdater: Sendable {
 
   // MARK: - Pre-download record
 
-  /// Whether `targetVersion` has been pre-downloaded completely into `tempDirectory`.
-  public static func isPredownloaded(_ targetVersion: String, in tempDirectory: URL) -> Bool {
+  /// Whether `targetVersion` was pre-downloaded completely, for the game at `installedVersion`: an ldiff
+  /// only fits the version it was made for. Cheap, so a launcher can ask it at startup; it trusts the
+  /// record and does not look at the files.
+  public static func isPredownloaded(_ targetVersion: String, from installedVersion: String, in tempDirectory: URL) -> Bool {
     guard let record = SophonPredownloadRecord.read(from: tempDirectory) else { return false }
-    return record.complete && record.targetVersion == targetVersion
+    return record.complete && record.targetVersion == targetVersion && record.fromVersion == installedVersion
+  }
+
+  /// Like `isPredownloaded(_:from:in:)`, and also checks that every ldiff file and chunk `plan` needs is
+  /// still in `tempDirectory` with its size, so a cleaned cache is not reported as done.
+  public static func isPredownloaded(_ targetVersion: String, plan: SophonUpdatePlan, in tempDirectory: URL) -> Bool {
+    guard isPredownloaded(targetVersion, from: plan.fromVersion, in: tempDirectory) else { return false }
+    for ldiff in plan.ldiffs
+    where size(of: ldiffDirectory(in: tempDirectory).appending(path: ldiff.id)) != ldiff.size {
+      return false
+    }
+    let chunkRoot = tempDirectory.appending(path: "chunks", directoryHint: .isDirectory)
+    for file in plan.downloads {
+      let directory = chunkRoot.appending(
+        path: SophonDownloaderLayout.fileKey(for: file.path), directoryHint: .isDirectory)
+      for chunk in file.chunks where size(of: directory.appending(path: chunk.id)) != Int64(chunk.compressedSize) {
+        return false
+      }
+    }
+    return true
   }
 
   // MARK: - Plan

@@ -168,6 +168,7 @@ private final class FakeCDN: @unchecked Sendable {
   private var gate: StubGate?
   private var ldiffGate: StubGate?
   private var failing: Set<String> = []
+  private var corrupted: Set<String> = []
 
   init(ldiff: Data, chunks: [String: Data]) {
     self.ldiff = ldiff
@@ -177,6 +178,7 @@ private final class FakeCDN: @unchecked Sendable {
   func replaceLdiff(_ data: Data) { lock.withLock { ldiff = data } }
   func holdLdiff(_ gate: StubGate?) { lock.withLock { ldiffGate = gate } }
   func fail(chunk id: String) { lock.withLock { _ = failing.insert(id) } }
+  func corrupt(chunk id: String) { lock.withLock { corrupted.insert(id) } }
 
   func reply(to request: URLRequest) -> StubReply {
     let name = request.url?.lastPathComponent ?? ""
@@ -184,7 +186,8 @@ private final class FakeCDN: @unchecked Sendable {
       if request.url?.path.hasPrefix("/diffs/") == true { return (name == World.ldiffID ? ldiff : nil, ldiffGate, false) }
       return (chunks[name], nil, failing.contains(name))
     }
-    guard let blob, !isFailing else { return .response(status: 404, body: Data()) }
+    guard var blob, !isFailing else { return .response(status: 404, body: Data()) }
+    if lock.withLock({ corrupted.contains(name) }) { blob = Data(repeating: 0x42, count: blob.count) }
     var answer: StubReply = .response(status: 200, body: blob)
     if let header = request.value(forHTTPHeaderField: "Range"), header.hasPrefix("bytes="), header.hasSuffix("-"),
       let start = Int(header.dropFirst(6).dropLast()), start < blob.count
@@ -885,11 +888,57 @@ private func waitUntil(timeout: Duration = .seconds(5), _ condition: () -> Bool)
   @Test func PRE_001_theRecordIsPerTargetVersion() async throws {
     try await withRig { rig in
       try rig.installOldVersion()
-      #expect(!SophonUpdater.isPredownloaded("7.1.0", in: rig.temp))
+      #expect(!SophonUpdater.isPredownloaded("7.1.0", from: World.installed, in: rig.temp))
       try await rig.predownload(rig.plan(), target: "7.1.0")
-      #expect(SophonUpdater.isPredownloaded("7.1.0", in: rig.temp))
+      #expect(SophonUpdater.isPredownloaded("7.1.0", from: World.installed, in: rig.temp))
       // A newer pre-download (7.2.0) is not covered by the one for 7.1.0.
-      #expect(!SophonUpdater.isPredownloaded("7.2.0", in: rig.temp))
+      #expect(!SophonUpdater.isPredownloaded("7.2.0", from: World.installed, in: rig.temp))
+    }
+  }
+
+  @Test func PRE_001_aPredownloadForAnotherInstalledVersionDoesNotCount() async throws {
+    try await withRig { rig in
+      try rig.installOldVersion()
+      try await rig.predownload(rig.plan())
+      #expect(!SophonUpdater.isPredownloaded(World.target, from: "6.9.0", in: rig.temp))
+    }
+  }
+
+  @Test func PRE_001_aCleanedCacheIsNotReportedAsPredownloaded() async throws {
+    try await withRig { rig in
+      try rig.installOldVersion()
+      let plan = try await rig.plan()
+      try await rig.predownload(plan)
+      #expect(SophonUpdater.isPredownloaded(World.target, plan: plan, in: rig.temp))
+      try FileManager.default.removeItem(at: rig.temp.appendingPathComponent("ldiff/\(World.ldiffID)"))
+      #expect(!SophonUpdater.isPredownloaded(World.target, plan: plan, in: rig.temp))
+    }
+  }
+
+  @Test func PRE_002_aCachedChunkOfTheRightLengthButWrongContentIsFetchedAgain() async throws {
+    try await withRig { rig in
+      try rig.installOldVersion()
+      let plan = try await rig.plan()
+      let chunk = try #require(plan.downloads.first { $0.path == "new/e.bin" }?.chunks.first)
+      let directory = rig.temp.appendingPathComponent(
+        "chunks/\(SophonDownloaderLayout.fileKey(for: "new/e.bin"))")
+      try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+      try Data(repeating: 0x42, count: Int(chunk.compressedSize)).write(to: directory.appendingPathComponent(chunk.id))
+      try await rig.predownload(plan)
+      #expect(rig.chunkRequests.contains { $0.url!.lastPathComponent == chunk.id })
+      try await rig.update(rig.plan())
+      #expect(rig.read("new/e.bin") == rig.world.contents["new/e.bin"])
+    }
+  }
+
+  @Test func PRE_002_aCorruptChunkFromTheServerFailsThePredownloadWithoutMarkingIt() async throws {
+    try await withRig { rig in
+      try rig.installOldVersion()
+      let plan = try await rig.plan()
+      let chunk = try #require(plan.downloads.first { $0.path == "new/e.bin" }?.chunks.first)
+      rig.cdn.corrupt(chunk: chunk.id)
+      await #expect(throws: SophonError.checksumMismatch(path: "new/e.bin")) { try await rig.predownload(plan) }
+      #expect(!SophonUpdater.isPredownloaded(World.target, from: World.installed, in: rig.temp))
     }
   }
 
@@ -899,8 +948,8 @@ private func waitUntil(timeout: Duration = .seconds(5), _ condition: () -> Bool)
       let plan = try await rig.plan()
       try await rig.predownload(plan, target: "7.1.0")
       try await rig.predownload(plan, target: "7.2.0")
-      #expect(SophonUpdater.isPredownloaded("7.2.0", in: rig.temp))
-      #expect(!SophonUpdater.isPredownloaded("7.1.0", in: rig.temp))
+      #expect(SophonUpdater.isPredownloaded("7.2.0", from: World.installed, in: rig.temp))
+      #expect(!SophonUpdater.isPredownloaded("7.1.0", from: World.installed, in: rig.temp))
     }
   }
 
@@ -914,10 +963,10 @@ private func waitUntil(timeout: Duration = .seconds(5), _ condition: () -> Bool)
       #expect(await waitUntil { rig.ldiffRequests.count >= 1 })
       task.cancel()
       await #expect(throws: CancellationError.self) { try await task.value }
-      #expect(!SophonUpdater.isPredownloaded(World.target, in: rig.temp))
+      #expect(!SophonUpdater.isPredownloaded(World.target, from: World.installed, in: rig.temp))
       rig.cdn.holdLdiff(nil)
       try await rig.predownload(plan)
-      #expect(SophonUpdater.isPredownloaded(World.target, in: rig.temp))
+      #expect(SophonUpdater.isPredownloaded(World.target, from: World.installed, in: rig.temp))
     }
   }
 
@@ -942,7 +991,7 @@ private func waitUntil(timeout: Duration = .seconds(5), _ condition: () -> Bool)
       try rig.installOldVersion()
       try await rig.predownload(rig.plan())
       try await rig.update(rig.plan())
-      #expect(!SophonUpdater.isPredownloaded(World.target, in: rig.temp))
+      #expect(!SophonUpdater.isPredownloaded(World.target, from: World.installed, in: rig.temp))
     }
   }
 

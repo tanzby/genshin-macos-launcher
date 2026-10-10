@@ -32,13 +32,26 @@ extension SophonDownloader {
       let directory = worker.chunkRoot.appending(path: key, directoryHint: .isDirectory)
       try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
       let progress = reporter.progress(forFile: item.file)
+      let file = item.file
       for chunk in item.file.chunks {
         let url = try SophonDownloaderLayout.resourceURL(
           base: chunkBase, name: chunk.id, suffix: ref.chunkURLSuffix)
+        let cached = directory.appending(path: chunk.id)
         try await Self.retrying(config) {
           try await fetcher.fetch(
-            name: chunk.id, url: url, expected: Int64(chunk.compressedSize),
-            to: directory.appending(path: chunk.id), reporter: progress)
+            name: chunk.id, url: url, expected: Int64(chunk.compressedSize), to: cached, reporter: progress)
+          // The fetcher only checks the length. A pre-download is marked complete for good, so a chunk of
+          // the right length but the wrong content must be caught here, not during the real update.
+          guard !chunk.compressedMD5.isEmpty else { return }
+          let intact = try await Offload.run {
+            try MD5Hasher.hex(ofFileAt: cached, cancelled: $0).caseInsensitiveCompare(chunk.compressedMD5)
+              == .orderedSame
+          }
+          if !intact {
+            try? FileManager.default.removeItem(at: cached)
+            progress.set(chunk.id, 0)
+            throw SophonError.checksumMismatch(path: file.path)
+          }
         }
       }
     }
