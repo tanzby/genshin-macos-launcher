@@ -150,6 +150,31 @@ private final class Harness {
     await task.value
   }
 
+  @Test func APP_001_bootstrapWaitsForAPreparationStartedWhileItWasReadingTheStatus() async throws {
+    let h = Harness(wine: missing)
+    h.wine.stallsStatus.withLock { $0 = true }
+    let model = h.model
+    let boot = Task { @MainActor in await model.bootstrap() }
+    try await h.wine.statusQueries.pop("the Wine status query")
+
+    // the user presses "prepare Wine" while bootstrap is still reading the status
+    try await h.model.prepareWine()
+    let install = try await h.wine.nextInstall()
+    h.wine.statusGate.push(())  // bootstrap now sees needsInstall and finds the slot taken
+    h.wine.stallsStatus.withLock { $0 = false }
+
+    #expect(await h.waitUntil { h.model.wineStatus == missing })  // bootstrap has now seen the slot taken
+    let finished = AsyncQueue<Void>()
+    let watcher = Task { await boot.value; finished.push(()) }
+    #expect(h.fake.statusCalls == 0)
+    h.wine.finish(install: install)
+    try await finished.pop("bootstrap to return")
+    watcher.cancel()
+    #expect(h.model.phase == .idle)
+    #expect(h.fake.statusCalls == 1)
+    #expect(h.model.status == installed)
+  }
+
   @Test func WIN_005_refreshWineTracksTheDisk() async throws {
     let h = Harness(wine: .ready)
     await h.model.refreshWine()

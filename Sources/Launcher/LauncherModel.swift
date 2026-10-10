@@ -152,7 +152,13 @@ public final class LauncherModel {
       await refresh()
       return
     }
-    guard (try? await prepareWine()) != nil, let task = exclusiveTask else { return }
+    do {
+      try await prepareWine()
+    } catch {
+      // Someone else (the user pressing "prepare Wine") got the slot while the status was being read.
+      guard exclusive == .preparingWine else { return }
+    }
+    guard exclusive == .preparingWine, let task = exclusiveTask else { return }
     await task.value  // the preparation reads the game status itself once Wine is ready
   }
 

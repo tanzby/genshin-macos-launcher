@@ -85,8 +85,17 @@ final class FakeWinePreparer: WinePreparing, Sendable {
 
   // MARK: WinePreparing
 
+  /// When set, `status()` signals `statusQueries` and suspends until `statusGate` is pushed to.
+  let stallsStatus = Mutex(false)
+  let statusQueries = AsyncQueue<Void>()
+  let statusGate = AsyncQueue<Void>()
+
   func status() async -> WineStatus {
-    state.withLock { s in
+    if stallsStatus.withLock({ $0 }) {
+      statusQueries.push(())
+      _ = await statusGate.pop()
+    }
+    return state.withLock { s in
       s.statusCalls += 1
       s.log.append("status")
       return s.status
