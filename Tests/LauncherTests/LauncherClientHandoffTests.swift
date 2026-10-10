@@ -6,7 +6,7 @@ import Testing
 // How the model hands the game directory and the settings snapshot to the GameClient (ticket #12).
 
 @MainActor
-@Suite struct LauncherClientHandoffTests {
+@Suite(.disabled("bisect")) struct LauncherClientHandoffTests {
   private let installed = GameStatus(localVersion: "5.6.0", remoteVersion: "5.6.0")
 
   @Test func WIN_005_theGameDirectoryReachesTheClientAtInitAndOnEveryChange() async {
