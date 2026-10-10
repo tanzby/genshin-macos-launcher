@@ -168,6 +168,13 @@ final class Counter: @unchecked Sendable {
     #expect(GenshinCNClient.map(URLError(.timedOut)) as? GameClientError == .network)
   }
 
+  @Test func INS_012_onlyTransportFailuresAndServerErrorsCountAsOffline() {
+    #expect(GenshinCNClient.isOffline(SophonError.transport(code: -1009)))
+    #expect(GenshinCNClient.isOffline(SophonError.http(status: 502)))
+    #expect(!GenshinCNClient.isOffline(SophonError.http(status: 403)))
+    #expect(!GenshinCNClient.isOffline(SophonError.malformedResponse))
+  }
+
   @Test func INS_008_corruptDataBecomesAVerificationFailure() {
     #expect(GenshinCNClient.map(SophonError.checksumMismatch(path: "a")) as? GameClientError == .verificationFailed)
     #expect(GenshinCNClient.map(SophonError.verificationFailed(path: "a")) as? GameClientError == .verificationFailed)

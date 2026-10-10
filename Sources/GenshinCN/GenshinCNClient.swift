@@ -160,7 +160,8 @@ public final class GenshinCNClient: GameClient {
     case is URLError: true
     case let error as SophonError:
       switch error {
-      case .transport, .http: true
+      case .transport: true
+      case .http(let status): status >= 500  // a 4xx is a contract break, not "offline"
       default: false
       }
     default: false
