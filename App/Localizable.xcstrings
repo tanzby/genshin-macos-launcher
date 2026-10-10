@@ -52,6 +52,23 @@
         }
       }
     },
+    "A new version can be downloaded in advance.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A new version can be downloaded in advance."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "新版本可以提前下载。"
+          }
+        }
+      }
+    },
     "About Yaagl": {
       "extractionState": "manual",
       "localizations": {

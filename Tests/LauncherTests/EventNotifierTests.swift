@@ -67,12 +67,13 @@ private func notifier(_ delivery: FakeDelivery) -> EventNotifier {
     let update = GameStatus(localVersion: "5.0.0", remoteVersion: "5.1.0", canUpdate: true)
     await notifier.observe(status: update)
     await notifier.observe(status: update)
-    let preDownload = GameStatus(localVersion: "5.0.0", remoteVersion: "5.0.0", canPreDownload: true)
+    let preDownload = GameStatus(
+      localVersion: "5.0.0", remoteVersion: "5.0.0", canPreDownload: true, preDownloadVersion: "5.1.0")
     await notifier.observe(status: preDownload)
     await notifier.observe(status: preDownload)
     await notifier.observe(status: nil)
     await notifier.observe(status: GameStatus(localVersion: "5.1.0", remoteVersion: "5.1.0"))
-    #expect(delivery.delivered == [.updateAvailable(version: "5.1.0"), .preDownloadAvailable(version: "5.0.0")])
+    #expect(delivery.delivered == [.updateAvailable(version: "5.1.0"), .preDownloadAvailable(version: "5.1.0")])
   }
 
   @Test func announcementsSurviveARelaunchWithoutRepeating() async {

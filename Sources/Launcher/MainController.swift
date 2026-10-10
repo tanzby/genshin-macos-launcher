@@ -12,6 +12,8 @@ public final class MainController {
 
   /// A start the launcher refused (no space, busy, offline…). Job failures live in `launcher.lastError`.
   public private(set) var actionError: LauncherError?
+  /// Set once the first status query has returned, so "offline" is only claimed after a real attempt.
+  public private(set) var hasLoaded = false
 
   public init(launcher: LauncherModel, settings: SettingsModel, onboarding: OnboardingModel) {
     self.launcher = launcher
@@ -23,7 +25,8 @@ public final class MainController {
     var snapshot = MainSnapshot(
       phase: launcher.phase, isPreDownloading: launcher.isPreDownloading, isPausing: launcher.isPausing,
       progress: launcher.progress, pendingJob: launcher.pendingJob, lastError: launcher.lastError,
-      status: launcher.status, isOnline: launcher.isOnline, hostsAllowLaunch: onboarding.allowsLaunch)
+      status: launcher.status, isOnline: launcher.isOnline, hostsAllowLaunch: onboarding.allowsLaunch,
+      hasLoaded: hasLoaded)
     if let actionError { snapshot.lastError = actionError }
     return .derive(snapshot)
   }
@@ -33,6 +36,7 @@ public final class MainController {
     onboarding.refresh()
     if launcher.gameDirectory != settings.gameDirectory { launcher.gameDirectory = settings.gameDirectory }
     await launcher.refresh()
+    hasLoaded = true
   }
 
   /// Installing needs a directory first; the view shows the picker when this is true.

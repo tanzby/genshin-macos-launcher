@@ -83,7 +83,8 @@ extension AppNotification {
     case .jobFinished: "You can start the game now."
     case .jobFailed(_, let error), .launchFailed(let error): error.message
     case .updateAvailable(let version): "Version \(version) is ready to install."
-    case .preDownloadAvailable(let version): "Version \(version) can be downloaded in advance."
+    case .preDownloadAvailable(let version):
+      version.map { "Version \($0) can be downloaded in advance." } ?? "A new version can be downloaded in advance."
     }
   }
 }

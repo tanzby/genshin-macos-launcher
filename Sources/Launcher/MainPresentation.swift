@@ -12,11 +12,13 @@ public struct MainSnapshot: Sendable, Equatable {
   public var isOnline: Bool
   /// The hosts blocklist is in place; without it the game must not start.
   public var hostsAllowLaunch: Bool
+  /// The first status query has finished (successfully or not). Before that "offline" is not yet known.
+  public var hasLoaded: Bool
 
   public init(
     phase: LauncherPhase, isPreDownloading: Bool, isPausing: Bool, progress: JobProgress?,
     pendingJob: PendingJob?, lastError: LauncherError?, status: GameStatus?, isOnline: Bool,
-    hostsAllowLaunch: Bool
+    hostsAllowLaunch: Bool, hasLoaded: Bool = true
   ) {
     self.phase = phase
     self.isPreDownloading = isPreDownloading
@@ -27,6 +29,7 @@ public struct MainSnapshot: Sendable, Equatable {
     self.status = status
     self.isOnline = isOnline
     self.hostsAllowLaunch = hostsAllowLaunch
+    self.hasLoaded = hasLoaded
   }
 }
 
@@ -103,7 +106,7 @@ public struct MainPresentation: Sendable, Equatable {
       }
     let enabled =
       switch base {
-      case .install: true
+      case .install: s.isOnline
       case .update: s.isOnline
       case .launch: s.isOnline && s.hostsAllowLaunch
       }
@@ -113,12 +116,12 @@ public struct MainPresentation: Sendable, Equatable {
       status = .error(error)
     } else if base == .launch && !s.hostsAllowLaunch {
       status = .hostsRequired
-    } else if s.status != nil && !s.isOnline {
+    } else if s.hasLoaded && !s.isOnline {
       status = .offline
     } else if s.isPreDownloading {
       status = .job(.preDownload, s.progress, paused: false)
     } else if s.status?.canPreDownload == true {
-      status = .preDownloadAvailable(version: s.status?.remoteVersion)
+      status = .preDownloadAvailable(version: s.status?.preDownloadVersion)
     } else if base == .update {
       status = .updateAvailable(version: s.status?.remoteVersion)
     } else {

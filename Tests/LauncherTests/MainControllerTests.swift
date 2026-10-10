@@ -24,7 +24,9 @@ private func makeController(
   @Test func APP_017_presentationFollowsTheLauncherAfterRefresh() async {
     let (controller, _, _) = makeController()
     #expect(controller.presentation.button == .install)
+    #expect(!controller.hasLoaded)
     await controller.refresh()
+    #expect(controller.hasLoaded)
     #expect(controller.presentation.button == .launch)
     #expect(controller.presentation.buttonEnabled)
   }

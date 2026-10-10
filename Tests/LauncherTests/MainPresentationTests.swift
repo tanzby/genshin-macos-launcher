@@ -71,10 +71,10 @@ private func snapshot(
 
   @Test func APP_017_preDownloadDoesNotBlockLaunch() {
     let status = GameStatus(
-      localVersion: "5.0.0", remoteVersion: "5.0.0", canPreDownload: true)
+      localVersion: "5.0.0", remoteVersion: "5.0.0", canPreDownload: true, preDownloadVersion: "5.1.0")
     let offer = MainPresentation.derive(snapshot(status: status))
     #expect(offer.button == .launch)
-    #expect(offer.status == .preDownloadAvailable(version: "5.0.0"))
+    #expect(offer.status == .preDownloadAvailable(version: "5.1.0"))
 
     let running = JobProgress.running(done: 1, total: 2)
     let active = MainPresentation.derive(
@@ -134,6 +134,18 @@ private func snapshot(
     let update = MainPresentation.derive(
       snapshot(status: GameStatus(localVersion: "5.0.0", remoteVersion: "5.1.0", canUpdate: true), online: false))
     #expect(!update.buttonEnabled)
+  }
+
+  @Test func APP_010_installIsDisabledWhileOfflineAndNothingIsKnown() {
+    let loaded = MainPresentation.derive(snapshot(status: nil, online: false))
+    #expect(loaded.button == .install)
+    #expect(!loaded.buttonEnabled)
+    #expect(loaded.status == .offline)
+    var loading = snapshot(status: nil, online: false)
+    loading.hasLoaded = false
+    let first = MainPresentation.derive(loading)
+    #expect(!first.buttonEnabled)
+    #expect(first.status == .none, "no Offline claim before the first query returned")
   }
 
   @Test func APP_017_launchNeedsTheHostsBlocklist() {

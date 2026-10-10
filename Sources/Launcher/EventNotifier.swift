@@ -6,7 +6,7 @@ public enum AppNotification: Sendable, Equatable {
   case jobFailed(GameJob, LauncherError)
   case launchFailed(LauncherError)
   case updateAvailable(version: String)
-  case preDownloadAvailable(version: String)
+  case preDownloadAvailable(version: String?)
 }
 
 /// The system notification centre behind a seam. `authorize` must never throw: a refusal (or any failure,
@@ -50,7 +50,10 @@ public final class EventNotifier {
       await announce(.updateAvailable(version: version), key: Self.announcedUpdateKey, version: version)
     }
     if status.canPreDownload {
-      await announce(.preDownloadAvailable(version: version), key: Self.announcedPreDownloadKey, version: version)
+      let target = status.preDownloadVersion ?? version
+      await announce(
+        .preDownloadAvailable(version: status.preDownloadVersion), key: Self.announcedPreDownloadKey,
+        version: target)
     }
   }
 
