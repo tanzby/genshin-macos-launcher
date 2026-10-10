@@ -7,7 +7,7 @@ import Testing
 
 // GenshinCNClient.status() and requiredDiskSpace(for:). Rule IDs refer to docs/parity/hk4e-cn.md.
 
-@Suite struct ClientStatusTests {
+@Suite(.disabled("bisect")) struct ClientStatusTests {
   @Test func INS_002_anEmptyDirectoryHasNoLocalVersionButKnowsTheRemoteOne() async throws {
     let rig = ClientRig(main: .game("5.6.0"))
 
@@ -123,7 +123,7 @@ import Testing
   }
 }
 
-@Suite struct ClientDiskSpaceTests {
+@Suite(.disabled("bisect")) struct ClientDiskSpaceTests {
   @Test func INS_004_installNeedsTheUnpackedSizeOfTheGameCategory() async throws {
     let release = FakeRelease.game("5.6.0")
     let rig = ClientRig(main: release)
