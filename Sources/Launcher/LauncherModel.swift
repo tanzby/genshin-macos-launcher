@@ -47,9 +47,9 @@ public enum JobEvent: Sendable, Equatable {
 
 /// Single source of truth for the main window, and the job coordinator (ADR 0002).
 ///
-/// Exclusive work (Wine preparation, install, update, repair, launch) runs one at a time. Pre-download only writes the temporary
-/// directory, so it may overlap with launching and running, but starting install, update or repair first
-/// cancels it and waits for it to stop. Pause is cancel-and-await; resuming reruns the same idempotent job.
+/// Exclusive work (Wine preparation, install, update, repair, launch) runs one at a time. Pre-download only
+/// writes the temporary directory, so it may overlap with launching and running, but starting Wine preparation,
+/// install, update or repair first cancels it and waits for it to stop. Pause is cancel-and-await; resuming reruns the same idempotent job.
 ///
 /// Wine preparation is not a Pending Job: it writes no `job.json`. Its state is whatever the Wine runtime's
 /// version stamp says, so `wineStatus` is re-read from `WinePreparing.status()` and a paused or failed
@@ -78,9 +78,16 @@ public final class LauncherModel {
     isWineMissing ? .prepareWine : PrimaryAction.derive(status)
   }
 
+  /// Wine is known to need preparation.
   private var isWineMissing: Bool {
     if case .needsInstall = wineStatus { return true }
     return false
+  }
+
+  /// Gate for game jobs and launch: with a Wine seam, an unread status counts as not ready, so nothing
+  /// slips in while the first `refreshWine()` is still suspended.
+  private var isWineNotReady: Bool {
+    wine != nil && wineStatus != .ready
   }
 
   @ObservationIgnored public let events: AsyncStream<JobEvent>
@@ -183,7 +190,7 @@ public final class LauncherModel {
 
   private func startExclusive(_ job: GameJob) async throws {
     guard exclusive == .idle else { throw LauncherError.busy }
-    guard !isWineMissing else { throw LauncherError.wineNotReady }
+    guard !isWineNotReady else { throw LauncherError.wineNotReady }
     if job != .install {
       guard status?.localVersion != nil else { throw LauncherError.notInstalled }
     }
@@ -217,7 +224,7 @@ public final class LauncherModel {
     guard exclusive == .idle || exclusive == .launching || exclusive == .running,
       !isPreDownloading
     else { throw LauncherError.busy }
-    guard !isWineMissing else { throw LauncherError.wineNotReady }
+    guard !isWineNotReady else { throw LauncherError.wineNotReady }
     guard status?.localVersion != nil else { throw LauncherError.notInstalled }
     guard status?.canPreDownload == true else { throw LauncherError.preDownloadUnavailable }
     guard let store else { throw LauncherError.noGameDirectory }
@@ -367,7 +374,10 @@ public final class LauncherModel {
     exclusive = .preparingWine  // claim before any await so nothing else can slip in
     lastError = nil
     progress = .preparing
-    exclusiveTask = Task { await self.runWinePreparation(wine) }
+    exclusiveTask = Task {
+      await stopPreDownload()  // shares the launcher's cancel-and-await rule with install/update/repair
+      await self.runWinePreparation(wine)
+    }
   }
 
   private func runWinePreparation(_ wine: any WinePreparing) async {
@@ -419,7 +429,7 @@ public final class LauncherModel {
 
   public func launch() async throws {
     guard exclusive == .idle, !isPausing, !isShuttingDown else { throw LauncherError.busy }
-    guard !isWineMissing else { throw LauncherError.wineNotReady }
+    guard !isWineNotReady else { throw LauncherError.wineNotReady }
     guard let status, status.localVersion != nil else { throw LauncherError.notInstalled }
     guard let gameDirectory else { throw LauncherError.noGameDirectory }
     if let kind = store?.load()?.kind, kind != .preDownload { throw LauncherError.pendingJob(kind) }

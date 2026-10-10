@@ -193,6 +193,18 @@ private final class Harness {
     #expect(h.model.phase == .idle)
   }
 
+  @Test func WIN_005_unreadWineStatusBlocksGameJobsToo() async throws {
+    // `bootstrap()` suspends inside `wine.status()`; nothing may slip in during that window.
+    let h = Harness(wine: .ready)
+    #expect(h.model.wineStatus == nil)
+    for job in [GameJob.install, .update, .repair, .preDownload] {
+      await #expect(throws: LauncherError.wineNotReady, "\(job)") { try await h.model.start(job) }
+    }
+    await #expect(throws: LauncherError.wineNotReady) { try await h.model.launch() }
+    #expect(h.fake.runs.isEmpty)
+    #expect(h.model.phase == .idle)
+  }
+
   @Test func WIN_005_gameJobsWorkOnceWineIsReady() async throws {
     let h = Harness(wine: missing, game: notInstalled)
     let (task, install) = try await h.bootstrapUntilPreparing()
@@ -229,6 +241,24 @@ private final class Harness {
     await #expect(throws: LauncherError.busy) { try await h.model.prepareWine() }
     #expect(h.wine.installCount == 0)
     await h.model.shutdown()
+  }
+
+  @Test func APP_015_preparingWineStopsARunningPreDownloadFirst() async throws {
+    let h = Harness(wine: .ready, game: GameStatus(localVersion: "5.0.0", remoteVersion: "5.0.0", canPreDownload: true))
+    await h.model.bootstrap()
+    try await h.model.start(.preDownload)
+    let run = try await h.fake.nextRun()
+    #expect(h.model.isPreDownloading)
+
+    h.wine.setStatus(missing)
+    await h.model.refreshWine()
+    try await h.model.prepareWine()
+    let install = try await h.wine.nextInstall()
+    #expect(h.fake.isTerminated(run: run), "the pre-download must have stopped before Wine preparation began")
+    #expect(!h.model.isPreDownloading)
+    #expect(h.model.phase == .preparingWine)
+    h.wine.finish(install: install)
+    await h.model.waitUntilIdle()
   }
 
   @Test func WIN_005_prepareWineIsANoOpWhenWineIsAlreadyReady() async throws {
