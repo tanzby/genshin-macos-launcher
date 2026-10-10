@@ -142,13 +142,16 @@ extension JobProgress {
     return min(1, Double(counts.done) / Double(counts.total))
   }
 
-  /// Bytes done and total, for the steps that move bytes (game download, Wine/DXMT download).
+  /// Bytes done and total, for the steps that move bytes (game download, Wine/DXMT download). nil when the
+  /// total is unknown (a download without a length announces -1).
   public var counts: (done: Int64, total: Int64)? {
+    let pair: (done: Int64, total: Int64)?
     switch self {
-    case .running(let done, let total): (done, total)
-    case .wine(.downloadingWine(let p)), .wine(.downloadingDXMT(let p)): (p.completed, p.total)
-    default: nil
+    case .running(let done, let total): pair = (done, total)
+    case .wine(.downloadingWine(let p)), .wine(.downloadingDXMT(let p)): pair = (p.completed, p.total)
+    default: pair = nil
     }
+    return pair.flatMap { $0.total > 0 ? $0 : nil }
   }
 }
 

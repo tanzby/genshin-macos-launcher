@@ -188,7 +188,9 @@ private func snapshot(
     #expect(download.counts?.done == 50 && download.counts?.total == 200)
     #expect(download.fraction == 0.25)
     #expect(JobProgress.wine(.extracting).fraction == nil)
-    #expect(JobProgress.wine(.downloadingDXMT(DownloadProgress(completed: 5, total: -1))).fraction == nil)
+    let unknown = JobProgress.wine(.downloadingDXMT(DownloadProgress(completed: 5, total: -1)))
+    #expect(unknown.fraction == nil)
+    #expect(unknown.counts == nil, "an unknown total is not shown as '5 B / 0 B'")
   }
 
   @Test func APP_017_menuActionsFollowTheState() {
