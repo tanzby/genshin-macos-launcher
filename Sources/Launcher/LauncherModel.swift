@@ -64,7 +64,11 @@ public final class LauncherModel {
   public private(set) var progress: JobProgress?
   public private(set) var pendingJob: PendingJob?
   public private(set) var lastError: LauncherError?
-  public var gameDirectory: URL?
+  public var gameDirectory: URL? {
+    didSet { if gameDirectory != oldValue { client.setGameDirectory(gameDirectory) } }
+  }
+  /// Snapshots the settings for a launch. The composition root replaces it with one that reads `SettingsModel`.
+  public var makeLaunchOptions: @MainActor (URL) -> LaunchOptions = { LaunchOptions(gameDirectory: $0) }
 
   /// The exclusive slot; pre-download has its own flag.
   private var exclusive: LauncherPhase = .idle
@@ -123,6 +127,7 @@ public final class LauncherModel {
     self.client = client
     self.wine = wine
     self.gameDirectory = gameDirectory
+    client.setGameDirectory(gameDirectory)
     self.launchTimeout = launchTimeout
     self.chunkTempMargin = chunkTempMargin
     self.availableDiskSpace = availableDiskSpace
@@ -456,7 +461,7 @@ public final class LauncherModel {
     let gate = LaunchGate()
     launchGate = gate
     let client = client
-    let options = LaunchOptions(gameDirectory: gameDirectory)
+    let options = makeLaunchOptions(gameDirectory)
     let onStarted: @Sendable () -> Void = { [weak self] in
       // Only the callback that beats the timeout may switch the phase to running.
       guard gate.markStarted() else { return }
