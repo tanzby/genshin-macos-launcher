@@ -16,14 +16,15 @@ public final class ProgressMeter {
 
   /// Call whenever the progress changes; `nil` (no job) clears the readings.
   public func update(_ progress: JobProgress?) {
-    guard case .running(let done, let total)? = progress else {
+    guard let (done, total) = progress?.counts else {
       estimator = TransferEstimator()
       bytesPerSecond = nil
       remaining = nil
       return
     }
     estimator.record(done: done, at: clock())
-    bytesPerSecond = estimator.bytesPerSecond
-    remaining = estimator.remaining(done: done, total: total)
+    // Rounded so the observed values only change when the shown text would (speed to KiB/s, time to seconds).
+    bytesPerSecond = estimator.bytesPerSecond.map { ($0 / 1024).rounded() * 1024 }
+    remaining = estimator.remaining(done: done, total: total).map { $0.rounded() }
   }
 }

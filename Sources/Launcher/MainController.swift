@@ -26,17 +26,16 @@ public final class MainController {
       phase: launcher.phase, isPreDownloading: launcher.isPreDownloading, isPausing: launcher.isPausing,
       progress: launcher.progress, pendingJob: launcher.pendingJob, lastError: launcher.lastError,
       status: launcher.status, isOnline: launcher.isOnline, hostsAllowLaunch: onboarding.allowsLaunch,
-      hasLoaded: hasLoaded)
+      hasLoaded: hasLoaded, wineNotReady: launcher.primaryAction == .prepareWine)
     if let actionError { snapshot.lastError = actionError }
     return .derive(snapshot)
   }
 
-  /// Re-reads everything the window shows. Safe to call whenever the window becomes active.
+  /// Re-reads everything the window shows. The first call runs the launcher's startup sequence (Wine, then the
+  /// game status); later ones only re-read, so coming back to the window never restarts a Wine download.
   public func refresh() async {
     onboarding.refresh()
-    if launcher.gameDirectory != settings.gameDirectory { launcher.gameDirectory = settings.gameDirectory }
-    await launcher.refresh()
-    hasLoaded = true
+    await reload()
   }
 
   /// For window activation: re-reads everything unless a job or the game is active, so coming back after the
@@ -44,7 +43,18 @@ public final class MainController {
   public func refreshWhenIdle() async {
     onboarding.refresh()
     guard launcher.phase == .idle else { return }
-    await refresh()
+    await reload()
+  }
+
+  private func reload() async {
+    if launcher.gameDirectory != settings.gameDirectory { launcher.gameDirectory = settings.gameDirectory }
+    if hasLoaded {
+      await launcher.refreshWine()
+      await launcher.refresh()
+    } else {
+      await launcher.bootstrap()
+    }
+    hasLoaded = true
   }
 
   /// Installing needs a directory first; the view shows the picker when this is true.
@@ -52,12 +62,10 @@ public final class MainController {
     button == .install && (settings.gameDirectory == nil || !onboarding.gameDirectoryUsable)
   }
 
-  public func dismissActionError() { actionError = nil }
-
   public func perform(_ button: PrimaryButton) async {
-    actionError = nil
     await run {
       switch button {
+      case .prepareWine: try await self.launcher.prepareWine()
       case .install: try await self.launcher.start(.install)
       case .update: try await self.launcher.start(.update)
       case .launch:
@@ -65,26 +73,27 @@ public final class MainController {
         try await self.launcher.launch()
       case .pause: await self.launcher.pause()
       case .resume, .retry: try await self.launcher.resume()
-      case .pausing, .repairing, .launching, .running: break
+      case .pausing, .preparingWine, .repairing, .launching, .running: break
       }
     }
   }
 
   public func preDownload() async {
-    actionError = nil
     await run { try await self.launcher.start(.preDownload) }
   }
 
   public func repair() async {
-    actionError = nil
     await run { try await self.launcher.start(.repair) }
   }
 
   private func run(_ work: () async throws -> Void) async {
+    actionError = nil
     do {
       try await work()
     } catch let error as LauncherError {
       actionError = error
+    } catch let error as GameClientError {
+      actionError = .client(error)
     } catch {
       actionError = .unexpected(String(describing: error))
     }

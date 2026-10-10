@@ -1,10 +1,13 @@
 import Foundation
 import Launcher
 import SwiftUI
+import Wine
 
 extension PrimaryButton {
   var title: LocalizedStringResource {
     switch self {
+    case .prepareWine: "Set Up Wine"
+    case .preparingWine: "Preparing…"
     case .install: "Install Game"
     case .update: "Update Game"
     case .launch: "Start Game"
@@ -37,6 +40,8 @@ extension LauncherError {
   var message: LocalizedStringResource {
     switch self {
     case .busy: "Another task is still running."
+    case .wineNotReady: "Wine has to be set up first."
+    case .wineInstall: "Wine could not be set up."
     case .noGameDirectory: "Choose a game folder first."
     case .notInstalled: "The game is not installed."
     case .offline: "You are offline."
@@ -73,6 +78,7 @@ extension AppNotification {
     case .jobFinished(.repair): "Verification finished"
     case .jobFailed: "Task failed"
     case .launchFailed: "The game could not run"
+    case .wineFailed: "Wine setup failed"
     case .updateAvailable: "Game update available"
     case .preDownloadAvailable: "Pre-download available"
     }
@@ -81,7 +87,7 @@ extension AppNotification {
   var body: LocalizedStringResource {
     switch self {
     case .jobFinished: "You can start the game now."
-    case .jobFailed(_, let error), .launchFailed(let error): error.message
+    case .jobFailed(_, let error), .launchFailed(let error), .wineFailed(let error): error.message
     case .updateAvailable(let version): "Version \(version) is ready to install."
     case .preDownloadAvailable(let version):
       version.map { "Version \($0) can be downloaded in advance." } ?? "A new version can be downloaded in advance."
@@ -89,9 +95,21 @@ extension AppNotification {
   }
 }
 
-enum Format {
-  static func bytes(_ value: Int64) -> String { ByteFormat.iec(value) }
+extension WineInstallProgress {
+  /// The label of a step that moves no bytes; downloads show amounts instead.
+  var label: LocalizedStringResource? {
+    switch self {
+    case .downloadingWine: "Downloading Wine"
+    case .downloadingDXMT: "Downloading DXMT"
+    case .extracting: "Extracting"
+    case .configuring, .initializingPrefix: "Setting up the Wine environment"
+    case .installingDXMT: "Installing DXMT"
+    case .finalizing: "Finishing up"
+    }
+  }
+}
 
+enum Format {
   static func duration(_ seconds: TimeInterval) -> String {
     Duration.seconds(seconds.rounded())
       .formatted(.units(allowed: [.hours, .minutes, .seconds], width: .abbreviated, maximumUnitCount: 2))

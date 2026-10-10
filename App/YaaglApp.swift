@@ -23,6 +23,8 @@ struct YaaglApp: App {
     userDriverDelegate: nil
   )
 
+  private let updater: UpdaterModel
+
   private static var startsUpdater: Bool {
     #if DEBUG
       return false
@@ -33,6 +35,7 @@ struct YaaglApp: App {
   }
 
   init() {
+    updater = UpdaterModel(updater: updaterController.updater)
     let client = GenshinCNClient()
     let settings = SettingsModel()
     let onboarding = OnboardingModel(hosts: GenshinCN.hostsBlocklist(), settings: settings)
@@ -59,14 +62,12 @@ struct YaaglApp: App {
         }
       }
       CommandGroup(after: .appInfo) {
-        Button("Check for Updates…") {
-          updaterController.checkForUpdates(nil)
-        }
+        CheckForUpdatesCommand(updater: updater)
       }
     }
 
     Settings {
-      SettingsView(dataDirectory: dataDirectory)
+      SettingsView(dataDirectory: dataDirectory, updater: updater)
         .environment(controller)
     }
   }

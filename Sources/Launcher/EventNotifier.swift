@@ -5,6 +5,7 @@ public enum AppNotification: Sendable, Equatable {
   case jobFinished(GameJob)
   case jobFailed(GameJob, LauncherError)
   case launchFailed(LauncherError)
+  case wineFailed(LauncherError)
   case updateAvailable(version: String)
   case preDownloadAvailable(version: String?)
 }
@@ -40,6 +41,8 @@ public final class EventNotifier {
     case .finished(let job): await post(.jobFinished(job))
     case .failed(let job, let error): await post(.jobFailed(job, error))
     case .launchFailed(let error): await post(.launchFailed(error))
+    case .wineFailed(let error): await post(.wineFailed(error))
+    case .wineReady: return  // the capsule already shows the button turning into "Start Game"
     }
   }
 

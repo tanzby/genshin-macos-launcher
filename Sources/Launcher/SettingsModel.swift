@@ -14,17 +14,24 @@ public enum GameDirectoryKind: Sendable, Equatable {
 }
 
 public enum GameDirectoryValidator {
+  /// nil = nothing there, false = a file, true = a directory.
+  static func exists(_ url: URL) -> Bool? {
+    var isDirectory: ObjCBool = false
+    guard FileManager.default.fileExists(atPath: url.path, isDirectory: &isDirectory) else { return nil }
+    return isDirectory.boolValue
+  }
+
   /// Names that do not count as content: this app's temp directory and Finder litter.
-  static let ignored: Set<String> = [".yaagl-tmp", ".DS_Store"]
+  static let ignored: Set<String> = [PendingJobStore.directoryName, ".DS_Store"]
 
   public static func validate(
     _ url: URL, gameExecutable: String, isSupportedPath: (URL) -> Bool
   ) throws -> GameDirectoryKind {
-    var isDirectory: ObjCBool = false
-    guard FileManager.default.fileExists(atPath: url.path, isDirectory: &isDirectory) else {
-      throw GameDirectoryProblem.missing
+    switch exists(url) {
+    case nil: throw GameDirectoryProblem.missing
+    case false?: throw GameDirectoryProblem.notADirectory
+    case true?: break
     }
-    guard isDirectory.boolValue else { throw GameDirectoryProblem.notADirectory }
     guard isSupportedPath(url) else { throw GameDirectoryProblem.unsupportedPath }
     // An unreadable folder (ACL, permissions) is not an empty one: refuse it rather than fail at install time.
     guard let names = try? FileManager.default.contentsOfDirectory(atPath: url.path) else {

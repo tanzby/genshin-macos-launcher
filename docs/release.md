@@ -6,7 +6,18 @@ Push a semver tag from `main` (`1.0.0-rc.1`, ..., `1.0.0`). `.github/workflows/r
 - Without the `SPARKLE_ED_PRIVATE_KEY` secret, or while `SUPublicEDKey` in `project.yml` is empty, a tag run is a dry run: it builds and uploads the files as a workflow artifact and publishes nothing. The Actions tab's "Run workflow" is always a dry run.
 - Before publishing, `scripts/release/verify-ed-signature.swift` checks the appcast signature against the `SUPublicEDKey` built into the app, so a secret holding the wrong private key fails the run instead of shipping an update every client rejects.
 - Debug builds never start the updater.
-- Before `1.0.0`, check that a real `rc.N` to `rc.N+1` update works through the live feed.
+- The app ships `SUEnableAutomaticChecks=true` and `SUScheduledCheckInterval=86400` (checked by `scripts/dev/check-bundle`), so it checks daily without Sparkle's permission prompt. The Settings toggle writes the user default, which wins over the plist. The "Check for Updates…" menu item is disabled while `SPUUpdater.canCheckForUpdates` is false.
+- Before `1.0.0`, check that a real `rc.N` to `rc.N+1` update works through the live feed (checklist below, maintainer only).
+
+## rc to rc update check (before 1.0.0)
+
+Needs two published rc tags and a real Mac, so it is a human step. Do it once the other 1.0.0 gates are green.
+
+1. Push `1.0.0-rc.1`; wait for the release workflow to publish. Download `Yaagl-1.0.0-rc.1.zip`, move the app to `/Applications` and launch it. Settings shows "Automatically check for updates" on.
+2. Push `1.0.0-rc.2`; wait for the publish. Confirm `releases/latest/download/appcast.xml` lists `1.0.0-rc.2` and carries a `sparkle:edSignature`.
+3. In rc.1 choose Yaagl > Check for Updates…. Sparkle must offer rc.2, install it and relaunch; About shows rc.2.
+4. Turn the Settings toggle off, quit, relaunch: it stays off and no background check happens.
+5. If any step fails, fix and cut `rc.3` before tagging `1.0.0`.
 
 ## EdDSA key (maintainer only, agents never touch it)
 

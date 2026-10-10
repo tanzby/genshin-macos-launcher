@@ -137,6 +137,23 @@
         }
       }
     },
+    "Automatically check for updates": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Automatically check for updates"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "自动检查更新"
+          }
+        }
+      }
+    },
     "Block Telemetry…": {
       "extractionState": "manual",
       "localizations": {
@@ -218,6 +235,23 @@
           "stringUnit": {
             "state": "translated",
             "value": "检查文件完整性"
+          }
+        }
+      }
+    },
+    "Check Now": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Check Now"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "立即检查"
           }
         }
       }
@@ -375,6 +409,40 @@
         }
       }
     },
+    "Downloading DXMT": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Downloading DXMT"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "正在下载 DXMT"
+          }
+        }
+      }
+    },
+    "Downloading Wine": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Downloading Wine"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "正在下载 Wine"
+          }
+        }
+      }
+    },
     "Enter the address as host:port, for example 127.0.0.1:7890.": {
       "extractionState": "manual",
       "localizations": {
@@ -392,6 +460,23 @@
         }
       }
     },
+    "Extracting": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Extracting"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "正在解压"
+          }
+        }
+      }
+    },
     "File verification failed.": {
       "extractionState": "manual",
       "localizations": {
@@ -405,6 +490,23 @@
           "stringUnit": {
             "state": "translated",
             "value": "文件校验失败。"
+          }
+        }
+      }
+    },
+    "Finishing up": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Finishing up"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "即将完成"
           }
         }
       }
@@ -609,6 +711,23 @@
           "stringUnit": {
             "state": "translated",
             "value": "正在安装"
+          }
+        }
+      }
+    },
+    "Installing DXMT": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Installing DXMT"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "正在安装 DXMT"
           }
         }
       }
@@ -987,6 +1106,40 @@
         }
       }
     },
+    "Preparing Wine": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Preparing Wine"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "正在准备 Wine"
+          }
+        }
+      }
+    },
+    "Preparing…": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Preparing…"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "准备中…"
+          }
+        }
+      }
+    },
     "Proxy address": {
       "extractionState": "manual",
       "localizations": {
@@ -1136,6 +1289,40 @@
           "stringUnit": {
             "state": "translated",
             "value": "运行时"
+          }
+        }
+      }
+    },
+    "Set Up Wine": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Set Up Wine"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "设置 Wine"
+          }
+        }
+      }
+    },
+    "Setting up the Wine environment": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Setting up the Wine environment"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "正在设置 Wine 环境"
           }
         }
       }
@@ -1718,6 +1905,23 @@
         }
       }
     },
+    "Updates": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Updates"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "更新"
+          }
+        }
+      }
+    },
     "Updating": {
       "extractionState": "manual",
       "localizations": {
@@ -1956,6 +2160,23 @@
         }
       }
     },
+    "Wine could not be set up.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Wine could not be set up."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "无法完成 Wine 的设置。"
+          }
+        }
+      }
+    },
     "Wine has to be reinstalled.": {
       "extractionState": "manual",
       "localizations": {
@@ -1969,6 +2190,57 @@
           "stringUnit": {
             "state": "translated",
             "value": "需要重新安装 Wine。"
+          }
+        }
+      }
+    },
+    "Wine has to be set up first": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Wine has to be set up first"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "需要先设置 Wine"
+          }
+        }
+      }
+    },
+    "Wine has to be set up first.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Wine has to be set up first."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "需要先设置 Wine。"
+          }
+        }
+      }
+    },
+    "Wine setup failed": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Wine setup failed"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Wine 设置失败"
           }
         }
       }

@@ -1,6 +1,8 @@
 import Foundation
 import Synchronization
+import Platform
 import Testing
+import Wine
 
 @testable import Launcher
 
@@ -162,12 +164,31 @@ private func snapshot(
     #expect(p.status == .error(.launchTimeout))
   }
 
-  @Test func APP_018_settingsAreReachableInEveryState() {
-    // Rewrite of the TS rule: the "…" menu and ⌘, never depend on the job state (#21).
-    for phase in [LauncherPhase.idle, .installing, .updating, .preDownloading, .repairing, .launching, .running] {
-      #expect(MainPresentation.derive(snapshot(phase: phase)).settingsAvailable)
-    }
-    #expect(MainPresentation.derive(snapshot(status: nil)).settingsAvailable)
+  @Test func APP_017_wineIsPreparedBeforeAnythingElse() {
+    var s = snapshot(status: nil)
+    s.wineNotReady = true
+    let needed = MainPresentation.derive(s)
+    #expect(needed.button == .prepareWine)
+    #expect(needed.buttonEnabled)
+    #expect(needed.status == .wineRequired)
+    #expect(!needed.canRepair)
+
+    let progress = JobProgress.wine(.extracting)
+    let running = MainPresentation.derive(snapshot(phase: .preparingWine, progress: progress))
+    #expect(running.button == .preparingWine)
+    #expect(!running.buttonEnabled)
+    #expect(running.status == .wine(progress))
+
+    s.lastError = .wineInstall(.dxmtArchiveInvalid)
+    #expect(MainPresentation.derive(s).status == .error(.wineInstall(.dxmtArchiveInvalid)))
+  }
+
+  @Test func PRG_005_wineDownloadsReportBytesLikeGameDownloads() {
+    let download = JobProgress.wine(.downloadingWine(DownloadProgress(completed: 50, total: 200)))
+    #expect(download.counts?.done == 50 && download.counts?.total == 200)
+    #expect(download.fraction == 0.25)
+    #expect(JobProgress.wine(.extracting).fraction == nil)
+    #expect(JobProgress.wine(.downloadingDXMT(DownloadProgress(completed: 5, total: -1))).fraction == nil)
   }
 
   @Test func APP_017_menuActionsFollowTheState() {
@@ -248,11 +269,11 @@ private func snapshot(
   @Test func PRG_002_meterReportsSpeedAndRemainingTime() {
     let now = Mutex(0.0)
     let meter = ProgressMeter(clock: { now.withLock { $0 } })
-    meter.update(.running(done: 0, total: 10_000))
+    meter.update(.running(done: 0, total: 10_240))
     now.withLock { $0 = 2 }
-    meter.update(.running(done: 2_000, total: 10_000))
-    #expect(meter.bytesPerSecond == 1_000)
-    #expect(meter.remaining == 8)
+    meter.update(.running(done: 4_096, total: 10_240))
+    #expect(meter.bytesPerSecond == 2_048)  // rounded to whole KiB/s
+    #expect(meter.remaining == 3)
     meter.update(nil)
     #expect(meter.bytesPerSecond == nil && meter.remaining == nil)
   }

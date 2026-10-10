@@ -46,6 +46,14 @@ private func notifier(_ delivery: FakeDelivery) -> EventNotifier {
       ])
   }
 
+  @Test func PRG_003_wineFailureNotifiesButWineReadyDoesNot() async {
+    let delivery = FakeDelivery(granted: true)
+    let notifier = notifier(delivery)
+    await notifier.handle(.wineReady)
+    await notifier.handle(.wineFailed(.client(.network)))
+    #expect(delivery.delivered == [.wineFailed(.client(.network))])
+  }
+
   @Test func PRG_003_aFinishedRepairIsNotWorthANotification() async {
     let delivery = FakeDelivery(granted: true)
     await notifier(delivery).handle(.finished(.repair))

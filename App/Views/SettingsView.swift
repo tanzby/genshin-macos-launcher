@@ -5,9 +5,8 @@ import Wine
 
 /// The Settings window: a sidebar of four pages, like System Settings (#21).
 struct SettingsView: View {
-  enum Page: String, CaseIterable, Identifiable {
+  enum Page: CaseIterable {
     case general, game, wine, advanced
-    var id: Self { self }
 
     var title: LocalizedStringKey {
       switch self {
@@ -29,17 +28,18 @@ struct SettingsView: View {
   }
 
   let dataDirectory: URL
+  let updater: UpdaterModel
   @State private var page: Page? = .general
 
   var body: some View {
     NavigationSplitView {
-      List(Page.allCases, selection: $page) { page in
+      List(Page.allCases, id: \.self, selection: $page) { page in
         Label(page.title, systemImage: page.symbol)
       }
       .navigationSplitViewColumnWidth(min: 150, ideal: 170, max: 200)
     } detail: {
       switch page ?? .general {
-      case .general: GeneralPage()
+      case .general: GeneralPage(updater: updater)
       case .game: GamePage()
       case .wine: WinePage(dataDirectory: dataDirectory)
       case .advanced: AdvancedPage(dataDirectory: dataDirectory)
@@ -51,6 +51,7 @@ struct SettingsView: View {
 
 private struct GeneralPage: View {
   @Environment(MainController.self) private var controller
+  let updater: UpdaterModel
   @State private var proxyDraft = ""
   @State private var proxyInvalid = false
 
@@ -94,6 +95,7 @@ private struct GeneralPage: View {
       } footer: {
         Text("The proxy only applies to the game, not to downloads made by Yaagl.")
       }
+      UpdateSettingsSection(updater: updater)
       Section("Launcher") {
         LabeledContent("Version", value: Bundle.main.versionString)
       }
@@ -212,7 +214,7 @@ private func reveal(_ directory: URL) {
   NSWorkspace.shared.open(directory)
 }
 
-extension Bundle {
+private extension Bundle {
   var versionString: String {
     let version = object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "0"
     let build = object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "0"

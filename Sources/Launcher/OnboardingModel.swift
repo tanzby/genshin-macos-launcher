@@ -51,8 +51,7 @@ public final class OnboardingModel {
       gameDirectoryUsable = true
       return
     }
-    var isDirectory: ObjCBool = false
-    gameDirectoryUsable = FileManager.default.fileExists(atPath: url.path, isDirectory: &isDirectory) && isDirectory.boolValue
+    gameDirectoryUsable = GameDirectoryValidator.exists(url) == true
   }
 
   /// Returns the read error's description, nil on success.

@@ -14,11 +14,13 @@ public struct MainSnapshot: Sendable, Equatable {
   public var hostsAllowLaunch: Bool
   /// The first status query has finished (successfully or not). Before that "offline" is not yet known.
   public var hasLoaded: Bool
+  /// Wine is known to need (re)installing; nothing else can run until it is prepared.
+  public var wineNotReady: Bool
 
   public init(
     phase: LauncherPhase, isPreDownloading: Bool, isPausing: Bool, progress: JobProgress?,
     pendingJob: PendingJob?, lastError: LauncherError?, status: GameStatus?, isOnline: Bool,
-    hostsAllowLaunch: Bool, hasLoaded: Bool = true
+    hostsAllowLaunch: Bool, hasLoaded: Bool = true, wineNotReady: Bool = false
   ) {
     self.phase = phase
     self.isPreDownloading = isPreDownloading
@@ -30,11 +32,13 @@ public struct MainSnapshot: Sendable, Equatable {
     self.isOnline = isOnline
     self.hostsAllowLaunch = hostsAllowLaunch
     self.hasLoaded = hasLoaded
+    self.wineNotReady = wineNotReady
   }
 }
 
 /// The one accent-coloured button in the capsule (#21: the colour never changes with the state).
 public enum PrimaryButton: Sendable, Equatable {
+  case prepareWine, preparingWine
   case install, update, launch
   case pause, pausing, resume, retry
   case repairing, launching, running
@@ -44,6 +48,8 @@ public enum PrimaryButton: Sendable, Equatable {
 public enum StatusLine: Sendable, Equatable {
   case none
   case job(GameJob, JobProgress?, paused: Bool)
+  case wine(JobProgress?)
+  case wineRequired
   case updateAvailable(version: String?)
   case preDownloadAvailable(version: String?)
   case error(LauncherError)
@@ -58,8 +64,6 @@ public struct MainPresentation: Sendable, Equatable {
   public var button: PrimaryButton
   public var buttonEnabled: Bool
   public var status: StatusLine
-  /// Settings are always reachable (the TS launcher hid them while busy; #21 moved them to ⌘, and the menu).
-  public var settingsAvailable: Bool { true }
   /// "Check file integrity" is offered only for an installed, current game while nothing exclusive runs.
   public var canRepair: Bool
   /// The "Pre-download" button is offered (also next to an error, so a failed pre-download can be retried).
@@ -70,8 +74,8 @@ public struct MainPresentation: Sendable, Equatable {
     let idleLike = s.phase == .idle || s.phase == .preDownloading
     // Pre-download may overlap with launching and running (APP-015), but not with install/update/repair.
     let preDownloadPhase = idleLike || s.phase == .launching || s.phase == .running
-    let repairable = installed && idleLike && s.pendingJob.map { $0.kind == .preDownload } ?? true
-      && s.status?.canUpdate != true
+    let noBlockingJob = s.pendingJob.map { $0.kind == .preDownload } ?? true
+    let repairable = installed && idleLike && noBlockingJob && !s.wineNotReady && s.status?.canUpdate != true
 
     func make(_ button: PrimaryButton, _ enabled: Bool, _ status: StatusLine) -> MainPresentation {
       MainPresentation(
@@ -81,6 +85,7 @@ public struct MainPresentation: Sendable, Equatable {
     }
 
     switch s.phase {
+    case .preparingWine: return make(.preparingWine, false, .wine(s.progress))
     case .running: return make(.running, false, .running)
     case .launching: return make(.launching, false, .launching)
     case .installing, .updating:
@@ -90,6 +95,10 @@ public struct MainPresentation: Sendable, Equatable {
       return make(.repairing, false, .job(.repair, s.progress, paused: false))
     case .idle, .preDownloading:
       break
+    }
+
+    if s.wineNotReady {
+      return make(.prepareWine, true, s.lastError.map { .error($0) } ?? .wineRequired)
     }
 
     if let pending = s.pendingJob, pending.kind != .preDownload {
@@ -102,14 +111,9 @@ public struct MainPresentation: Sendable, Equatable {
       switch base {
       case .install: .install
       case .update: .update
-      case .launch: .launch
+      default: .launch
       }
-    let enabled =
-      switch base {
-      case .install: s.isOnline
-      case .update: s.isOnline
-      case .launch: s.isOnline && s.hostsAllowLaunch
-      }
+    let enabled = base == .install ? s.isOnline : s.isOnline && (base != .launch || s.hostsAllowLaunch)
 
     let status: StatusLine
     if let error = s.lastError {
@@ -134,13 +138,17 @@ public struct MainPresentation: Sendable, Equatable {
 extension JobProgress {
   /// nil = indeterminate: no total yet, or a real 0 % (PRG-005 shows both the same way).
   public var fraction: Double? {
-    guard case .running(let done, let total) = self, total > 0, done > 0 else { return nil }
-    return min(1, Double(done) / Double(total))
+    guard let counts, counts.total > 0, counts.done > 0 else { return nil }
+    return min(1, Double(counts.done) / Double(counts.total))
   }
 
+  /// Bytes done and total, for the steps that move bytes (game download, Wine/DXMT download).
   public var counts: (done: Int64, total: Int64)? {
-    if case .running(let done, let total) = self { return (done, total) }
-    return nil
+    switch self {
+    case .running(let done, let total): (done, total)
+    case .wine(.downloadingWine(let p)), .wine(.downloadingDXMT(let p)): (p.completed, p.total)
+    default: nil
+    }
   }
 }
 

@@ -5,7 +5,6 @@ import SwiftUI
 /// The single Liquid Glass capsule at the bottom: status area, primary button, "…" menu (#21).
 struct CapsuleView: View {
   @Environment(MainController.self) private var controller
-  @Environment(ProgressMeter.self) private var meter
   let chooseGameDirectory: () -> Bool
 
   var body: some View {
@@ -13,9 +12,7 @@ struct CapsuleView: View {
     GlassEffectContainer {
       HStack(spacing: 12) {
         if presentation.status != .none {
-          StatusArea(
-            status: presentation.status, canPreDownload: presentation.canPreDownload, meter: meter,
-            controller: controller)
+          StatusArea(status: presentation.status, canPreDownload: presentation.canPreDownload)
             .padding(.leading, 14)
             .transition(.opacity.combined(with: .move(edge: .trailing)))
         }
@@ -72,10 +69,10 @@ private struct MoreMenu: View {
 }
 
 private struct StatusArea: View {
+  @Environment(MainController.self) private var controller
+  @Environment(ProgressMeter.self) private var meter
   let status: StatusLine
   let canPreDownload: Bool
-  let meter: ProgressMeter
-  let controller: MainController
 
   var body: some View {
     HStack(spacing: 12) {
@@ -89,8 +86,9 @@ private struct StatusArea: View {
             .foregroundStyle(.secondary)
             .lineLimit(1)
         }
-        if let bar = progressBar {
-          ProgressView(value: bar.fraction)
+        if let progress = movingProgress {
+          // A `nil` fraction renders the indeterminate bar (PRG-005).
+          ProgressView(value: progress.fraction)
             .progressViewStyle(.linear)
         }
       }
@@ -99,10 +97,21 @@ private struct StatusArea: View {
     }
   }
 
+  /// The progress of a job that is moving (not paused), when the status is a job at all.
+  private var movingProgress: JobProgress? {
+    switch status {
+    case .job(_, let progress, false): progress ?? .preparing
+    case .wine(let progress): progress ?? .preparing
+    default: nil
+    }
+  }
+
   private var headline: LocalizedStringResource {
     switch status {
     case .none: ""
     case .job(let job, _, let paused): job.title(paused: paused)
+    case .wine: "Preparing Wine"
+    case .wineRequired: "Wine has to be set up first"
     case .updateAvailable(let version):
       version.map { "Version \($0) available" } ?? "Update available"
     case .preDownloadAvailable(let version):
@@ -116,21 +125,18 @@ private struct StatusArea: View {
   }
 
   private var detail: LocalizedStringResource? {
-    guard case .job(_, let progress, let paused) = status, !paused, let counts = progress?.counts else {
+    guard let progress = movingProgress else { return nil }
+    guard let counts = progress.counts else {
+      if case .wine(let step) = progress { return step.label }
       return nil
     }
-    let amount = "\(Format.bytes(counts.done)) / \(Format.bytes(counts.total))"
+    let amount = "\(ByteFormat.iec(counts.done)) / \(ByteFormat.iec(counts.total))"
     guard let speed = meter.bytesPerSecond, speed > 0 else { return "\(amount)" }
+    let rate = ByteFormat.iec(Int64(speed))
     if let remaining = meter.remaining {
-      return "\(amount) · \(Format.bytes(Int64(speed)))/s · \(Format.duration(remaining)) left"
+      return "\(amount) · \(rate)/s · \(Format.duration(remaining)) left"
     }
-    return "\(amount) · \(Format.bytes(Int64(speed)))/s"
-  }
-
-  /// A bar only while a job is moving; `nil` fraction renders the indeterminate bar (PRG-005).
-  private var progressBar: (fraction: Double?, show: Bool)? {
-    guard case .job(_, let progress, let paused) = status, !paused else { return nil }
-    return (progress?.fraction, true)
+    return "\(amount) · \(rate)/s"
   }
 
   @ViewBuilder private var accessory: some View {
