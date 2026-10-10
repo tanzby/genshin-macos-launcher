@@ -114,6 +114,9 @@ public struct SophonUpdater: Sendable {
 
     enum Verdict: Sendable {
       case untouched
+      /// A new file: it may already be in place, which the pass below finds out.
+      case newFile(SophonFile)
+      /// Checked above and not matching: missing, damaged or not the file the patch needs.
       case download(SophonFile)
       case patch(SophonPlannedPatch)
     }
@@ -125,8 +128,7 @@ public struct SophonUpdater: Sendable {
     }
 
     var candidates: [Candidate] = []
-    var immediate: [Int: Verdict] = [:]
-    for (index, file) in diff.files.enumerated() {
+    for file in diff.files {
       let destination = try SophonPathPolicy.resolve(file.path, in: gameDirectory)
       if file.patches.isEmpty {
         candidates.append(Candidate(file: file, patch: nil, destination: destination, original: nil))
@@ -134,8 +136,6 @@ public struct SophonUpdater: Sendable {
         let originalPath = patch.originalPath.isEmpty ? file.path : patch.originalPath
         let original = try SophonPathPolicy.resolve(originalPath, in: gameDirectory)
         candidates.append(Candidate(file: file, patch: patch, destination: destination, original: original))
-      } else {
-        immediate[index] = .untouched
       }
     }
     // A deletion names a file. One that is a folder holding new files would wipe them (and `removeItem`
@@ -171,20 +171,31 @@ public struct SophonUpdater: Sendable {
               guard let chunks = chunkOf[newFile.path], !chunks.isDirectory else {
                 throw SophonError.invalidManifest("\(newFile.path) is not in the chunk manifest")
               }
-              return .download(chunks)
+              return .newFile(chunks)
             }
             guard let chunks = chunkOf[newFile.path], !chunks.isDirectory else {
               throw SophonError.invalidManifest("\(newFile.path) is not in the chunk manifest")
             }
-            if try Self.matches(candidate.destination, size: newFile.size, md5: newFile.md5, cancelled: cancelled) {
+            // One read serves both questions when the patch rewrites the file in place.
+            let inPlace = candidate.original == candidate.destination
+            let size = Self.size(of: candidate.destination)
+            let digest = (size == newFile.size || (inPlace && size == patch.originalSize))
+              ? try MD5Hasher.hex(ofFileAt: candidate.destination, cancelled: cancelled) : nil
+            if size == newFile.size, digest?.caseInsensitiveCompare(newFile.md5) == .orderedSame {
               return .untouched
             }
-            if let original = candidate.original,
-              try Self.matches(original, size: patch.originalSize, md5: patch.originalMD5, cancelled: cancelled)
-            {
-              return .patch(SophonPlannedPatch(file: newFile, patch: patch, fallback: chunks))
+            let originalMatches: Bool
+            if inPlace {
+              originalMatches =
+                size == patch.originalSize && digest?.caseInsensitiveCompare(patch.originalMD5) == .orderedSame
+            } else if let original = candidate.original {
+              originalMatches = try Self.matches(
+                original, size: patch.originalSize, md5: patch.originalMD5, cancelled: cancelled)
+            } else {
+              originalMatches = false
             }
-            return .download(chunks)
+            return originalMatches
+              ? .patch(SophonPlannedPatch(file: newFile, patch: patch, fallback: chunks)) : .download(chunks)
           }
           counter.add(max(candidate.file.size, candidate.patch?.originalSize ?? 0))
           return (index, verdict)
@@ -201,25 +212,27 @@ public struct SophonUpdater: Sendable {
 
     var patches: [SophonPlannedPatch] = []
     var downloads: [SophonFile] = []
+    var newFiles: [SophonFile] = []
     for verdict in verdicts {
       switch verdict {
       case .untouched: break
+      case .newFile(let file): newFiles.append(file)
       case .download(let file): downloads.append(file)
       case .patch(let planned): patches.append(planned)
       }
     }
-    // Entries that are new files may already be on disk and intact: leave those out of the totals.
-    let destinations = Dictionary(
-      uniqueKeysWithValues: try downloads.map { ($0.path, try SophonPathPolicy.resolve($0.path, in: gameDirectory)) })
-    let pending = downloads
+    // New files may already be on disk and intact: leave those out of the totals.
+    var seenNew = Set<String>()
+    let uniqueNew = newFiles.filter { seenNew.insert($0.path).inserted }
+    let destinations = try uniqueNew.map { ($0, try SophonPathPolicy.resolve($0.path, in: gameDirectory)) }
     let missing: [SophonFile] = try await Offload.run { cancelled in
-      try pending.filter { file in
-        !(try Self.matches(destinations[file.path]!, size: file.size, md5: file.md5, cancelled: cancelled))
-      }
+      try destinations.filter { file, url in
+        !(try Self.matches(url, size: file.size, md5: file.md5, cancelled: cancelled))
+      }.map(\.0)
     }
     try Self.validate(patches: patches)
     return SophonUpdatePlan(
-      fromVersion: installedVersion, patches: patches, downloads: missing,
+      fromVersion: installedVersion, patches: patches, downloads: downloads + missing,
       deletions: diff.deletions[installedVersion] ?? [], expectedFiles: diff.files)
   }
 

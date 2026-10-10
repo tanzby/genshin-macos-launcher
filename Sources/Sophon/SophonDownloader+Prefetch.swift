@@ -60,9 +60,9 @@ extension SophonDownloader {
     let fetcher = ResourceFetcher(session: session)
     let config = configuration
     let suffix = ref.diffURLSuffix
-    let progress = ChunkProgress(reporter: reporter)
     try await runBounded(ldiffs, limit: configuration.concurrency) { ldiff in
       let url = try SophonDownloaderLayout.resourceURL(base: base, name: ldiff.id, suffix: suffix)
+      let progress = ChunkProgress(reporter: reporter)  // one per ldiff: it is not thread-safe
       try await Self.retrying(config) {
         try await fetcher.fetch(
           name: ldiff.id, url: url, expected: ldiff.size, to: directory.appending(path: ldiff.id),

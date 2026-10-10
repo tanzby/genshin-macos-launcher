@@ -208,6 +208,9 @@ public struct SophonDownloader: Sendable {
   ) async throws {
     if try await Offload.run({ try isIntact(file, at: destination, cancelled: $0) }) {
       reporter.add(compressedSize(of: file))
+      // Chunks a pre-download left for this file are not needed any more.
+      try? FileManager.default.removeItem(
+        at: worker.chunkRoot.appending(path: SophonDownloaderLayout.fileKey(for: file.path), directoryHint: .isDirectory))
       return
     }
     let chunkProgress = reporter.progress(forFile: file)

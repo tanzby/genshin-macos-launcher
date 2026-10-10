@@ -466,6 +466,17 @@ private func waitUntil(timeout: Duration = .seconds(5), _ condition: () -> Bool)
     }
   }
 
+  @Test func UPG_008_aRepeatedManifestPathDoesNotCrashAndIsDownloadedOnce() async throws {
+    try await withRig { rig in
+      try rig.installOldVersion()
+      var world = rig.world
+      world.diffFiles.append(world.diffFiles.last!)
+      let plan = try await rig.updater.plan(
+        from: World.installed, diff: world.diff, manifest: world.manifest, gameDirectory: rig.game)
+      #expect(plan.downloads.map(\.path) == ["new/e.bin"])
+    }
+  }
+
   @Test func UPG_008_aVersionTheServerHasNoPatchesForIsRefused() async throws {
     try await withRig { rig in
       try rig.installOldVersion()
