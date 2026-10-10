@@ -211,3 +211,20 @@ actor Log {
   private(set) var entries: [String] = []
   func add(_ entry: String) { entries.append(entry) }
 }
+
+@Suite struct BundledHelpersTests {
+  @Test func LCH_022_theHelpersAreFoundInContentsHelpersAndMissingOnesMeanNoGameMode() throws {
+    let app = FileManager.default.temporaryDirectory.appending(path: "Fake-\(UUID().uuidString).app")
+    let helpers = app.appending(path: "Contents/Helpers")
+    try FileManager.default.createDirectory(at: helpers, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: app) }
+
+    #expect(GenshinCNClient.helpers(in: app) == nil)
+    try Data("shim".utf8).write(to: helpers.appending(path: "yaagl-wine-shim"))
+    #expect(GenshinCNClient.helpers(in: app) == nil)
+    try Data("dylib".utf8).write(to: helpers.appending(path: "yaagl-gamehost"))
+    #expect(
+      GenshinCNClient.helpers(in: app)
+        == GameHostHelpers(shim: helpers.appending(path: "yaagl-wine-shim"), dylib: helpers.appending(path: "yaagl-gamehost")))
+  }
+}

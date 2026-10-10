@@ -1,11 +1,18 @@
 import GenshinCN
 import Launcher
+import Platform
 import Sparkle
 import SwiftUI
+import Wine
 
 @main
 struct YaaglApp: App {
-  @State private var launcher = LauncherModel(client: GenshinCNClient())
+  @State private var launcher = LauncherModel(client: Self.makeClient())
+
+  private static func makeClient() -> GenshinCNClient {
+    let data = DataDirectory(root: DataDirectory.defaultRoot)
+    return GenshinCNClient.bundled(wine: WineRuntime(dataDirectory: data), dataDirectory: data)
+  }
 
   // Sparkle refuses to start without an EdDSA public key, so builds made before
   // the key exists (SUPublicEDKey empty) leave the updater stopped. Debug builds

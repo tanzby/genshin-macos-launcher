@@ -171,6 +171,21 @@ private func isError(_ error: (any Error)?, _ expected: SophonError) -> Bool {
   }
 }
 
+@Suite struct ClientRepairLaunchTests {
+  @Test func REP_005_aRepairNeedsNoMarkerResetBecauseEveryLaunchPreparesTheGameAgain() async throws {
+    let release = FakeRelease.game("5.6.0")
+    let rig = ClientRig(main: release)
+    rig.install(release)
+
+    _ = await rig.run(.repair)
+    _ = try await rig.client.launch(.init(gameDirectory: rig.game), onStarted: {})
+
+    let recipe = try #require(rig.launcher.recipes.first)
+    #expect(recipe.moveAside.count == 3)
+    #expect(recipe.prefixCopies.count == 4)
+  }
+}
+
 @Suite struct ClientUpdateTests {
   private func updateRig() -> (ClientRig, FakeRelease, FakeRelease) {
     let old = FakeRelease.game("5.5.0", extra: ["gone.bin": Data("old only".utf8)])
@@ -226,7 +241,7 @@ private func isError(_ error: (any Error)?, _ expected: SophonError) -> Bool {
     #expect((result.error as? GenshinCNClientError) == .noUpdate)
   }
 
-  @Test func UPG_001_aVersionThePatchBuildDoesNotKnowIsSyncedFromTheChunkManifestInstead() async throws {
+  @Test func INS_013_aVersionThePatchBuildDoesNotKnowIsSyncedFromTheChunkManifestInstead() async throws {
     let new = FakeRelease.game("5.6.0", extra: ["fresh.bin": Data("fresh".utf8)], diffTags: ["5.5.0"])
     let rig = ClientRig(main: new)
     rig.install(.game("5.0.0"))
