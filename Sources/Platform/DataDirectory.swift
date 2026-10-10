@@ -30,6 +30,8 @@ public struct DataDirectory: Sendable, Equatable {
   public var wine: URL { entry("wine", directory: true) }
   public var winePrefix: URL { entry("wineprefix", directory: true) }
   public var logs: URL { entry("logs", directory: true) }
+  /// The official launcher background (one file), see `BackgroundImageProvider`.
+  public var background: URL { entry("background", directory: true) }
 
   private func entry(_ name: String, directory: Bool = false) -> URL {
     root.appending(path: name, directoryHint: directory ? .isDirectory : .notDirectory)
