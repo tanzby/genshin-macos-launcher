@@ -62,6 +62,24 @@ public struct GameSession: Sendable {
     try? FileManager.default.removeItem(at: layout.configBatch)
   }
 
+  /// Opens an interactive `wine cmd` in the game's prefix (CFG-032, WIN-022): same loader, `WINEPREFIX`,
+  /// `WINEDEBUG` and recipe environment as a launch, plus `WINEPATH` pointing at the game directory.
+  /// Touches neither the registry, the journal nor `config.bat`. Returns the exit code once the prompt is
+  /// closed, or `nil` if Wine could not be started.
+  public func openCommandPrompt(_ recipe: LaunchRecipe, gameDirectory: URL?) async -> Int32? {
+    var environment = baseEnvironment
+    for (name, value) in recipe.environment where !value.isEmpty { environment[name] = value }
+    if let gameDirectory { environment["WINEPATH"] = Self.windowsPath(gameDirectory) }
+    do {
+      return try await runner.run(
+        layout.loader, arguments: ["cmd"], environment: environment, workingDirectory: layout.root
+      ).exitCode
+    } catch {
+      log.error("wine cmd failed: \(String(describing: error), privacy: .public)")
+      return nil
+    }
+  }
+
   // MARK: - Launch
 
   private func run(_ recipe: LaunchRecipe) async -> LaunchResult {

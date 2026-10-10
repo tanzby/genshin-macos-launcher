@@ -232,5 +232,5 @@
 | WIN-019 | DXMT 版本检查与下载 | 改写 | [#28](https://github.com/tanzby/yet-another-anime-game-launcher/issues/28) C 负面用例 | 单元 | WineStatusTests（DXMT 版本不符即重装） |
 | WIN-020 | 把 DXMT 注入 Wine 运行时 | 改写 | [#28](https://github.com/tanzby/yet-another-anime-game-launcher/issues/28) B12：DXMT 装 Wine 时一次装好，不再注入（ADR 0002 已修订） | 单元 | WineInstallTests（DXMT 随 Wine 一次装好） |
 | WIN-021 | 还原 DXMT 注入 | 改写 | [#28](https://github.com/tanzby/yet-another-anime-game-launcher/issues/28) B12：DXMT 不再注入，因此无需还原（ADR 0002 已修订） | 单元 | WineInstallTests（无 .bak，无需还原） |
-| WIN-022 | 打开 Wine 命令行窗口 | 改写 | [#21](https://github.com/tanzby/yet-another-anime-game-launcher/issues/21) 设置窗口重新设计；保留为开发便利入口（CFG-032） | 组件 |  |
+| WIN-022 | 打开 Wine 命令行窗口 | 改写 | [#21](https://github.com/tanzby/yet-another-anime-game-launcher/issues/21) 设置窗口重新设计；保留为开发便利入口（CFG-032） | 组件 | CommandPromptTests |
 | WIN-023 | 当前版本不在清单中时的下拉框 | 作废 | 死/开发便利/无版本选择 UI/空列表 | — |  |
