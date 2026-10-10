@@ -8,17 +8,22 @@ public struct GameStatus: Sendable, Equatable {
   public var remoteVersion: String?
   public var canUpdate: Bool
   public var canPreDownload: Bool
+  /// The pre-download branch's target version. It can differ from `remoteVersion` (the main branch), and both
+  /// `canUpdate` and `canPreDownload` may be true at once.
+  public var preDownloadVersion: String?
 
   public init(
     localVersion: String? = nil,
     remoteVersion: String? = nil,
     canUpdate: Bool = false,
-    canPreDownload: Bool = false
+    canPreDownload: Bool = false,
+    preDownloadVersion: String? = nil
   ) {
     self.localVersion = localVersion
     self.remoteVersion = remoteVersion
     self.canUpdate = canUpdate
     self.canPreDownload = canPreDownload
+    self.preDownloadVersion = preDownloadVersion
   }
 }
 

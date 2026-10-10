@@ -116,4 +116,6 @@ protocol GameClient: Sendable {
 
 ## 未验证
 
-- ad-hoc 签名、未公证的 App 能否拿到 `UNUserNotificationCenter` 授权（地图 Not yet specified 已记录）。通知相关代码只放在 `YaaglApp`，不影响本架构。
+（票 #14 已验证，结论如下；留作记录。）
+
+- ad-hoc 签名、未公证的 App 能否拿到 `UNUserNotificationCenter` 授权：**拿不到**。实测（2026-10-10，macOS 27 开发版）一个 ad-hoc 签名、独立 bundle id 的最小 App，经 `open` 启动、已激活，`notificationSettings()` 为 `notDetermined`，`requestAuthorization` 立即抛 `UNErrorDomain Code=1`（"Notifications are not allowed for this application"），没有弹授权框。所以 `EventNotifier` 把"授权失败"当作 `false`：不发通知也不报错，持久状态仍在底部胶囊里。1.0.0 的发布包同样是 ad-hoc 签名（codesign 与公证在范围外），所以通知在正式版里也不会出现，除非以后改用 Developer ID 签名；不要为此增加应用内卡片。

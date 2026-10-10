@@ -4,6 +4,7 @@ options:
   deploymentTarget:
     macOS: "26.0"
   xcodeVersion: "26.0"
+  developmentLanguage: en
   createIntermediateGroups: true
   generateEmptyDirectories: true
 settings:
@@ -47,6 +48,7 @@ targets:
         ARCHS: arm64
         ENABLE_HARDENED_RUNTIME: NO
         GENERATE_INFOPLIST_FILE: YES
+        SWIFT_EMIT_LOC_STRINGS: YES
         INFOPLIST_KEY_CFBundleDisplayName: Yaagl
         INFOPLIST_KEY_LSApplicationCategoryType: public.app-category.games
         INFOPLIST_KEY_LSMinimumSystemVersion: "26.0"
@@ -58,6 +60,10 @@ targets:
         product: Launcher
       - package: YaaglKit
         product: GenshinCN
+      - package: YaaglKit
+        product: Platform
+      - package: YaaglKit
+        product: Wine
       - package: Sparkle
         product: Sparkle
       - target: YaaglWineShim
