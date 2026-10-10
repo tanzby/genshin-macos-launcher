@@ -480,6 +480,25 @@ private func waitUntil(timeout: Duration = .seconds(5), _ condition: () -> Bool)
     }
   }
 
+  @Test func UPG_008_manifestsOfDifferentReleasesAreRefused() async throws {
+    try await withRig { rig in
+      try rig.installOldVersion()
+      for variant in 0..<2 {
+        var world = rig.world
+        let index = world.chunkFiles.firstIndex { $0.path == "new/e.bin" }!
+        let file = world.chunkFiles[index]
+        // Same size with another content, or another size.
+        world.chunkFiles[index] = SophonFile(
+          path: file.path, isDirectory: false, size: variant == 0 ? file.size : file.size + 1,
+          md5: variant == 0 ? String(repeating: "0", count: 32) : file.md5, chunks: file.chunks)
+        await #expect(throws: SophonError.invalidManifest("new/e.bin differs between the chunk and the ldiff manifest")) {
+          _ = try await rig.updater.plan(
+            from: World.installed, diff: world.diff, manifest: world.manifest, gameDirectory: rig.game)
+        }
+      }
+    }
+  }
+
   @Test func UPG_008_aVersionTheServerHasNoPatchesForIsRefused() async throws {
     try await withRig { rig in
       try rig.installOldVersion()
@@ -679,7 +698,11 @@ private func waitUntil(timeout: Duration = .seconds(5), _ condition: () -> Bool)
       var world = rig.world
       let file = world.diffFiles[0]
       world.diffFiles[0] = SophonDiffFile(path: file.path, size: file.size, md5: String(repeating: "0", count: 32), patches: file.patches)
-      let chunkFile = world.chunkFiles.first { $0.path == file.path }!
+      let chunkIndex = world.chunkFiles.firstIndex { $0.path == file.path }!
+      let chunkFile = world.chunkFiles[chunkIndex]
+      world.chunkFiles[chunkIndex] = SophonFile(
+        path: chunkFile.path, isDirectory: false, size: chunkFile.size, md5: String(repeating: "0", count: 32),
+        chunks: chunkFile.chunks)
       for chunk in chunkFile.chunks { rig.cdn.fail(chunk: chunk.id) }
       let plan = try await rig.updater.plan(
         from: World.installed, diff: world.diff, manifest: world.manifest, gameDirectory: rig.game)

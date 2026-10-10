@@ -126,12 +126,6 @@ public struct SophonUpdater: Sendable {
     guard known else { throw SophonError.versionNotPatchable(installedVersion) }
 
     let chunkFiles = Dictionary(manifest.files.map { ($0.path, $0) }, uniquingKeysWith: { first, _ in first })
-    func chunkFile(_ path: String) throws -> SophonFile {
-      guard let file = chunkFiles[path], !file.isDirectory else {
-        throw SophonError.invalidManifest("\(path) is not in the chunk manifest")
-      }
-      return file
-    }
 
     enum Verdict: Sendable {
       case untouched
@@ -146,6 +140,17 @@ public struct SophonUpdater: Sendable {
       let patch: SophonPatch?
       let destination: URL
       let original: URL?
+    }
+
+    // Both manifests must describe the same release. If they disagree about a file, the chunk download
+    // would install another version's file and the final size check could still pass.
+    for file in diff.files {
+      guard let chunks = chunkFiles[file.path], !chunks.isDirectory else {
+        throw SophonError.invalidManifest("\(file.path) is not in the chunk manifest")
+      }
+      guard chunks.size == file.size, chunks.md5.caseInsensitiveCompare(file.md5) == .orderedSame else {
+        throw SophonError.invalidManifest("\(file.path) differs between the chunk and the ldiff manifest")
+      }
     }
 
     var candidates: [Candidate] = []

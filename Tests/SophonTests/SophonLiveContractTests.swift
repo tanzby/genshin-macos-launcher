@@ -35,6 +35,12 @@ struct SophonLiveContractTests {
     let diffRef = try await api.patchBuild(for: main).manifest(matching: "game")
     let diff = try await api.diffManifest(for: diffRef)
     #expect(!diff.files.isEmpty)
+    // UPG-008: the updater refuses a pair of manifests that disagree, so the real ones must agree.
+    let chunkFiles = Dictionary(manifest.files.map { ($0.path, $0) }, uniquingKeysWith: { first, _ in first })
+    for file in diff.files {
+      let chunks = try #require(chunkFiles[file.path], "\(file.path)")
+      #expect(chunks.size == file.size && chunks.md5.lowercased() == file.md5.lowercased(), "\(file.path)")
+    }
   }
 
   @Test func APP_009_live_smallestChunkDownloadsAndVerifies() async throws {
