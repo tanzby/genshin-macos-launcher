@@ -36,6 +36,10 @@ targets:
         SUFeedURL: https://github.com/tanzby/genshin-macos-launcher/releases/latest/download/appcast.xml
         # EdDSA public key printed by generate_keys (private key: login Keychain + CI secret SPARKLE_ED_PRIVATE_KEY).
         SUPublicEDKey: "+bZH7ivQ9Rt952S3q3X8nYfrOCYGNA8V/5VrW1Cavkc="
+        # Check on its own once a day without Sparkle's first-launch permission prompt;
+        # the Settings toggle overrides this through the user defaults.
+        SUEnableAutomaticChecks: true
+        SUScheduledCheckInterval: 86400
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: io.github.tanzby.yaagl

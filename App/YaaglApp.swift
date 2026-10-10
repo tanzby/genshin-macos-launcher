@@ -16,6 +16,12 @@ struct YaaglApp: App {
     userDriverDelegate: nil
   )
 
+  private let updater: UpdaterModel
+
+  init() {
+    updater = UpdaterModel(updater: updaterController.updater)
+  }
+
   private static var startsUpdater: Bool {
     #if DEBUG
       return false
@@ -32,10 +38,12 @@ struct YaaglApp: App {
     }
     .commands {
       CommandGroup(after: .appInfo) {
-        Button("Check for Updates…") {
-          updaterController.checkForUpdates(nil)
-        }
+        CheckForUpdatesCommand(updater: updater)
       }
+    }
+
+    Settings {
+      SettingsView(updater: updater)
     }
   }
 }
