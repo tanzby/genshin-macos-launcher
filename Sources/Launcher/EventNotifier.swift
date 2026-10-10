@@ -23,6 +23,8 @@ public final class EventNotifier {
   private let delivery: any NotificationDelivering
   private let defaults: UserDefaults
   private var authorization: Bool?
+  /// Versions whose announcement is being delivered; concurrent `observe` calls must not post twice.
+  private var inFlight: Set<String> = []
 
   static let announcedUpdateKey = "announcedUpdateVersion"
   static let announcedPreDownloadKey = "announcedPreDownloadVersion"
@@ -44,16 +46,19 @@ public final class EventNotifier {
   /// Announces a new update or pre-download once per version, also across relaunches.
   public func observe(status: GameStatus?) async {
     guard let status, let version = status.remoteVersion, !version.isEmpty else { return }
-    if status.canUpdate, defaults.string(forKey: Self.announcedUpdateKey) != version {
-      if await post(.updateAvailable(version: version)) {
-        defaults.set(version, forKey: Self.announcedUpdateKey)
-      }
+    if status.canUpdate {
+      await announce(.updateAvailable(version: version), key: Self.announcedUpdateKey, version: version)
     }
-    if status.canPreDownload, defaults.string(forKey: Self.announcedPreDownloadKey) != version {
-      if await post(.preDownloadAvailable(version: version)) {
-        defaults.set(version, forKey: Self.announcedPreDownloadKey)
-      }
+    if status.canPreDownload {
+      await announce(.preDownloadAvailable(version: version), key: Self.announcedPreDownloadKey, version: version)
     }
+  }
+
+  private func announce(_ notification: AppNotification, key: String, version: String) async {
+    let token = "\(key)/\(version)"
+    guard defaults.string(forKey: key) != version, inFlight.insert(token).inserted else { return }
+    defer { inFlight.remove(token) }
+    if await post(notification) { defaults.set(version, forKey: key) }
   }
 
   /// True when the system accepted the notification.

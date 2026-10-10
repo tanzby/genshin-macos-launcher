@@ -19,6 +19,7 @@ final class FakeDelivery: NotificationDelivering, Sendable {
     return granted
   }
   func deliver(_ notification: AppNotification) async -> Bool {
+    await Task.yield()  // lets a concurrent observe() interleave
     state.withLock { $0.delivered.append(notification) }
     return accepts
   }
@@ -108,5 +109,15 @@ private func notifier(_ delivery: FakeDelivery) -> EventNotifier {
     let later = FakeDelivery(granted: true)
     await EventNotifier(delivery: later, defaults: defaults).observe(status: update)
     #expect(later.delivered == [.updateAvailable(version: "5.1.0")])
+  }
+
+  @Test func concurrentObservationsOfTheSameVersionAnnounceOnce() async {
+    let delivery = FakeDelivery(granted: true)
+    let notifier = notifier(delivery)
+    let update = GameStatus(localVersion: "5.0.0", remoteVersion: "5.1.0", canUpdate: true)
+    async let first: Void = notifier.observe(status: update)
+    async let second: Void = notifier.observe(status: update)
+    _ = await (first, second)
+    #expect(delivery.delivered == [.updateAvailable(version: "5.1.0")])
   }
 }

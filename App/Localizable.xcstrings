@@ -1327,6 +1327,23 @@
         }
       }
     },
+    "The folder cannot be read.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The folder cannot be read."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "无法读取这个文件夹。"
+          }
+        }
+      }
+    },
     "The folder does not exist.": {
       "extractionState": "manual",
       "localizations": {

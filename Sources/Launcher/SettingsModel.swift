@@ -3,7 +3,7 @@ import Observation
 
 /// Why a directory cannot be the game directory.
 public enum GameDirectoryProblem: Error, Sendable, Equatable {
-  case missing, notADirectory, unsupportedPath, notEmpty
+  case missing, notADirectory, unsupportedPath, unreadable, notEmpty
 }
 
 public enum GameDirectoryKind: Sendable, Equatable {
@@ -26,7 +26,10 @@ public enum GameDirectoryValidator {
     }
     guard isDirectory.boolValue else { throw GameDirectoryProblem.notADirectory }
     guard isSupportedPath(url) else { throw GameDirectoryProblem.unsupportedPath }
-    let names = (try? FileManager.default.contentsOfDirectory(atPath: url.path)) ?? []
+    // An unreadable folder (ACL, permissions) is not an empty one: refuse it rather than fail at install time.
+    guard let names = try? FileManager.default.contentsOfDirectory(atPath: url.path) else {
+      throw GameDirectoryProblem.unreadable
+    }
     if names.contains(gameExecutable) { return .existingGame }
     guard names.allSatisfy({ ignored.contains($0) }) else { throw GameDirectoryProblem.notEmpty }
     return .empty

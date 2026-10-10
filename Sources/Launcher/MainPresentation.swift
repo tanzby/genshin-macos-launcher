@@ -65,13 +65,16 @@ public struct MainPresentation: Sendable, Equatable {
   public static func derive(_ s: MainSnapshot) -> MainPresentation {
     let installed = s.status?.localVersion != nil
     let idleLike = s.phase == .idle || s.phase == .preDownloading
+    // Pre-download may overlap with launching and running (APP-015), but not with install/update/repair.
+    let preDownloadPhase = idleLike || s.phase == .launching || s.phase == .running
     let repairable = installed && idleLike && s.pendingJob.map { $0.kind == .preDownload } ?? true
       && s.status?.canUpdate != true
 
     func make(_ button: PrimaryButton, _ enabled: Bool, _ status: StatusLine) -> MainPresentation {
       MainPresentation(
         button: button, buttonEnabled: enabled, status: status, canRepair: repairable,
-        canPreDownload: installed && idleLike && !s.isPreDownloading && s.status?.canPreDownload == true)
+        canPreDownload: installed && s.isOnline && preDownloadPhase && !s.isPreDownloading
+          && s.status?.canPreDownload == true)
     }
 
     switch s.phase {

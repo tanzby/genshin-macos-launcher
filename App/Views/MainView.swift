@@ -73,6 +73,7 @@ extension GameDirectoryProblem {
     case .missing: String(localized: "The folder does not exist.")
     case .notADirectory: String(localized: "That is a file, not a folder.")
     case .unsupportedPath: String(localized: "The folder path contains a quotation mark or a line break.")
+    case .unreadable: String(localized: "The folder cannot be read.")
     case .notEmpty: String(localized: "The folder is not empty and does not contain the game.")
     }
   }

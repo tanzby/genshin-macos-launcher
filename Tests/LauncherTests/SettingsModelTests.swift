@@ -134,6 +134,18 @@ private func freshDefaults() -> UserDefaults {
     }
   }
 
+  @Test func CFG_010_aFolderThatCannotBeListedIsNotTreatedAsEmpty() throws {
+    let dir = try makeDirectory()
+    defer {
+      try? FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: dir.path)
+      try? FileManager.default.removeItem(at: dir)
+    }
+    try FileManager.default.setAttributes([.posixPermissions: 0o000], ofItemAtPath: dir.path)
+    #expect(throws: GameDirectoryProblem.unreadable) {
+      try GameDirectoryValidator.validate(dir, gameExecutable: "YuanShen.exe", isSupportedPath: supported)
+    }
+  }
+
   @Test func CFG_010_missingOrFileOrUnsupportedPathsAreRefused() throws {
     let dir = try makeDirectory()
     defer { try? FileManager.default.removeItem(at: dir) }

@@ -97,6 +97,21 @@ private func snapshot(
     #expect(!MainPresentation.derive(snapshot()).canPreDownload)
   }
 
+  @Test func APP_015_preDownloadStaysAvailableWhileTheGameStartsOrRuns() {
+    let status = GameStatus(localVersion: "5.0.0", remoteVersion: "5.0.0", canPreDownload: true)
+    for phase in [LauncherPhase.launching, .running] {
+      #expect(MainPresentation.derive(snapshot(phase: phase, status: status)).canPreDownload)
+    }
+    for phase in [LauncherPhase.installing, .updating, .repairing] {
+      #expect(!MainPresentation.derive(snapshot(phase: phase, status: status)).canPreDownload)
+    }
+  }
+
+  @Test func APP_010_preDownloadIsNotOfferedOffline() {
+    let status = GameStatus(localVersion: "5.0.0", remoteVersion: "5.0.0", canPreDownload: true)
+    #expect(!MainPresentation.derive(snapshot(status: status, online: false)).canPreDownload)
+  }
+
   @Test func APP_017_pendingPreDownloadIsNotAResumeOfTheMainButton() {
     let p = MainPresentation.derive(snapshot(pending: PendingJob(kind: .preDownload)))
     #expect(p.button == .launch)
