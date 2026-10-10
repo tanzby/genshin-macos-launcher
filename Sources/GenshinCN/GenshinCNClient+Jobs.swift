@@ -55,7 +55,7 @@ extension GenshinCNClient {
   ) async throws {
     report(.preparing)
     try SophonInstallation.prepareForInstall(in: directory)  // INS-005: refuses before any request
-    let (main, ref, manifest) = try await mainRelease(withManifest: ())
+    let (main, ref, manifest) = try await mainReleaseWithManifest()
     try await downloader.install(
       manifest.files, using: ref, into: directory, tempDirectory: SophonInstallation.tempDirectory(in: directory),
       progress: progress)
@@ -73,7 +73,7 @@ extension GenshinCNClient {
     report(.preparing)
     let installed = try installedVersion(in: directory)
     GenshinGameFiles.healBackups(in: directory)
-    let (main, ref, manifest) = try await mainRelease(withManifest: ())
+    let (main, ref, manifest) = try await mainReleaseWithManifest()
     guard installed == main.tag else { throw GenshinCNClientError.outdated(installed: installed, latest: main.tag) }
     let damaged = try await downloader.findDamagedFiles(in: manifest.files, gameDirectory: directory, progress: progress)
     if !damaged.isEmpty {
@@ -92,7 +92,7 @@ extension GenshinCNClient {
     report(.preparing)
     let installed = try installedVersion(in: directory)
     GenshinGameFiles.healBackups(in: directory)
-    let (main, ref, manifest) = try await mainRelease(withManifest: ())
+    let (main, ref, manifest) = try await mainReleaseWithManifest()
     guard SophonVersion.isOlder(installed, than: main.tag) else { throw GenshinCNClientError.noUpdate }
     let temp = SophonInstallation.tempDirectory(in: directory)
 
@@ -150,7 +150,7 @@ extension GenshinCNClient {
         return try await mainRelease().ref.stats?.uncompressedSize ?? 0
       case .repair:
         _ = try installedVersion(in: directory)
-        let (_, _, manifest) = try await mainRelease(withManifest: ())
+        let (_, _, manifest) = try await mainReleaseWithManifest()
         return try SophonInstallation.bytesToFetch(for: manifest.files, in: directory)
       case .update:
         let installed = try installedVersion(in: directory)
@@ -186,7 +186,7 @@ extension GenshinCNClient {
     return (main, try await sophon.build(for: main).manifest(matching: "game"))
   }
 
-  private func mainRelease(withManifest: Void = ()) async throws -> (
+  private func mainReleaseWithManifest() async throws -> (
     branch: SophonGameBranch, ref: SophonManifestRef, manifest: SophonManifest
   ) {
     let (main, ref) = try await mainRelease()

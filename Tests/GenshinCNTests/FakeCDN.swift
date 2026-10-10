@@ -138,7 +138,7 @@ final class FakeCDN: @unchecked Sendable {
       if let pre, name == pre.manifestID("predownload") { return ok(pre.chunkManifest) }
       if name.hasPrefix("diff-") {
         let target = name == "diff-main" ? main : (pre ?? main)
-        return ok(diffManifest(target, previousFiles: [:], deletions: deletions))
+        return ok(diffManifest(target, deletions: deletions))
       }
       return .response(status: 404, body: Data())
     case ("cdn.test", let name) where url.path.hasPrefix("/chunks/"):
@@ -219,7 +219,7 @@ final class FakeCDN: @unchecked Sendable {
   }
 
   /// A diff manifest in which every file of `target` is new (no patches) and `deletions` lists old files.
-  private func diffManifest(_ target: FakeRelease, previousFiles: [String: Data], deletions: [String: [String: Data]]) -> Data {
+  private func diffManifest(_ target: FakeRelease, deletions: [String: [String: Data]]) -> Data {
     var manifest = PbDiffManifest()
     for path in target.sortedPaths {
       var file = PbDiffFileInfo()

@@ -4,9 +4,6 @@ import Platform
 import Sophon
 import Synchronization
 import Wine
-import os
-
-private let log = Logger(subsystem: "io.github.tanzby.yaagl", category: "genshin")
 
 public enum GenshinCNClientError: Error, Sendable, Equatable {
   case noGameDirectory
