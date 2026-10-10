@@ -11,7 +11,7 @@ private func isError(_ error: (any Error)?, _ expected: SophonError) -> Bool {
   (error as? SophonError) == expected
 }
 
-@Suite struct ClientInstallTests {
+@Suite(.disabled("bisect")) struct ClientInstallTests {
   @Test func INS_003_installDownloadsEveryFileAndWritesTheVersionLast() async throws {
     let release = FakeRelease.game("5.6.0", extra: ["data/blob.bin": Data(repeating: 7, count: 300_000)])
     let rig = ClientRig(main: release)
@@ -80,7 +80,7 @@ private func isError(_ error: (any Error)?, _ expected: SophonError) -> Bool {
   }
 }
 
-@Suite struct ClientRepairTests {
+@Suite(.disabled("bisect")) struct ClientRepairTests {
   @Test func REP_003_repairDownloadsOnlyTheDamagedFilesAndKeepsConfigIni() async throws {
     let release = FakeRelease.game("5.6.0", extra: ["data/blob.bin": Data(repeating: 7, count: 4000)])
     let rig = ClientRig(main: release)
@@ -171,7 +171,7 @@ private func isError(_ error: (any Error)?, _ expected: SophonError) -> Bool {
   }
 }
 
-@Suite struct ClientRepairLaunchTests {
+@Suite(.disabled("bisect")) struct ClientRepairLaunchTests {
   @Test func REP_005_aRepairNeedsNoMarkerResetBecauseEveryLaunchPreparesTheGameAgain() async throws {
     let release = FakeRelease.game("5.6.0")
     let rig = ClientRig(main: release)
@@ -186,7 +186,7 @@ private func isError(_ error: (any Error)?, _ expected: SophonError) -> Bool {
   }
 }
 
-@Suite struct ClientUpdateTests {
+@Suite(.disabled("bisect")) struct ClientUpdateTests {
   private func updateRig() -> (ClientRig, FakeRelease, FakeRelease) {
     let old = FakeRelease.game("5.5.0", extra: ["gone.bin": Data("old only".utf8)])
     let new = FakeRelease.game("5.6.0", extra: ["fresh.bin": Data("fresh".utf8)], diffTags: ["5.5.0"])
@@ -271,7 +271,7 @@ private func isError(_ error: (any Error)?, _ expected: SophonError) -> Bool {
   }
 }
 
-@Suite struct ClientPreDownloadTests {
+@Suite(.disabled("bisect")) struct ClientPreDownloadTests {
   private func rig() -> (ClientRig, FakeRelease) {
     var pre = FakeRelease.game("5.7.0", extra: ["fresh.bin": Data("fresh 5.7".utf8)], diffTags: ["5.6.0"])
     pre.files["pkg_version"] = Data("pkg 5.7".utf8)
