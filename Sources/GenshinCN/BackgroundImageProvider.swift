@@ -103,6 +103,7 @@ public struct BackgroundImageProvider: Sendable {
 
   /// The directory holds at most one image, so any entry is the newest.
   private func cachedFiles() -> [URL] {
-    (try? fileManager.contentsOfDirectory(at: cacheDirectory, includingPropertiesForKeys: nil)) ?? []
+    (try? fileManager.contentsOfDirectory(
+      at: cacheDirectory, includingPropertiesForKeys: nil, options: .skipsHiddenFiles)) ?? []
   }
 }
