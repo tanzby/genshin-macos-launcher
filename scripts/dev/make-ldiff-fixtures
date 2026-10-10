@@ -1,0 +1,80 @@
+#!/usr/bin/env bash
+# Regenerates Tests/SophonTests/Fixtures/ldiff/: synthetic old/new files, their HDiffPatch diffs
+# (single-stream, uncompressed, like the CN ldiff files) and one ldiff that concatenates the diffs.
+# The committed outputs are what the tests read; tests never run hdiffz.
+#
+#   scripts/dev/make-ldiff-fixtures
+#
+# Needs git, a C/C++ compiler, make and python3. hdiffz is built from the same HDiffPatch tag that is
+# vendored in Sources/CHDiffPatch.
+set -euo pipefail
+
+TAG=v4.5.2
+ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
+OUT="$ROOT/Tests/SophonTests/Fixtures/ldiff"
+WORK="$(mktemp -d)"
+trap 'rm -rf "$WORK"' EXIT
+
+git clone --quiet --depth 1 --branch "$TAG" https://github.com/sisong/HDiffPatch.git "$WORK/HDiffPatch"
+make -C "$WORK/HDiffPatch" -j8 hdiffz LZMA=0 ZSTD=0 MD5=0 ZLIB=0 BZIP2=0 BSD=0 VCD=0 MT=0 DIR_DIFF=0 >/dev/null
+HDIFFZ="$WORK/HDiffPatch/hdiffz"
+
+mkdir -p "$OUT"
+rm -f "$OUT"/*
+
+python3 -I - "$OUT" "$HDIFFZ" <<'PY'
+import hashlib, json, subprocess, sys
+
+out, hdiffz = sys.argv[1], sys.argv[2]
+
+def stream(seed, count):
+    state = (seed * 0x9E3779B97F4A7C15 | 1) & 0xFFFFFFFFFFFFFFFF
+    data = bytearray()
+    for _ in range(count):
+        state ^= (state << 13) & 0xFFFFFFFFFFFFFFFF
+        state ^= state >> 7
+        state ^= (state << 17) & 0xFFFFFFFFFFFFFFFF
+        data.append((state >> 24) & 0xFF)
+    return bytes(data)
+
+old1 = stream(1, 48 * 1024)
+# Same size: a block in the middle is replaced.
+new1 = old1[:20000] + stream(11, 4096) + old1[24096:]
+old2 = stream(2, 40 * 1024)
+# Different size: a block is replaced by a longer one and the tail is cut.
+new2 = old2[:5000] + stream(22, 9000) + old2[8000:36000]
+old3 = stream(3, 16 * 1024)
+# Almost everything is new.
+new3 = stream(33, 20 * 1024) + old3[:1024]
+
+pairs = [("a", old1, new1), ("b", old2, new2), ("c", old3, new3)]
+prefix = b"LDIFF-FIXTURE-PREFIX:"  # ldiff files hold many diffs; each one is read from its offset
+ldiff = bytearray(prefix)
+meta = {"files": []}
+md5 = lambda b: hashlib.md5(b).hexdigest()
+for name, old, new in pairs:
+    open(f"{out}/{name}.old", "wb").write(old)
+    open(f"{out}/{name}.new", "wb").write(new)
+    # a and b use the default format, which is what the real ldiff files are (header "HDIFF13&" followed by
+    # an empty compressor name). c is a single-stream diff (-SD), also accepted by the patcher.
+    single = name == "c"
+    args = [hdiffz, "-m-1"] + (["-SD"] if single else []) + ["-f", f"{out}/{name}.old", f"{out}/{name}.new", f"{out}/{name}.hdiff"]
+    subprocess.run(args, check=True, stdout=subprocess.DEVNULL)
+    diff = open(f"{out}/{name}.hdiff", "rb").read()
+    assert diff.startswith(b"HDIFFSF20&" if single else b"HDIFF13&\x00"), diff[:12]
+    meta["files"].append({
+        "name": name, "singleStream": single, "offset": len(ldiff), "length": len(diff),
+        "oldSize": len(old), "oldMD5": md5(old), "newSize": len(new), "newMD5": md5(new),
+    })
+    ldiff += diff
+ldiff += b":SUFFIX"
+meta["ldiffSize"] = len(ldiff)
+open(f"{out}/fixture.ldiff", "wb").write(ldiff)
+json.dump(meta, open(f"{out}/meta.json", "w"), indent=2)
+open(f"{out}/meta.json", "a").write("\n")
+for name, _, _ in pairs:
+    import os
+    os.remove(f"{out}/{name}.hdiff")
+PY
+
+ls -l "$OUT"

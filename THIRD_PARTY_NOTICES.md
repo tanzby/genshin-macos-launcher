@@ -8,6 +8,7 @@ This project builds on, bundles or links the following. Notices are added as eac
 | [Sparkle](https://github.com/sparkle-project/Sparkle) | Self-update | MIT |
 | [swift-protobuf](https://github.com/apple/swift-protobuf) | Sophon manifest parsing | Apache-2.0 |
 | [zstd](https://github.com/facebook/zstd) v1.5.7 (`Sources/CZstd`, decompressor only) | Decompressing Sophon manifests and chunks | BSD-3-Clause (dual BSD/GPLv2; used under BSD) |
+| [HDiffPatch](https://github.com/sisong/HDiffPatch) v4.5.2 (`Sources/CHDiffPatch/hpatch`, patcher only, commit f62556a) | Applying Sophon ldiff patches | MIT |
 | protonextras (`Resources/protonextras/`) | Four Windows files copied into the Wine prefix for the Steam patch; see below | Proton: BSD-3-Clause; Wine-derived parts: LGPL-2.1-or-later |
 | Wine (CrossOver 11.0-1 build, yaagl/anime-game-wine) | Downloaded at install time into the data directory, not bundled | LGPL-2.1-or-later (CrossOver sources: see upstream) |
 | [DXMT](https://github.com/3Shain/dxmt) (build 654f547 from yaagl/anime-game-wine) | Downloaded at install time and copied into the Wine runtime, not bundled | See upstream repository |
