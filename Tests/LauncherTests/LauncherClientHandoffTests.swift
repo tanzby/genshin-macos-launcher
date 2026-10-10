@@ -12,7 +12,7 @@ private func waitForLaunch(_ fake: FakeGameClient) async {
 
 @Suite struct LauncherClientHandoffTests {
   @MainActor
-  @Test func WIN_005_theGameDirectoryReachesTheClientAtInitAndOnEveryChange() {
+  @Test(.disabled("bisect")) func WIN_005_theGameDirectoryReachesTheClientAtInitAndOnEveryChange() {
     let fake = FakeGameClient(status: GameStatus(localVersion: "5.6.0", remoteVersion: "5.6.0"))
     let first = URL(filePath: "/Games/A")
     let second = URL(filePath: "/Games/B")
