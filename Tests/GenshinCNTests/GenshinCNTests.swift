@@ -4,11 +4,9 @@ import Testing
 @testable import GenshinCN
 
 @Suite struct GenshinCNTests {
-  @Test func clientIsAGameClientWithoutImplementationYet() async {
-    let client: any GameClient = GenshinCNClient()
-    await #expect(throws: GenshinCNClientError.notImplemented) {
-      try await client.status()
-    }
+  @Test func clientIsAGameClientAndKeepsTheBundledBackgroundUntilTicket39() async {
+    let rig = ClientRig(main: .game("5.6.0"))
+    let client: any GameClient = rig.client
     #expect(await client.backgroundImage() == .bundledDefault)
     #expect(GenshinCN.channel == "hk4ecn")
   }

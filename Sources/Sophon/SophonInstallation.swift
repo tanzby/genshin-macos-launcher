@@ -57,10 +57,12 @@ public enum SophonInstallation {
   }
 
   static func configVersion(in gameDirectory: URL) -> String? {
-    guard let text = try? String(contentsOf: gameDirectory.appending(path: configFileName), encoding: .utf8),
-      let match = text.firstMatch(of: versionLine)
-    else { return nil }
-    return String(match.output.1)
+    // Not exactly one `game_version=` line counts as no usable config, the same rule `writeVersion` applies.
+    guard let text = try? String(contentsOf: gameDirectory.appending(path: configFileName), encoding: .utf8) else {
+      return nil
+    }
+    let matches = text.matches(of: versionLine)
+    return matches.count == 1 ? String(matches[0].output.1) : nil
   }
 
   /// INS-005: a fresh install needs an empty directory, or one an interrupted install left behind (its
@@ -99,5 +101,26 @@ public enum SophonInstallation {
     for name in [".tmp", "ldiff"] {
       try? fileManager.removeItem(at: gameDirectory.appending(path: name))
     }
+  }
+
+  /// INS-006: the quick check after a download. Every file is there with the size the manifest says.
+  public static func verifySizes(of files: [SophonFile], in gameDirectory: URL) throws {
+    for file in files where !file.isDirectory {
+      guard try size(of: file, in: gameDirectory) == file.size else {
+        throw SophonError.verificationFailed(path: file.path)
+      }
+    }
+  }
+
+  /// Bytes of the files that are missing or have the wrong size. Looks at sizes only, never hashes.
+  public static func bytesToFetch(for files: [SophonFile], in gameDirectory: URL) throws -> Int64 {
+    try files.filter { !$0.isDirectory }.reduce(Int64(0)) { sum, file in
+      try size(of: file, in: gameDirectory) == file.size ? sum : sum + file.size
+    }
+  }
+
+  private static func size(of file: SophonFile, in gameDirectory: URL) throws -> Int64? {
+    let url = try SophonPathPolicy.resolve(file.path, in: gameDirectory)
+    return ((try? FileManager.default.attributesOfItem(atPath: url.path))?[.size] as? NSNumber)?.int64Value
   }
 }
