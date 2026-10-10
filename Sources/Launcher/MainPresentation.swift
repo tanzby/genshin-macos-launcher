@@ -59,6 +59,8 @@ public struct MainPresentation: Sendable, Equatable {
   public var settingsAvailable: Bool { true }
   /// "Check file integrity" is offered only for an installed, current game while nothing exclusive runs.
   public var canRepair: Bool
+  /// The "Pre-download" button is offered (also next to an error, so a failed pre-download can be retried).
+  public var canPreDownload: Bool
 
   public static func derive(_ s: MainSnapshot) -> MainPresentation {
     let installed = s.status?.localVersion != nil
@@ -67,7 +69,9 @@ public struct MainPresentation: Sendable, Equatable {
       && s.status?.canUpdate != true
 
     func make(_ button: PrimaryButton, _ enabled: Bool, _ status: StatusLine) -> MainPresentation {
-      MainPresentation(button: button, buttonEnabled: enabled, status: status, canRepair: repairable)
+      MainPresentation(
+        button: button, buttonEnabled: enabled, status: status, canRepair: repairable,
+        canPreDownload: installed && idleLike && !s.isPreDownloading && s.status?.canPreDownload == true)
     }
 
     switch s.phase {

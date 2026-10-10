@@ -7,15 +7,20 @@ import Testing
 final class FakeDelivery: NotificationDelivering, Sendable {
   private let state = Mutex<(delivered: [AppNotification], authorizeCalls: Int)>((delivered: [], authorizeCalls: 0))
   let granted: Bool
-  init(granted: Bool) { self.granted = granted }
+  let accepts: Bool
+  init(granted: Bool, accepts: Bool = true) {
+    self.granted = granted
+    self.accepts = accepts
+  }
   var delivered: [AppNotification] { state.withLock { $0.delivered } }
   var authorizeCalls: Int { state.withLock { $0.authorizeCalls } }
   func authorize() async -> Bool {
     state.withLock { $0.authorizeCalls += 1 }
     return granted
   }
-  func deliver(_ notification: AppNotification) async {
+  func deliver(_ notification: AppNotification) async -> Bool {
     state.withLock { $0.delivered.append(notification) }
+    return accepts
   }
 }
 
@@ -88,6 +93,18 @@ private func notifier(_ delivery: FakeDelivery) -> EventNotifier {
     defaults.removePersistentDomain(forName: suite)
     let update = GameStatus(localVersion: "5.0.0", remoteVersion: "5.1.0", canUpdate: true)
     await EventNotifier(delivery: FakeDelivery(granted: false), defaults: defaults).observe(status: update)
+    let later = FakeDelivery(granted: true)
+    await EventNotifier(delivery: later, defaults: defaults).observe(status: update)
+    #expect(later.delivered == [.updateAvailable(version: "5.1.0")])
+  }
+
+  @Test func aNotificationTheSystemRejectedIsAnnouncedAgainLater() async {
+    let suite = "yaagl-notify-\(UUID().uuidString)"
+    let defaults = UserDefaults(suiteName: suite)!
+    defaults.removePersistentDomain(forName: suite)
+    let update = GameStatus(localVersion: "5.0.0", remoteVersion: "5.1.0", canUpdate: true)
+    await EventNotifier(delivery: FakeDelivery(granted: true, accepts: false), defaults: defaults)
+      .observe(status: update)
     let later = FakeDelivery(granted: true)
     await EventNotifier(delivery: later, defaults: defaults).observe(status: update)
     #expect(later.delivered == [.updateAvailable(version: "5.1.0")])

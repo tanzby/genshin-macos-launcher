@@ -13,7 +13,8 @@ public enum AppNotification: Sendable, Equatable {
 /// such as an ad-hoc signed app the system will not authorize) is just `false`.
 public protocol NotificationDelivering: Sendable {
   func authorize() async -> Bool
-  func deliver(_ notification: AppNotification) async
+  /// True only when the system accepted the notification; a transient failure must not count as sent.
+  func deliver(_ notification: AppNotification) async -> Bool
 }
 
 /// Turns `JobEvent`s and status changes into notifications. Without authorization it does nothing, silently.
@@ -55,12 +56,11 @@ public final class EventNotifier {
     }
   }
 
-  /// True when the notification was handed to the system.
+  /// True when the system accepted the notification.
   @discardableResult
   private func post(_ notification: AppNotification) async -> Bool {
     if authorization == nil { authorization = await delivery.authorize() }
     guard authorization == true else { return false }
-    await delivery.deliver(notification)
-    return true
+    return await delivery.deliver(notification)
   }
 }

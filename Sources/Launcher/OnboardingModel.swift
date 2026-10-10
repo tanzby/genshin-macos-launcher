@@ -19,6 +19,9 @@ public final class OnboardingModel {
   public private(set) var hostsStatus: HostsBlocklist.Status?
   public private(set) var hostsError: String?
   public private(set) var isApplyingHosts = false
+  /// The saved game folder still exists. A folder on an unmounted or renamed volume sends the user back to
+  /// the picker instead of failing every install and launch against a dead path.
+  public private(set) var gameDirectoryUsable = true
 
   private let hosts: any HostsBlocking
   private let settings: SettingsModel
@@ -32,7 +35,7 @@ public final class OnboardingModel {
 
   public var step: Step {
     if !allowsLaunch { return .hosts }
-    return settings.gameDirectory == nil ? .gameDirectory : .done
+    return settings.gameDirectory == nil || !gameDirectoryUsable ? .gameDirectory : .done
   }
 
   public var isComplete: Bool { step == .done }
@@ -40,6 +43,16 @@ public final class OnboardingModel {
   /// Re-reads `/etc/hosts` (no privileges needed). An unreadable file counts as "not in place".
   public func refresh() {
     hostsError = readStatus()
+    checkGameDirectory()
+  }
+
+  private func checkGameDirectory() {
+    guard let url = settings.gameDirectory else {
+      gameDirectoryUsable = true
+      return
+    }
+    var isDirectory: ObjCBool = false
+    gameDirectoryUsable = FileManager.default.fileExists(atPath: url.path, isDirectory: &isDirectory) && isDirectory.boolValue
   }
 
   /// Returns the read error's description, nil on success.
@@ -71,5 +84,6 @@ public final class OnboardingModel {
 
   public func useGameDirectory(_ url: URL) {
     settings.gameDirectory = url
+    checkGameDirectory()
   }
 }

@@ -84,6 +84,19 @@ private func snapshot(
     #expect(active.status == .job(.preDownload, running, paused: false))
   }
 
+  @Test func APP_017_aFailedPreDownloadKeepsItsRetryEntry() {
+    let status = GameStatus(localVersion: "5.0.0", remoteVersion: "5.0.0", canPreDownload: true)
+    let failed = MainPresentation.derive(
+      snapshot(pending: PendingJob(kind: .preDownload), error: .client(.network), status: status))
+    #expect(failed.button == .launch)
+    #expect(failed.status == .error(.client(.network)))
+    #expect(failed.canPreDownload)
+    let running = MainPresentation.derive(
+      snapshot(phase: .preDownloading, preDownloading: true, status: status))
+    #expect(!running.canPreDownload)
+    #expect(!MainPresentation.derive(snapshot()).canPreDownload)
+  }
+
   @Test func APP_017_pendingPreDownloadIsNotAResumeOfTheMainButton() {
     let p = MainPresentation.derive(snapshot(pending: PendingJob(kind: .preDownload)))
     #expect(p.button == .launch)

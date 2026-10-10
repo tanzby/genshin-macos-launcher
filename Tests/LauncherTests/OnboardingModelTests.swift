@@ -33,6 +33,12 @@ private func settings() -> SettingsModel {
   return SettingsModel(defaults: defaults)
 }
 
+private func tempDirectory() -> URL {
+  let url = FileManager.default.temporaryDirectory.appending(path: "yaagl-onb-\(UUID().uuidString)")
+  try? FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
+  return url
+}
+
 @MainActor @Suite struct OnboardingModelTests {
   @Test func WIN_011_hostsBlockIsTheFirstRequiredStep() {
     let model = OnboardingModel(hosts: FakeHosts(.missing), settings: settings())
@@ -79,11 +85,13 @@ private func settings() -> SettingsModel {
 
   @Test func INS_001_chosenGameDirectoryCompletesOnboarding() {
     let settings = settings()
+    let dir = tempDirectory()
+    defer { try? FileManager.default.removeItem(at: dir) }
     let model = OnboardingModel(hosts: FakeHosts(.current), settings: settings)
     model.refresh()
     #expect(model.step == .gameDirectory)
-    model.useGameDirectory(URL(filePath: "/Volumes/Games/Genshin"))
-    #expect(settings.gameDirectory == URL(filePath: "/Volumes/Games/Genshin"))
+    model.useGameDirectory(dir)
+    #expect(settings.gameDirectory == dir)
     #expect(model.step == .done)
     #expect(model.isComplete)
   }
@@ -91,7 +99,9 @@ private func settings() -> SettingsModel {
   @Test func hostsStaysWatchedAfterOnboarding() {
     let hosts = FakeHosts(.current)
     let settings = settings()
-    settings.gameDirectory = URL(filePath: "/g")
+    let dir = tempDirectory()
+    defer { try? FileManager.default.removeItem(at: dir) }
+    settings.gameDirectory = dir
     let model = OnboardingModel(hosts: hosts, settings: settings)
     model.refresh()
     #expect(model.isComplete)
@@ -110,5 +120,18 @@ private func settings() -> SettingsModel {
     hosts.setStatus(.success(.current))
     model.refresh()
     #expect(model.hostsError == nil)
+  }
+
+  @Test func CFG_009_aVanishedGameFolderSendsTheUserBackToThePicker() throws {
+    let settings = settings()
+    let dir = tempDirectory()
+    settings.gameDirectory = dir
+    let model = OnboardingModel(hosts: FakeHosts(.current), settings: settings)
+    model.refresh()
+    #expect(model.isComplete)
+    try FileManager.default.removeItem(at: dir)  // the external drive went away
+    model.refresh()
+    #expect(model.step == .gameDirectory)
+    #expect(!model.isComplete)
   }
 }

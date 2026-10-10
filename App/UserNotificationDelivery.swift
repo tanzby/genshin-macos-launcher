@@ -33,7 +33,7 @@ struct UserNotificationDelivery: NotificationDelivering {
     }
   }
 
-  func deliver(_ notification: AppNotification) async {
+  func deliver(_ notification: AppNotification) async -> Bool {
     let content = UNMutableNotificationContent()
     content.title = String(localized: notification.title)
     content.body = String(localized: notification.body)
@@ -41,8 +41,10 @@ struct UserNotificationDelivery: NotificationDelivering {
     let request = UNNotificationRequest(identifier: UUID().uuidString, content: content, trigger: nil)
     do {
       try await UNUserNotificationCenter.current().add(request)
+      return true
     } catch {
       Self.log.info("notification not delivered: \(error.localizedDescription)")
+      return false
     }
   }
 }

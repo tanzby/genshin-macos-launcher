@@ -13,7 +13,9 @@ struct CapsuleView: View {
     GlassEffectContainer {
       HStack(spacing: 12) {
         if presentation.status != .none {
-          StatusArea(status: presentation.status, meter: meter, controller: controller)
+          StatusArea(
+            status: presentation.status, canPreDownload: presentation.canPreDownload, meter: meter,
+            controller: controller)
             .padding(.leading, 14)
             .transition(.opacity.combined(with: .move(edge: .trailing)))
         }
@@ -71,6 +73,7 @@ private struct MoreMenu: View {
 
 private struct StatusArea: View {
   let status: StatusLine
+  let canPreDownload: Bool
   let meter: ProgressMeter
   let controller: MainController
 
@@ -131,19 +134,15 @@ private struct StatusArea: View {
   }
 
   @ViewBuilder private var accessory: some View {
-    switch status {
-    case .preDownloadAvailable:
+    if canPreDownload {
       Button("Pre-download") { Task { await controller.preDownload() } }
         .buttonStyle(.glass)
         .controlSize(.large)
-    case .error(let error):
-      if let log = error.logURL {
-        Button("Show Log") { NSWorkspace.shared.activateFileViewerSelecting([log]) }
-          .buttonStyle(.glass)
-          .controlSize(.large)
-      }
-    default:
-      EmptyView()
+    }
+    if case .error(let error) = status, let log = error.logURL {
+      Button("Show Log") { NSWorkspace.shared.activateFileViewerSelecting([log]) }
+        .buttonStyle(.glass)
+        .controlSize(.large)
     }
   }
 }

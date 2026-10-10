@@ -37,7 +37,7 @@ public final class MainController {
 
   /// Installing needs a directory first; the view shows the picker when this is true.
   public func needsGameDirectory(for button: PrimaryButton) -> Bool {
-    button == .install && settings.gameDirectory == nil
+    button == .install && (settings.gameDirectory == nil || !onboarding.gameDirectoryUsable)
   }
 
   public func dismissActionError() { actionError = nil }
