@@ -23,11 +23,13 @@ final class UpdaterModel {
     self.updater = updater
     automaticallyChecksForUpdates = updater.automaticallyChecksForUpdates
     updater.publisher(for: \.canCheckForUpdates)
+      .receive(on: DispatchQueue.main)
       .sink { [weak self] value in
         MainActor.assumeIsolated { self?.canCheckForUpdates = value }
       }
       .store(in: &subscriptions)
     updater.publisher(for: \.automaticallyChecksForUpdates)
+      .receive(on: DispatchQueue.main)
       .sink { [weak self] value in
         MainActor.assumeIsolated {
           guard let self, self.automaticallyChecksForUpdates != value else { return }

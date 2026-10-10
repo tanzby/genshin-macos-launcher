@@ -14,7 +14,7 @@ Push a semver tag from `main` (`1.0.0-rc.1`, ..., `1.0.0`). `.github/workflows/r
 Needs two published rc tags and a real Mac, so it is a human step. Do it once the other 1.0.0 gates are green.
 
 1. Push `1.0.0-rc.1`; wait for the release workflow to publish. Download `Yaagl-1.0.0-rc.1.zip`, move the app to `/Applications` and launch it. Settings shows "Automatically check for updates" on.
-2. Push `1.0.0-rc.2`; wait for the publish. Confirm `releases/latest/download/appcast.xml` lists `1.0.0-rc.2` and carries an `sparkle:edSignature`.
+2. Push `1.0.0-rc.2`; wait for the publish. Confirm `releases/latest/download/appcast.xml` lists `1.0.0-rc.2` and carries a `sparkle:edSignature`.
 3. In rc.1 choose Yaagl > Check for Updates…. Sparkle must offer rc.2, install it and relaunch; About shows rc.2.
 4. Turn the Settings toggle off, quit, relaunch: it stays off and no background check happens.
 5. If any step fails, fix and cut `rc.3` before tagging `1.0.0`.
