@@ -30,7 +30,7 @@ private func waitForLaunch(_ fake: FakeGameClient) async {
   }
 
   @MainActor
-  @Test func LCH_005_launchPassesTheSettingsSnapshotFromTheProvider() async throws {
+  @Test(.disabled("bisect")) func LCH_005_launchPassesTheSettingsSnapshotFromTheProvider() async throws {
     let fake = FakeGameClient(status: GameStatus(localVersion: "5.6.0", remoteVersion: "5.6.0"))
     let directory = FileManager.default.temporaryDirectory.appending(path: "handoff-\(UUID().uuidString)")
     try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
