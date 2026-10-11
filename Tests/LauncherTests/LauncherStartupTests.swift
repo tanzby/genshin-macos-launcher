@@ -62,6 +62,8 @@ private struct Harness {
   let probe: StepsProbe
   let model: LauncherModel
   let directory: URL
+  /// The launch watchdog sleeps on this instead of the real clock, like the other launch tests.
+  let sleeper = ManualSleeper()
 
   init(wine wineStatus: WineStatus, rosetta: Bool = true) {
     wine = FakeWinePreparer(status: wineStatus)
@@ -69,8 +71,10 @@ private struct Harness {
     probe = StepsProbe(fake: fake, rosetta: rosetta)
     directory = FileManager.default.temporaryDirectory.appending(path: "LauncherStartupTests-\(UUID().uuidString)")
     try! FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    let sleeper = sleeper
     model = LauncherModel(
-      client: fake, wine: wine, startup: probe.steps, gameDirectory: directory, chunkTempMargin: 0)
+      client: fake, wine: wine, startup: probe.steps, gameDirectory: directory, chunkTempMargin: 0,
+      sleep: { try await sleeper.sleep($0) })
   }
 
   func cleanUp() { try? FileManager.default.removeItem(at: directory) }
@@ -235,17 +239,96 @@ private struct Harness {
 }
 
 @MainActor @Suite struct WIN_005_ReinstallTests {
-  @Test func WIN_005_aThrownLaunchErrorIsReported() async throws {
+  private func failLaunchWithReinstall(_ h: Harness) async throws {
+    await h.model.bootstrap()
+    try await h.model.launch()
+    try await h.fake.nextLaunch()
+    h.fake.failLaunch(GameClientError.wineReinstallRequired)
+    await h.model.waitUntilIdle()
+  }
+
+  @Test func WIN_005_wineReinstallRequiredReturnsToPreparation() async throws {
+    let h = Harness(wine: .ready)
+    defer { h.cleanUp() }
+    try await failLaunchWithReinstall(h)
+    #expect(h.model.primaryAction == .prepareWine)
+    #expect(h.model.wineStatus != .ready)
+    await #expect(throws: LauncherError.wineNotReady) { try await h.model.launch() }
+
+    // the disk still says "ready"; re-reading it must not undo the request
+    await h.model.refreshWine()
+    #expect(h.model.primaryAction == .prepareWine)
+
+    try await h.model.prepareWine()
+    let install = try await h.wine.nextInstall()
+    #expect(h.wine.isReinstall(install: install), "ensureInstalled would return at once on a ready stamp")
+    h.wine.finish(install: install)
+    await h.model.waitUntilIdle()
+    #expect(h.model.wineStatus == .ready)
+    #expect(h.model.primaryAction == .launch)
+
+    // satisfied: later refreshes follow the disk again
+    h.wine.setStatus(missing)
+    await h.model.refreshWine()
+    h.wine.setStatus(.ready)
+    await h.model.refreshWine()
+    #expect(h.model.primaryAction == .launch)
+  }
+
+  @Test func WIN_005_aFailedReinstallStaysRequired() async throws {
+    let h = Harness(wine: .ready)
+    defer { h.cleanUp() }
+    try await failLaunchWithReinstall(h)
+    try await h.model.prepareWine()
+    let first = try await h.wine.nextInstall()
+    h.wine.fail(install: first, throwing: WineInstallError.dxmtArchiveInvalid)
+    await h.model.waitUntilIdle()
+    #expect(h.model.primaryAction == .prepareWine)
+
+    try await h.model.resume()
+    let second = try await h.wine.nextInstall()
+    #expect(h.wine.isReinstall(install: second))
+    h.wine.finish(install: second)
+    await h.model.waitUntilIdle()
+    #expect(h.model.primaryAction == .launch)
+  }
+}
+
+extension WIN_005_ReinstallTests {
+  @Test func WIN_005_aPausedReinstallStaysRequired() async throws {
     let h = Harness(wine: .ready)
     defer { h.cleanUp() }
     await h.model.bootstrap()
     try await h.model.launch()
     try await h.fake.nextLaunch()
-    print("DBG test failing launch")
-    h.fake.failLaunch(GameClientError.network)
-    print("DBG test failed launch")
+    h.fake.failLaunch(GameClientError.wineReinstallRequired)
     await h.model.waitUntilIdle()
-    print("DBG test idle")
-    #expect(h.model.lastError == .client(.network))
+    try await h.model.prepareWine()
+    _ = try await h.wine.nextInstall()
+    await h.model.pause()
+    #expect(h.model.primaryAction == .prepareWine)
+    try await h.model.resume()
+    let second = try await h.wine.nextInstall()
+    #expect(h.wine.isReinstall(install: second))
+    h.wine.finish(install: second)
+    await h.model.waitUntilIdle()
+  }
+}
+
+@MainActor @Suite struct WIN_005_RefreshWineTests {
+  @Test func WIN_005_preparationReadsTheWineStatusOnceAfterAnyOutcome() async throws {
+    for finish in [true, false] {
+      let h = Harness(wine: missing)
+      defer { h.cleanUp() }
+      let (task, install) = try await h.bootstrapUntilPreparing()
+      let before = h.wine.statusCalls
+      if finish {
+        h.wine.finish(install: install)
+      } else {
+        h.wine.fail(install: install, throwing: WineInstallError.dxmtArchiveInvalid)
+      }
+      await task.value
+      #expect(h.wine.statusCalls - before == 1)
+    }
   }
 }
