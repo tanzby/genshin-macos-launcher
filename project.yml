@@ -18,10 +18,6 @@ settings:
 packages:
   YaaglKit:
     path: .
-  # Exact, not in Package.resolved (#87). Bump it together with sparkle_version in scripts/dev/sparkle-local-check.
-  Sparkle:
-    url: https://github.com/sparkle-project/Sparkle
-    exactVersion: 2.10.0
 targets:
   Yaagl:
     type: application
@@ -79,8 +75,8 @@ targets:
         product: Platform
       - package: YaaglKit
         product: Wine
-      - package: Sparkle
-        product: Sparkle
+      - package: YaaglKit
+        product: Updates
       - target: YaaglWineShim
         embed: true
         link: false

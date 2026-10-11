@@ -1,5 +1,5 @@
 import Combine
-import Sparkle
+import Updates
 import SwiftUI
 
 /// SwiftUI-facing wrapper around `SPUUpdater`: the menu command observes

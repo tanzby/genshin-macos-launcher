@@ -7,7 +7,8 @@ import PackageDescription
 //   Wine      -> Platform
 //   Sophon    -> swift-protobuf, CZstd (vendored facebook/zstd, decompression only),
 //                CHDiffPatch (vendored sisong/HDiffPatch v4.5.2, patching only)
-// The SwiftUI app (project.yml) sits on top of Launcher and GenshinCN.
+//   Updates   -> Sparkle (re-exported for the app, so Package.resolved pins it, #87)
+// The SwiftUI app (project.yml) sits on top of Launcher, GenshinCN and Updates.
 let package = Package(
   name: "YaaglKit",
   platforms: [.macOS(.v26)],
@@ -17,9 +18,11 @@ let package = Package(
     .library(name: "Wine", targets: ["Wine"]),
     .library(name: "GenshinCN", targets: ["GenshinCN"]),
     .library(name: "Launcher", targets: ["Launcher"]),
+    .library(name: "Updates", targets: ["Updates"]),
   ],
   dependencies: [
-    .package(url: "https://github.com/apple/swift-protobuf.git", from: "1.38.1")
+    .package(url: "https://github.com/apple/swift-protobuf.git", from: "1.38.1"),
+    .package(url: "https://github.com/sparkle-project/Sparkle", from: "2.10.0"),
   ],
   targets: [
     // facebook/zstd v1.5.7, decompressor only. Assembly is disabled so the target builds without .S files.
@@ -40,6 +43,7 @@ let package = Package(
     .target(name: "Wine", dependencies: ["Platform"]),
     .target(name: "Launcher", dependencies: ["Platform", "Wine"]),
     .target(name: "GenshinCN", dependencies: ["Launcher", "Sophon", "Wine", "Platform"]),
+    .target(name: "Updates", dependencies: [.product(name: "Sparkle", package: "Sparkle")]),
 
     .testTarget(
       name: "SophonTests",

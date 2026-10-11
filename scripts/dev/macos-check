@@ -6,7 +6,7 @@ cd "$(dirname "$0")/../.."
 scripts/dev/parity-coverage --strict
 swift test
 xcodegen generate
-scripts/dev/keep-package-resolved xcodebuild -project Yaagl.xcodeproj -scheme Yaagl -configuration Debug \
+xcodebuild -project Yaagl.xcodeproj -scheme Yaagl -configuration Debug \
   -destination 'platform=macOS,arch=arm64' -derivedDataPath build/DerivedData build
 
 scripts/dev/check-bundle

@@ -18,7 +18,7 @@ repo=$PWD
 work=${SPARKLE_CHECK_DIR:-$HOME/Library/Caches/yaagl-sparkle-test}
 port=${SPARKLE_CHECK_PORT:-18765}
 domain=io.github.tanzby.yaagl
-sparkle_version=2.10.0 # the exactVersion of Sparkle in project.yml
+sparkle_version=2.10.0 # the Sparkle pin in Package.resolved
 sparkle_sha256=c2bf58aa8387266ac179357b1415d6f2635f044da8be41042af32425dae6da0c
 app=$work/app/Yaagl.app
 data=$work/data
@@ -107,7 +107,7 @@ rm -rf "$work/stage" "$work/serve"
 mkdir -p "$work/stage" "$work/serve"
 for n in 1 2; do
   version=1.0.0-test.$n
-  scripts/dev/keep-package-resolved xcodebuild -project Yaagl.xcodeproj -scheme Yaagl -configuration Release \
+  xcodebuild -project Yaagl.xcodeproj -scheme Yaagl -configuration Release \
     -destination 'platform=macOS,arch=arm64' -derivedDataPath "$work/derived" \
     MARKETING_VERSION="$version" CURRENT_PROJECT_VERSION="900$n" build >"$work/build-$n.log" 2>&1 \
     || { tail -20 "$work/build-$n.log"; exit 1; }
