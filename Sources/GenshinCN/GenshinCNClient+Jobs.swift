@@ -153,7 +153,7 @@ extension GenshinCNClient {
     do {
       switch job {
       case .install:
-        return try await mainRelease().ref.stats?.uncompressedSize ?? 0
+        return try Self.sizes(of: await mainRelease().ref.stats).uncompressedSize
       case .repair:
         _ = try installedVersion(in: directory)
         let (_, _, manifest) = try await mainReleaseWithManifest()
@@ -162,19 +162,25 @@ extension GenshinCNClient {
         let installed = try installedVersion(in: directory)
         let (main, ref) = try await mainRelease()
         guard SophonVersion.isOlder(installed, than: main.tag) else { return 0 }
-        guard main.diffTags.contains(installed) else { return ref.stats?.uncompressedSize ?? 0 }
-        let stats = try await diffManifestRef(for: main).patchStats[installed]
+        guard main.diffTags.contains(installed) else { return try Self.sizes(of: ref.stats).uncompressedSize }
+        let stats = try Self.sizes(of: await diffManifestRef(for: main).patchStats[installed])
         let temp = SophonInstallation.tempDirectory(in: directory)
         let downloaded = SophonUpdater.isPredownloaded(main.tag, from: installed, in: temp)
-        return (downloaded ? 0 : stats?.compressedSize ?? 0) + (stats?.uncompressedSize ?? 0)
+        return (downloaded ? 0 : stats.compressedSize) + stats.uncompressedSize
       case .preDownload:
         let installed = try installedVersion(in: directory)
         guard let pre = try await sophon.gameBranches().preDownload else { throw GenshinCNClientError.noPreDownload }
-        return try await diffManifestRef(for: pre).patchStats[installed]?.compressedSize ?? 0
+        return try Self.sizes(of: await diffManifestRef(for: pre).patchStats[installed]).compressedSize
       }
     } catch {
       throw Self.map(error)
     }
+  }
+
+  /// A manifest without statistics is a contract break; reading it as 0 bytes would skip the disk check.
+  private static func sizes(of stats: SophonStats?) throws -> SophonStats {
+    guard let stats else { throw SophonError.malformedResponse }
+    return stats
   }
 
   // MARK: - Shared steps
