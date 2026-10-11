@@ -67,11 +67,8 @@ public struct SophonAPI: Sendable {
   }
 
   private func downloadManifest(_ ref: SophonManifestRef) async throws -> Data {
-    var prefix = ref.manifestURLPrefix
-    while prefix.hasSuffix("/") { prefix.removeLast() }
-    guard let url = URL(string: "\(prefix)/\(ref.manifestID)\(ref.manifestURLSuffix)"),
-      url.scheme == "https"
-    else {
+    let prefix = try SophonDownloaderLayout.httpsBase(ref.manifestURLPrefix)
+    guard let url = URL(string: "\(prefix)/\(ref.manifestID)\(ref.manifestURLSuffix)") else {
       throw SophonError.malformedResponse
     }
     return try await send(URLRequest(url: url))

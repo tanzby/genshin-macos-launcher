@@ -85,14 +85,14 @@ public struct SophonUpdater: Sendable {
   public static func isPredownloaded(_ targetVersion: String, plan: SophonUpdatePlan, in tempDirectory: URL) -> Bool {
     guard isPredownloaded(targetVersion, from: plan.fromVersion, in: tempDirectory) else { return false }
     for ldiff in plan.ldiffs
-    where size(of: ldiffDirectory(in: tempDirectory).appending(path: ldiff.id)) != ldiff.size {
+    where ldiffDirectory(in: tempDirectory).appending(path: ldiff.id).fileSize != ldiff.size {
       return false
     }
     let chunkRoot = tempDirectory.appending(path: "chunks", directoryHint: .isDirectory)
     for file in plan.downloads {
       let directory = chunkRoot.appending(
         path: SophonDownloaderLayout.fileKey(for: file.path), directoryHint: .isDirectory)
-      for chunk in file.chunks where size(of: directory.appending(path: chunk.id)) != Int64(chunk.compressedSize) {
+      for chunk in file.chunks where directory.appending(path: chunk.id).fileSize != Int64(chunk.compressedSize) {
         return false
       }
     }
@@ -182,8 +182,7 @@ public struct SophonUpdater: Sendable {
     let total = candidates.reduce(Int64(0)) { $0 + max($1.file.size, $1.patch?.originalSize ?? 0) }
     let counter = VerifyCounter(total: total, interval: .milliseconds(250), report: progress)
     progress(.verifying(done: 0, total: total))
-    let limit = max(2, ProcessInfo.processInfo.activeProcessorCount - 4)
-    let verdicts = try await mapBounded(candidates, limit: limit) { candidate in
+    let verdicts = try await mapBounded(candidates, limit: SophonDownloaderLayout.verifyWorkers) { candidate in
       let verdict: Verdict = try await Offload.run { cancelled in
         let newFile = candidate.file
         let chunks = candidate.chunks
@@ -191,7 +190,7 @@ public struct SophonUpdater: Sendable {
         guard let patch = candidate.patch else { return .newFile(chunks) }
         // One read serves both questions when the patch rewrites the file in place.
         let inPlace = candidate.original == candidate.destination
-        let size = Self.size(of: candidate.destination)
+        let size = candidate.destination.fileSize
         let digest = (size == newFile.size || (inPlace && size == patch.originalSize))
           ? try MD5Hasher.hex(ofFileAt: candidate.destination, cancelled: cancelled) : nil
         if size == newFile.size, digest?.caseInsensitiveCompare(newFile.md5) == .orderedSame {
@@ -347,7 +346,7 @@ public struct SophonUpdater: Sendable {
     progress(.finalizing)
     for file in plan.expectedFiles {
       let url = try SophonPathPolicy.resolve(file.path, in: gameDirectory)
-      guard Self.size(of: url) == file.size else { throw SophonError.verificationFailed(path: file.path) }
+      guard url.fileSize == file.size else { throw SophonError.verificationFailed(path: file.path) }
     }
     for deleted in doomed {
       let url = try SophonPathPolicy.resolve(deleted.path, in: gameDirectory)
@@ -401,12 +400,9 @@ public struct SophonUpdater: Sendable {
 
   /// Size and MD5 both match. A missing file does not match.
   static func matches(_ url: URL, size: Int64, md5: String, cancelled: CancelFlag) throws -> Bool {
-    guard Self.size(of: url) == size else { return false }
+    guard url.fileSize == size else { return false }
     return try MD5Hasher.hex(ofFileAt: url, cancelled: cancelled).caseInsensitiveCompare(md5) == .orderedSame
   }
-
-  /// -1 for a missing file, so it never equals a size from a manifest.
-  static func size(of url: URL) -> Int64 { SophonDownloaderLayout.fileSize(at: url) ?? -1 }
 
   /// Also true for a dangling symlink.
   static func exists(_ url: URL) -> Bool {
@@ -432,7 +428,7 @@ public struct SophonUpdater: Sendable {
         return false
       }
       let ldiff = ldiffDirectory.appending(path: patch.patchID)
-      guard size(of: ldiff) == patch.patchSize else { return false }
+      guard ldiff.fileSize == patch.patchSize else { return false }
 
       let fileManager = FileManager.default
       try fileManager.createDirectory(at: patchDirectory, withIntermediateDirectories: true)

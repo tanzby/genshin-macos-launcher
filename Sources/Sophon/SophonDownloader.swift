@@ -136,12 +136,10 @@ public struct SophonDownloader: Sendable {
     let destinations = try candidates.map { try SophonPathPolicy.resolve($0.path, in: gameDirectory) }
     let counter = VerifyCounter(total: total, interval: configuration.progressInterval, report: progress)
     progress(.verifying(done: 0, total: total))
-    // REP-003: checking is disk and CPU bound, so it uses about as many workers as there are cores.
-    let limit = max(2, ProcessInfo.processInfo.activeProcessorCount - 4)
-
-    let flags = try await mapBounded(Array(candidates.indices), limit: limit) { index in
-      let intact = try await Offload.run { try Self.isIntact(candidates[index], at: destinations[index], cancelled: $0) }
-      counter.add(candidates[index].size)
+    let pairs = Array(zip(candidates, destinations))
+    let flags = try await mapBounded(pairs, limit: SophonDownloaderLayout.verifyWorkers) { file, destination in
+      let intact = try await Offload.run { try Self.isIntact(file, at: destination, cancelled: $0) }
+      counter.add(file.size)
       return intact
     }
     progress(.verifying(done: total, total: total))
@@ -167,8 +165,7 @@ public struct SophonDownloader: Sendable {
 
   /// Size and MD5 both match. A size-only check lets corrupted files of the right size survive.
   static func isIntact(_ file: SophonFile, at url: URL, cancelled: CancelFlag) throws -> Bool {
-    guard SophonDownloaderLayout.fileSize(at: url) == file.size else { return false }
-    return try MD5Hasher.hex(ofFileAt: url, cancelled: cancelled).caseInsensitiveCompare(file.md5) == .orderedSame
+    try SophonUpdater.matches(url, size: file.size, md5: file.md5, cancelled: cancelled)
   }
 
   private static func process(
@@ -310,7 +307,7 @@ struct ResourceFetcher: Sendable {
 
   func fetch(name: String, url: URL, expected: Int64, to cached: URL, reporter: ChunkProgress) async throws {
     let fileManager = FileManager.default
-    var have = SophonDownloaderLayout.fileSize(at: cached) ?? 0
+    var have = cached.fileSize ?? 0
     if have > expected {
       try? fileManager.removeItem(at: cached)
       have = 0
@@ -382,7 +379,7 @@ struct ResourceFetcher: Sendable {
     try handle?.close()
     handle = nil
 
-    guard SophonDownloaderLayout.fileSize(at: cached) == expected else {
+    guard cached.fileSize == expected else {
       // Short or long body: drop it so the next attempt starts clean.
       try? fileManager.removeItem(at: cached)
       reporter.set(name, 0)
@@ -540,10 +537,8 @@ enum SophonDownloaderLayout {
 
   static let maxChunkSize: UInt32 = 64 << 20
 
-  /// Size in bytes, or nil when nothing is there (a dangling link counts as nothing).
-  static func fileSize(at url: URL) -> Int64? {
-    ((try? FileManager.default.attributesOfItem(atPath: url.path))?[.size] as? NSNumber)?.int64Value
-  }
+  /// REP-003: checking is disk and CPU bound, so it uses about as many workers as there are cores.
+  static var verifyWorkers: Int { max(2, ProcessInfo.processInfo.activeProcessorCount - 4) }
 
   /// A manifest's URL prefix without trailing slashes; it must be an https URL.
   static func httpsBase(_ prefix: String?) throws -> String {
@@ -639,5 +634,12 @@ enum SophonPathPolicy {
       throw SophonError.unsafePath(path)
     }
     return destination
+  }
+}
+
+extension URL {
+  /// Size in bytes, or nil when nothing is there (a dangling link counts as nothing).
+  var fileSize: Int64? {
+    ((try? FileManager.default.attributesOfItem(atPath: path))?[.size] as? NSNumber)?.int64Value
   }
 }

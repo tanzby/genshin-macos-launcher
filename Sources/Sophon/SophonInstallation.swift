@@ -127,6 +127,6 @@ public enum SophonInstallation {
 
   private static func size(of file: SophonFile, in gameDirectory: URL) throws -> Int64? {
     let url = try SophonPathPolicy.resolve(file.path, in: gameDirectory)
-    return SophonDownloaderLayout.fileSize(at: url)
+    return url.fileSize
   }
 }
