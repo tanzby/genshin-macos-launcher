@@ -51,7 +51,7 @@ public struct HostsBlocklist: Sendable {
     let sections = Self.sections(in: lines)
     guard let first = sections.first else { return .missing }
     let expected = Self.lines(of: Self.section(for: domains))
-    let actual = lines[first.range].map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+    let actual = lines[first.range].map(Self.trimmed)
     return sections.count == 1 && first.terminated && actual == expected ? .current : .outdated
   }
 
@@ -119,13 +119,13 @@ public struct HostsBlocklist: Sendable {
     var found: [FoundSection] = []
     var index = 0
     while index < lines.count {
-      guard lines[index].trimmingCharacters(in: .whitespacesAndNewlines) == beginMarker else {
+      guard trimmed(lines[index]) == beginMarker else {
         index += 1
         continue
       }
       var end = index + 1
       var terminated = false
-      if let close = lines[end...].firstIndex(where: { $0.trimmingCharacters(in: .whitespacesAndNewlines) == endMarker }),
+      if let close = lines[end...].firstIndex(where: { trimmed($0) == endMarker }),
         lines[end..<close].allSatisfy(isOwnLine)
       {
         end = close + 1
@@ -139,19 +139,19 @@ public struct HostsBlocklist: Sendable {
     return found
   }
 
-  private static func isBeginMarker(_ line: String) -> Bool {
-    line.trimmingCharacters(in: .whitespacesAndNewlines) == beginMarker
+  private static func trimmed(_ line: String) -> String {
+    line.trimmingCharacters(in: .whitespacesAndNewlines)
   }
 
   /// Inside a terminated section only comments and 0.0.0.0 routes can be ours; anything else means
   /// the end marker belongs to somebody else's block.
   private static func isOwnLine(_ line: String) -> Bool {
-    let line = line.trimmingCharacters(in: .whitespacesAndNewlines)
+    let line = trimmed(line)
     return (line.hasPrefix("#") && line != beginMarker) || line.hasPrefix("0.0.0.0 ")
   }
 
   private static func isManagedLine(_ line: String) -> Bool {
-    let line = line.trimmingCharacters(in: .whitespacesAndNewlines)
+    let line = trimmed(line)
     return line == warning || line.hasPrefix("0.0.0.0 ")
   }
 

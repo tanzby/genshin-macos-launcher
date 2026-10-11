@@ -37,18 +37,10 @@ public struct SystemProcessRunner: ProcessRunning {
     environment: [String: String],
     workingDirectory: URL?
   ) async throws -> ProcessResult {
-    guard isAllowed(executable) else {
-      throw ProcessRunnerError.executableNotAllowed(executable.path)
-    }
-    let process = Process()
-    process.executableURL = executable
-    process.arguments = arguments
-    process.environment = ProcessInfo.processInfo.environment.merging(environment) { _, new in new }
-    process.currentDirectoryURL = workingDirectory
+    let process = try makeProcess(executable, arguments, environment, workingDirectory)
     let pipe = Pipe()
     process.standardOutput = pipe
     process.standardError = pipe
-    process.standardInput = FileHandle.nullDevice
 
     return try await withTaskCancellationHandler {
       try await withCheckedThrowingContinuation { continuation in
@@ -67,9 +59,7 @@ public struct SystemProcessRunner: ProcessRunning {
               output: String(decoding: collected.value, as: UTF8.self)))
         }
         do {
-          try process.run()
-          // Cancelled before the process existed: onCancel found nothing to stop, so do it (with the KILL fallback).
-          if Task.isCancelled { Self.terminate(process, after: terminationGrace) }
+          try start(process)
         } catch {
           pipe.fileHandleForReading.readabilityHandler = nil
           continuation.resume(throwing: error)
@@ -87,28 +77,18 @@ public struct SystemProcessRunner: ProcessRunning {
     workingDirectory: URL?,
     logFile: URL
   ) async throws -> Int32 {
-    guard isAllowed(executable) else {
-      throw ProcessRunnerError.executableNotAllowed(executable.path)
-    }
+    let process = try makeProcess(executable, arguments, environment, workingDirectory)
     try Data().write(to: logFile)
     let handle = try FileHandle(forWritingTo: logFile)
     defer { try? handle.close() }
-    let process = Process()
-    process.executableURL = executable
-    process.arguments = arguments
-    process.environment = ProcessInfo.processInfo.environment.merging(environment) { _, new in new }
-    process.currentDirectoryURL = workingDirectory
     process.standardOutput = handle
     process.standardError = handle
-    process.standardInput = FileHandle.nullDevice
 
     return try await withTaskCancellationHandler {
       try await withCheckedThrowingContinuation { continuation in
         process.terminationHandler = { continuation.resume(returning: $0.terminationStatus) }
         do {
-          try process.run()
-          // Cancelled before the process existed: onCancel found nothing to stop, so do it (with the KILL fallback).
-          if Task.isCancelled { Self.terminate(process, after: terminationGrace) }
+          try start(process)
         } catch {
           continuation.resume(throwing: error)
         }
@@ -116,6 +96,27 @@ public struct SystemProcessRunner: ProcessRunning {
     } onCancel: {
       Self.terminate(process, after: terminationGrace)
     }
+  }
+
+  private func makeProcess(
+    _ executable: URL, _ arguments: [String], _ environment: [String: String], _ workingDirectory: URL?
+  ) throws -> Process {
+    guard isAllowed(executable) else {
+      throw ProcessRunnerError.executableNotAllowed(executable.path)
+    }
+    let process = Process()
+    process.executableURL = executable
+    process.arguments = arguments
+    process.environment = ProcessInfo.processInfo.environment.merging(environment) { _, new in new }
+    process.currentDirectoryURL = workingDirectory
+    process.standardInput = FileHandle.nullDevice
+    return process
+  }
+
+  private func start(_ process: Process) throws {
+    try process.run()
+    // Cancelled before the process existed: onCancel found nothing to stop, so do it (with the KILL fallback).
+    if Task.isCancelled { Self.terminate(process, after: terminationGrace) }
   }
 
   /// SIGTERM, then SIGKILL if the process is still there after a grace period (Wine loaders can ignore TERM).

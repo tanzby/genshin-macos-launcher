@@ -118,7 +118,7 @@ public struct Downloader: Downloading {
   }
 
   public static func fileSize(_ url: URL) -> Int64 {
-    ((try? FileManager.default.attributesOfItem(atPath: url.path)[.size] as? Int64) ?? nil) ?? 0
+    (try? FileManager.default.attributesOfItem(atPath: url.path))?[.size] as? Int64 ?? 0
   }
 
   /// Streaming SHA-256 so a 450 MB archive is never held in memory.
@@ -168,7 +168,7 @@ private final class StreamingDelegate: NSObject, URLSessionDataDelegate, @unchec
     completionHandler: @escaping (URLSession.ResponseDisposition) -> Void
   ) {
     guard let http = response as? HTTPURLResponse else {
-      fail(URLError(.badServerResponse), dataTask, completionHandler)
+      fail(URLError(.badServerResponse), completionHandler)
       return
     }
     do {
@@ -197,7 +197,7 @@ private final class StreamingDelegate: NSObject, URLSessionDataDelegate, @unchec
       }
       completionHandler(finishedWithoutBody ? .cancel : .allow)
     } catch {
-      fail(error, dataTask, completionHandler)
+      fail(error, completionHandler)
     }
   }
 
@@ -231,10 +231,7 @@ private final class StreamingDelegate: NSObject, URLSessionDataDelegate, @unchec
     }
   }
 
-  private func fail(
-    _ error: any Error, _ task: URLSessionDataTask,
-    _ completionHandler: (URLSession.ResponseDisposition) -> Void
-  ) {
+  private func fail(_ error: any Error, _ completionHandler: (URLSession.ResponseDisposition) -> Void) {
     lock.withLock { failure = failure ?? error }
     completionHandler(.cancel)
   }
