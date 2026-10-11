@@ -1,3 +1,3 @@
-# docs instructions
+# Project documentation
 
-Project decisions and procedures are documented here. Update an existing authoritative guide before creating a duplicate; root `AGENTS.md` links the agent-facing workflow and retrospective.
+This directory records native runtime behavior, accepted architecture, historical research, parity with the archived launcher, and project memory. Accepted architecture is cataloged under `adr/`.

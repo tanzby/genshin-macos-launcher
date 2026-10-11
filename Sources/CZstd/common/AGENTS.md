@@ -1,3 +1,3 @@
-# common instructions
+# Zstandard common primitives
 
-Vendored Zstandard common primitives used by the decompressor. Preserve upstream source and license; do not expand the compression surface accidentally.
+These vendored common routines support the decompressor target; they are not an independent compression interface.

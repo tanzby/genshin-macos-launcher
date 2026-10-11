@@ -1,3 +1,3 @@
-# workflows instructions
+# Workflow contracts
 
-Keep the required `swift` job calling `scripts/dev/macos-check`. Release and DXMT gates must match their scripts and `docs/release.md`.
+The `swift` job in `ci.yaml` runs `scripts/dev/macos-check`. `dxmt.yaml` produces the DXMT artifact consumed by `release.yaml`; `live-contract.yaml` is separate service-contract coverage.

@@ -21,6 +21,10 @@
 - Keep the current turn active through review, CI, merge, and cleanup. Bound each command or status wait to 30 minutes, then check progress again. Save long command output in a task-specific log under `${TMPDIR:-/tmp}`; if a command stops making progress, inspect its log and process once, then resume from a safe point or report the concrete blocker.
 - Historical review-policy changes are recorded in [`retrospective-native-launcher-1.0.0.md`](retrospective-native-launcher-1.0.0.md).
 
+## Swift runtime note
+
+On Xcode 26.6, a closure literal used as the default value for an async-closure parameter can abort at runtime (#48). A named function is the supported default.
+
 ## Merge and cleanup
 
 - Squash-merge after review and the required check pass. Then remove the worktree and branch, fast-forward the main checkout, and remove temporary files.

@@ -1,3 +1,3 @@
-# Helpers instructions
+# Helper executables
 
-These C/Objective-C helpers are x86_64 processes built by XcodeGen. `Helpers/build.sh [--dev]` is the manual build path; preserve the external-process boundary documented in the root guide.
+The C and Objective-C helpers are separate x86_64 executables used by the app at the Wine boundary. Their app-target integration is defined in `project.yml`.

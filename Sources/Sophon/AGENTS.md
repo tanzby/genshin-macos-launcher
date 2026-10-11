@@ -1,3 +1,3 @@
-# Sophon instructions
+# Sophon module
 
-Sophon manifests, chunk downloads, Zstd decoding, and ldiff patching live here. Use the vendored decoder/patcher only for their documented roles and keep fixtures focused on protocol behavior.
+This module owns Sophon manifests, chunk downloads, Zstandard decoding, and ldiff patching. It consumes the vendored decoder and patcher through their narrow interfaces; protocol behavior is represented in `Tests/SophonTests/Fixtures/`.

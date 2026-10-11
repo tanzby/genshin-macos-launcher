@@ -1,3 +1,3 @@
-# diag instructions
+# Runtime diagnostics
 
-Diagnostics inspect runtime state for troubleshooting. Keep them read-only where practical, bounded in time, and consistent with `docs/genshin-macos.md` game-verification procedure.
+These tools expose launcher, host, and game-window state for diagnosis. The `yaagl-diag` output includes `launcher.log` records emitted by `Sources/Diagnostics`.

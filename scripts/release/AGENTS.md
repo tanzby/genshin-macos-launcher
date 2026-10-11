@@ -1,3 +1,3 @@
-# release instructions
+# Release artifact checks
 
-Release verification tools live here. Keep checks aligned with `docs/release.md` and CI; never embed signing credentials or private keys in the repository.
+This directory contains validation of signed update artifacts. Sparkle update metadata and app-side update state are owned by `Sources/Updates` and `App/Updates`.

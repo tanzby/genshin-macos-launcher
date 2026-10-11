@@ -1,3 +1,3 @@
-# ldiff instructions
+# ldiff fixtures
 
-Binary ldiff fixtures keep old/new pairs and metadata aligned. Follow [`../AGENTS.md`](../AGENTS.md) to regenerate the complete set.
+Each binary patch sample belongs to an old/new payload pair and matching metadata in the parent fixture collection.

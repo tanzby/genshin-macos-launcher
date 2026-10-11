@@ -1,3 +1,3 @@
-# Updates instructions
+# Updates module
 
-This module exposes Sparkle to the app. Keep package pinning and release tooling versions aligned with `Package.swift`, `.github/workflows/release.yaml`, and `scripts/dev/sparkle-local-check`.
+This module exposes Sparkle's update controller to the app. The app-facing presentation and state are in `App/Updates`.

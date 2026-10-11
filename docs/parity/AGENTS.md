@@ -1,3 +1,3 @@
-# parity instructions
+# Native parity map
 
-Parity documents map native behavior to the archived TypeScript launcher. Keep code-relevant gaps linked to specific implementation/tests; source `file:line` references target the old repository.
+These documents compare native behavior with the archived TypeScript launcher. Historical `file:line` references point to that repository.

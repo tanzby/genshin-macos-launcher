@@ -1,3 +1,3 @@
-# Proto instructions
+# Sophon wire schemas
 
-Keep each `.proto` schema paired with its generated `.pb.swift` file. Regenerate or update both together when the wire schema changes; schemas are excluded from the Swift target in `Package.swift`.
+Each `.proto` schema corresponds to generated `.pb.swift` models. Together they define the wire format for Sophon manifests.

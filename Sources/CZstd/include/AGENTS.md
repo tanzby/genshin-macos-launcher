@@ -1,3 +1,3 @@
-# include instructions
+# Zstandard headers
 
-Vendored public Zstandard headers used by the decompressor. Keep the version aligned with the C sources and retain upstream notices.
+These public Zstandard headers are the C interface consumed by the decompressor target.

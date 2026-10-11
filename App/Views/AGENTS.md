@@ -1,3 +1,3 @@
-# Views instructions
+# App views
 
-Keep views focused on presentation and bind them to app/module models. Follow [`../AGENTS.md`](../AGENTS.md) for localization rules.
+Views compose presentation from app and module state. Display text uses localization keys from the app's string catalog.

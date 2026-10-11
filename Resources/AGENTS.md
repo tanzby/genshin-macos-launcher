@@ -1,3 +1,3 @@
-# Resources instructions
+# Bundled resources
 
-Files here are packaged app inputs. Preserve provenance and licenses, and update the relevant bundle/build configuration when adding a resource.
+Files here are non-code inputs packaged with the app. Their provenance, licenses, and bundle placement are part of the resource contract.

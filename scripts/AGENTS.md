@@ -1,3 +1,3 @@
-# scripts instructions
+# Project scripts
 
-Scripts are the executable source of build, check, diagnostics, and release procedures. Read the closest script guide before changing behavior; keep CI and local entrypoints consistent.
+This tree contains executable implementations for application checks, diagnostics, fixture data, and release artifact validation. Their behavior is consumed by CI workflows and app/runtime contracts.

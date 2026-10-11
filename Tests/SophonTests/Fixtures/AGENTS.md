@@ -1,3 +1,3 @@
-# Fixtures instructions
+# Sophon fixtures
 
-Checked-in protocol fixtures keep Sophon tests deterministic. Regenerate ldiff samples with `scripts/dev/make-ldiff-fixtures`; preserve fixture provenance and expected bytes.
+These checked-in protocol samples define deterministic inputs and expected outputs for Sophon tests. Their provenance and expected bytes are part of the fixture contract.

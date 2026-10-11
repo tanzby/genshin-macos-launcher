@@ -1,3 +1,3 @@
-# Updates instructions
+# Update presentation
 
-Sparkle update presentation and app-facing update state live here. Keep updater mechanics in the `Updates` module and follow `docs/release.md` for signing and feed validation.
+This directory contains the app-facing Sparkle update presentation and state. The updater implementation is in the `Sources/Updates` module.

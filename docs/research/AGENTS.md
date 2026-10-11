@@ -1,3 +1,3 @@
-# research instructions
+# Project research
 
-Research records evidence behind project decisions. Preserve source links and mark historical facts clearly; accepted choices belong in `docs/adr/`.
+These records preserve source evidence behind native project decisions. Accepted choices are summarized in `../adr/`.

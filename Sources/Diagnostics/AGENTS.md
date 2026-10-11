@@ -1,3 +1,3 @@
-# Diagnostics instructions
+# Diagnostics module
 
-This target provides the app's autolaunch options and `launcher.log` writer used by `scripts/diag/yaagl-diag`. Keep diagnostics machine-readable and bounded; app composition stays in `App`.
+This module provides the app's autolaunch options and writes `launcher.log`, which is consumed by `scripts/diag/yaagl-diag`. App composition remains in `App/`.

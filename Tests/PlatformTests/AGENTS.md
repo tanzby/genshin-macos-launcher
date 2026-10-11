@@ -1,3 +1,3 @@
-# PlatformTests instructions
+# Platform tests
 
-Test system boundaries with temporary directories and process/download fakes. Avoid real machine mutation in unit tests.
+These tests cover file, process, and download boundaries through temporary directories and fakes; they do not depend on mutable host state.

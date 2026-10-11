@@ -1,3 +1,3 @@
-# Assets.xcassets instructions
+# App assets
 
-Asset catalog inputs are bundled app resources. Regenerate app icon variants with `scripts/dev/make-app-icon` from the canonical square source rather than editing generated sizes independently.
+This asset catalog contains bundled artwork and the app icon. The icon set contains generated size variants from one square source image.

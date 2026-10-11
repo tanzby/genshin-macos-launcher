@@ -21,4 +21,5 @@
 - 发布构建多一个 CI 任务，冷缓存时多约 25 分钟。
 - App 体积增加约 35 MB（DXMT 压缩前 33 MB；`winemetal.so` 静态链接了 LLVM）。
 - 许可证：DXMT 是 LGPL-2.1-or-later，`winemetal.so` 内含 LLVM（Apache-2.0 with LLVM Exception）；两份文本随 bundle 分发，`THIRD_PARTY_NOTICES.md` 和 App 的致谢页列出来源。
+- 首次成功构建本地 DXMT 后，若已有 `Yaagl.app`，需删除该旧 app 一次；随后 Xcode 会重新打包并签入新生成的 DXMT。
 - 本地要构建 App 里的 DXMT 需先 `brew install meson cmake ninja mingw-w64` 并运行 `scripts/build-dxmt`，再 `xcodegen generate`；不运行也能构建 App，只是它装不了 Wine。

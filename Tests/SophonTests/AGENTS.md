@@ -1,3 +1,3 @@
-# SophonTests instructions
+# Sophon tests
 
-Test manifest, downloader, installation, and patch/decompression behavior with checked-in fixtures. The live-contract test is opt-in and requires its documented environment.
+These tests cover manifest, download, installation, patch, and decompression behavior with checked-in protocol fixtures. Live-contract coverage is separate from fixture-based tests.

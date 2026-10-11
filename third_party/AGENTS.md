@@ -1,3 +1,3 @@
-# third_party instructions
+# Third-party source
 
-Vendored dependencies and submodules are tracked here. Preserve upstream licenses/notices and pin/update provenance. Build DXMT with `scripts/build-dxmt` after installing Meson, CMake, Ninja, and MinGW-w64; after the first successful build, delete the generated `Yaagl.app` once so Xcode signs the bundled DXMT on the next build. The `dxmt` submodule has its own instructions and is outside this parent guide's tracked file coverage.
+This directory contains vendored dependencies and pinned submodules with their upstream license provenance. DXMT is a source submodule bundled into the app; its data path and Wine-install lifecycle are defined in [ADR 0003](../docs/adr/0003-dxmt-built-from-source-and-bundled.md).

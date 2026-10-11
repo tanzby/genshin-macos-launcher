@@ -1,3 +1,3 @@
-# TestSupport instructions
+# Shared test support
 
-Shared test helpers provide temporary directories and condition polling. Prefer `pollUntil`/`waitUntil` with a timeout over fixed `Task.sleep` delays.
+This module provides temporary-directory helpers and condition polling through `pollUntil`/`waitUntil`. Test callers observe state transitions rather than fixed-duration delays.

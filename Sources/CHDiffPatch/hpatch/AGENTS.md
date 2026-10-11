@@ -1,3 +1,3 @@
-# hpatch instructions
+# HDiffPatch implementation
 
-Vendored HDiffPatch patching implementation. Preserve upstream license and source; Yaagl integration belongs in the wrapper one directory above.
+This is the vendored HDiffPatch patching implementation. The Yaagl-specific file-descriptor bridge is in the parent directory.

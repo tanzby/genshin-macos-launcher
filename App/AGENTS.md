@@ -1,3 +1,3 @@
-# App instructions
+# App
 
-This is the SwiftUI composition root. Keep platform orchestration in the library modules and use the existing module interfaces; app strings live in `Localizable.xcstrings` (zh-Hans and en). Use the `swiftui-specialist` skill when writing SwiftUI.
+`App/` is the SwiftUI composition root for module state, application lifecycle, and windows. User-facing strings are in `Localizable.xcstrings`, with zh-Hans and English localizations.

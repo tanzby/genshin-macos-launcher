@@ -1,3 +1,3 @@
-# LauncherTests instructions
+# Launcher tests
 
-Test launcher state and coordination through fake clients and preparers. Localization/catalog consistency is checked here.
+These tests cover launcher state and coordination through fake clients and preparers. Localization catalog consistency is also exercised here.

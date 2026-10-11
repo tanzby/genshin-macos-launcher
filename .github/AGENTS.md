@@ -1,3 +1,3 @@
-# .github instructions
+# GitHub automation
 
-Workflow automation lives here. Keep CI, release, and live-contract behavior aligned with the project workflow in `docs/agents/development-workflow.md` and release policy in `docs/release.md`.
+This directory contains CI, live-contract, DXMT artifact, and release automation. The required Swift check is implemented by `scripts/dev/macos-check`.

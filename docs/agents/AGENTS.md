@@ -1,3 +1,3 @@
-# agents instructions
+# Project memory
 
-Agent-facing procedures and project memory live here. Keep each guide authoritative for one topic and use conditional pointers from `AGENTS.md` rather than duplicating its rules.
+This directory contains the 1.0.0 session retrospective and supplementary project notes. Accepted architecture is recorded in `../adr/`.

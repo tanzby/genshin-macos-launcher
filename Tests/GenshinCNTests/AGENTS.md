@@ -1,3 +1,3 @@
-# GenshinCNTests instructions
+# Genshin CN tests
 
-Test CN-server requests, game policy, launch recipes, and client jobs with fixtures or `FakeCDN`/URL protocol stubs. Keep live service access out of ordinary unit tests.
+These tests cover CN-server requests, game policy, launch recipes, and client jobs through fixtures or `FakeCDN`/URL protocol stubs. Live-contract coverage is separate from ordinary unit tests.

@@ -1,3 +1,3 @@
-# AppIcon.appiconset instructions
+# App icon variants
 
-Generated icon variants; follow [`../AGENTS.md`](../AGENTS.md) for regeneration.
+This set contains generated app icon sizes and metadata, all derived from one square source image.

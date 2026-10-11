@@ -1,5 +1,3 @@
-# Sources instructions
+# Native modules
 
-Swift package module boundaries and dependency direction are defined in `docs/adr/0002-native-architecture.md`. Declare Swift package targets and dependencies in `Package.swift`; `project.yml` defines the app and helpers. Keep external process execution within the root guide's allowlist.
-
-On Xcode 26.6, an async-closure parameter defaulted with a closure literal can abort at runtime (#48). Use a named function as the default.
+`Sources/` contains the native library modules and linked C dependencies. Their one-way dependency graph and ownership boundaries are defined in [ADR 0002](../docs/adr/0002-native-architecture.md); `Package.swift` is the package target map.

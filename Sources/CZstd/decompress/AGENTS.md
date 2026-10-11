@@ -1,3 +1,3 @@
-# decompress instructions
+# Zstandard decompressor
 
-Vendored Zstandard decompression implementation. Preserve upstream source and license; target membership is controlled by `Package.swift`.
+This is the vendored Zstandard decompression implementation used by Sophon.

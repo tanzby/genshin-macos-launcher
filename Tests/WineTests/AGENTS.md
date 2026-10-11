@@ -1,3 +1,3 @@
-# WineTests instructions
+# Wine tests
 
-Test Wine install and game-session lifecycle using the local fake/runtime support. Keep tests deterministic and do not launch the installed game from unit tests.
+These tests cover Wine installation and game-session lifecycle through fake runtime and process boundaries, without depending on an installed game session.
