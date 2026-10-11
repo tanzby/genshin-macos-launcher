@@ -26,7 +26,7 @@ build of Valve's Proton, released 2025-07-19; archive `GE-Proton10-10.tar.gz`, S
 files under `files/lib/wine/{i386,x86_64}-windows/`). They reached the TS launcher in 2025-08 via yaagl/yet-another-anime-game-launcher
 (commit 61814bf7), and in 2026-01 (commit 347fbd2c, "make steam stub files signed") they were replaced by the same
 files carrying an Authenticode signature from "Dawn Winery Code Signing Certificate" (Dawn Winery CA1). The signature
-adds an 11360-byte certificate table and changes seven header bytes (checksum, certificate directory, padding);
+adds an 11360-byte certificate table and changes seven bytes in the PE header (apparently the checksum and the certificate directory entry);
 nothing else differs. The files here are those signed ones, so no dwproton release contains them (the first dwproton
 release, 10.0-1, is from 2025-10-18, and its `steam.exe`/`lsteamclient.dll` differ). Hashes below are for the files in this repo;
 the unsigned originals are listed for matching against GE-Proton10-10.
