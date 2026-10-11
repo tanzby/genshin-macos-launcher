@@ -34,7 +34,6 @@ struct AppRuntime {
     self.client = client
     notifier = EventNotifier(delivery: UserNotificationDelivery())
     dataDirectory = data
-    AppDelegate.launcher = launcher
   }
 }
 
@@ -69,8 +68,10 @@ struct YaaglApp: App {
   init() {
     updater = UpdaterModel(updater: updaterController.updater)
     do {
-      runtime = try AppRuntime(autoLaunch: autoLaunch)
+      let built = try AppRuntime(autoLaunch: autoLaunch)
+      runtime = built
       startupFailure = nil
+      AppDelegate.launcher = built.controller.launcher
     } catch {
       runtime = nil
       let failure = DataDirectoryFailure(error, root: autoLaunch.dataRoot ?? DataDirectory.defaultRoot)
