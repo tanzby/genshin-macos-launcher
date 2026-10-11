@@ -25,7 +25,11 @@ env:
   SPARKLE_SHA256: c2bf58aa8387266ac179357b1415d6f2635f044da8be41042af32425dae6da0c
 
 jobs:
+  dxmt:
+    uses: ./.github/workflows/dxmt.yaml
+
   release:
+    needs: dxmt
     runs-on: macos-26
     timeout-minutes: 45
     permissions:
@@ -35,6 +39,13 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
+
+      # Built by dxmt.yaml; project.yml puts build/dxmt into Contents/Resources/dxmt.
+      - name: Download DXMT
+        uses: actions/download-artifact@v4
+        with:
+          name: dxmt
+          path: build/dxmt
 
       - name: Resolve version and mode
         env:
@@ -93,6 +104,7 @@ jobs:
             MARKETING_VERSION="$VERSION" CURRENT_PROJECT_VERSION="$BUILD" build
           app=build/DerivedData/Build/Products/Release/Yaagl.app
           codesign --verify --deep --strict --verbose=2 "$app"
+          REQUIRE_DXMT=1 scripts/dev/check-bundle "$app"
           plist="$app/Contents/Info.plist"
           test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$plist")" = "$VERSION"
           test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$plist")" = "$BUILD"

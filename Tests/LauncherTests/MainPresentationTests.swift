@@ -210,8 +210,8 @@ private func snapshot(
     let pausing = MainPresentation.derive(snapshot(phase: .preparingWine, pausing: true, progress: progress))
     #expect(pausing.button == .pausing && !pausing.buttonEnabled)
 
-    s.lastError = .wineInstall(.dxmtArchiveInvalid)
-    #expect(MainPresentation.derive(s).status == .error(.wineInstall(.dxmtArchiveInvalid)))
+    s.lastError = .wineInstall(.dxmtBundleInvalid)
+    #expect(MainPresentation.derive(s).status == .error(.wineInstall(.dxmtBundleInvalid)))
   }
 
   @Test func PRG_005_wineDownloadsReportBytesLikeGameDownloads() {
@@ -219,7 +219,7 @@ private func snapshot(
     #expect(download.counts?.done == 50 && download.counts?.total == 200)
     #expect(download.fraction == 0.25)
     #expect(JobProgress.wine(.extracting).fraction == nil)
-    let unknown = JobProgress.wine(.downloadingDXMT(DownloadProgress(completed: 5, total: -1)))
+    let unknown = JobProgress.wine(.downloadingWine(DownloadProgress(completed: 5, total: -1)))
     #expect(unknown.fraction == nil)
     #expect(unknown.counts == nil, "an unknown total is not shown as '5 B / 0 B'")
   }

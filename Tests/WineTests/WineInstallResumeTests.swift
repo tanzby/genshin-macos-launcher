@@ -16,7 +16,7 @@ import Testing
       try h.writeFile("wine/sentinel.txt")
       try h.writeFile("wineprefix/sentinel.txt")
 
-      let required = wineFixtureArchiveSize + 4 * wineFixtureDXMTArchiveSize + wineFixtureInstalledSize
+      let required = wineFixtureArchiveSize + wineFixtureInstalledSize
         + wineFixturePrefixSize
       await #expect(
         throws: WineInstallError.insufficientDiskSpace(required: required, available: 1_000_000_000)
@@ -33,7 +33,7 @@ import Testing
   func exactSpaceIsEnough() async throws {
     try await withWineTempDirectory { dir in
       var options = WineHarnessOptions()
-      options.availableBytes = wineFixtureArchiveSize + 4 * wineFixtureDXMTArchiveSize + wineFixtureInstalledSize
+      options.availableBytes = wineFixtureArchiveSize + wineFixtureInstalledSize
         + wineFixturePrefixSize
       let h = try makeWineHarness(in: dir, options: options)
       try await h.install()
@@ -46,7 +46,7 @@ import Testing
     try await withWineTempDirectory { dir in
       var options = WineHarnessOptions()
       options.availableBytes =
-        wineFixtureArchiveSize + 4 * wineFixtureDXMTArchiveSize + wineFixtureInstalledSize + wineFixturePrefixSize - 1000
+        wineFixtureArchiveSize + wineFixtureInstalledSize + wineFixturePrefixSize - 1000
       let h = try makeWineHarness(in: dir, options: options)
 
       // Without a leftover the same free space is not enough ...
@@ -84,31 +84,16 @@ import Testing
     }
   }
 
-  @Test("WIN-007 the Wine and DXMT archives download at the same time")
-  func concurrentDownloads() async throws {
+  @Test("WIN-007 DXMT comes from the app: the only download is the Wine archive")
+  func onlyWineIsDownloaded() async throws {
     try await withWineTempDirectory { dir in
-      var options = WineHarnessOptions()
-      options.downloadDelay = .milliseconds(100)
-      let h = try makeWineHarness(in: dir, options: options)
+      let h = try makeWineHarness(in: dir)
       try await h.install()
-      #expect(h.downloader.maxConcurrentDownloads == 2)
+      #expect(h.downloader.requests.map(\.url) == [h.fixtures.distribution.url])
     }
   }
 
-  @Test("WIN-007 a failing download cancels the other one and still installs nothing")
-  func failureCancelsTheOtherDownload() async throws {
-    try await withWineTempDirectory { dir in
-      var options = WineHarnessOptions()
-      options.failingURLs = { [$0.dxmt.zipURL] }
-      options.downloadDelay = .milliseconds(20)
-      let h = try makeWineHarness(in: dir, options: options)
-      await #expect(throws: WineStubDownloadFailure()) { try await h.install() }
-      #expect(await h.runtime.status() == .needsInstall(.notInstalled))
-      #expect(h.runner.calls.isEmpty)
-    }
-  }
-
-  @Test("WIN-007 archives keep the same path across attempts so a partial download can resume")
+  @Test("WIN-007 the archive keeps the same path across attempts so a partial download can resume")
   func stableArchivePaths() async throws {
     try await withWineTempDirectory { dir in
       var options = WineHarnessOptions()
@@ -121,8 +106,6 @@ import Testing
       let wine = h.downloader.requests.filter { $0.url == h.fixtures.distribution.url }
       #expect(wine.count == 2)
       #expect(Set(wine.map(\.destination)).count == 1)
-      let dxmt = h.downloader.requests.filter { $0.url == h.fixtures.dxmt.zipURL }
-      #expect(Set(dxmt.map(\.destination)).count == 1)
       for request in h.downloader.requests {
         #expect(
           request.destination.deletingLastPathComponent().resolvingSymlinksInPath().path
@@ -132,7 +115,7 @@ import Testing
     }
   }
 
-  @Test("WIN-007 verified archives stay after a later step fails, so a retry does not download them again")
+  @Test("WIN-007 the verified archive stays after a later step fails, so a retry does not download it again")
   func archivesSurviveALaterFailure() async throws {
     try await withWineTempDirectory { dir in
       var options = WineHarnessOptions()
@@ -140,24 +123,22 @@ import Testing
       let h = try makeWineHarness(in: dir, options: options)
       await #expect(throws: WineInstallError.self) { try await h.install() }
       let kept = try FileManager.default.contentsOfDirectory(atPath: h.layout.downloadsDirectory.path)
-      #expect(kept.contains { $0.hasPrefix("dxmt-") })
       #expect(kept.contains { $0.hasPrefix("wine-") })
     }
   }
 
-  @Test("WIN-007 the progress of each archive grows across several reports")
+  @Test("WIN-007 the progress of the archive grows across several reports")
   func progressGrows() async throws {
     try await withWineTempDirectory { dir in
       let h = try makeWineHarness(in: dir)
       let collector = WineProgressCollector()
       try await h.runtime.ensureInstalled(progress: collector.callback)
 
-      for reports in [collector.wineDownloads, collector.dxmtDownloads] {
-        #expect(reports.count >= 3)
-        #expect(Set(reports.map(\.total)).count == 1)
-        #expect(zip(reports, reports.dropFirst()).allSatisfy { $0.completed < $1.completed })
-        #expect(reports.last?.completed == reports.last?.total)
-      }
+      let reports = collector.wineDownloads
+      #expect(reports.count >= 3)
+      #expect(Set(reports.map(\.total)).count == 1)
+      #expect(zip(reports, reports.dropFirst()).allSatisfy { $0.completed < $1.completed })
+      #expect(reports.last?.completed == reports.last?.total)
     }
   }
 

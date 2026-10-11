@@ -2,6 +2,8 @@
 
 原生 Swift 版（地图 #13，票 #22）按下面的模块和缝划分。这是后续骨架（#25）和各模块实现票的前提。前提条件已由其他票定下：macOS 26+、仅 Apple Silicon、Swift 6 strict concurrency、`@Observable`、SwiftPM + XcodeGen、Sophon 用 Swift 重写、只允许 Wine / x86_64 helper / 白名单系统工具作为外部进程（#27）、不兼容 TS 数据（ADR 0001）。
 
+> **修订（地图 #1、票 #63，[ADR 0003](0003-dxmt-built-from-source-and-bundled.md)）：** DXMT 不再下载，而是从 `third_party/dxmt` 构建、随 App 分发；安装 Wine 时从 App 里拷贝，App 更新带来新 DXMT 时只刷新这几个文件。下文凡说「DXMT 下载」「Wine 与 DXMT 的下载进度」处以 ADR 0003 为准。
+>
 > **修订（地图 #1、票 #2，依据旧仓库 [#28](https://github.com/tanzby/yet-another-anime-game-launcher/issues/28) 的决定）：** 删除 ReShade；DXMT 在安装 Wine 时一次装好，运行时不再注入和还原。下文相应段落已改。
 
 ## Target 与依赖

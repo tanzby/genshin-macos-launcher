@@ -11,7 +11,8 @@ enum Credits {
 
   static let components: [Component] = [
     Component(name: "Wine \(WineRuntime.pinnedVersion)", license: "LGPL-2.1-or-later"),
-    Component(name: "DXMT \(DXMTRelease.pinned.version)", license: "see upstream"),
+    Component(name: "DXMT \(DXMTBundle.inApp?.shortVersion ?? "-")", license: "LGPL-2.1-or-later"),
+    Component(name: "LLVM (inside DXMT)", license: "Apache-2.0 with LLVM exception"),
     Component(name: "Proton steam_helper (Valve)", license: "BSD-3-Clause"),
     Component(name: "Proton lsteamclient (Valve)", license: "Steamworks SDK License"),
     Component(name: "Sparkle", license: "MIT"),

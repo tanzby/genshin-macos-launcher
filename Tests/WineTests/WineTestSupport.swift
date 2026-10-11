@@ -77,20 +77,19 @@ struct WineFixtureOptions {
   var winePath: String? = "wine"
   /// Appends junk after the sha256 was computed, like a truncated or tampered download.
   var corruptWine = false
-  /// `false` builds a DXMT archive without `x86_64-windows`.
+  /// `false` builds a DXMT bundle without `x86_64-windows`.
   var dxmtHasX64 = true
 }
 
 struct WineFixtures {
   var wineArchive: URL
-  var dxmtZip: URL
   var distribution: WineDistribution
-  var dxmt: DXMTRelease
+  /// The DXMT shipped in the (fake) app.
+  var dxmt: DXMTBundle
 }
 
-/// Declared sizes of the fixture archives (the real files are a few KB). Required space = wine archive + 4 x DXMT archive (zip, tar.gz, unpacked) + installed + prefix.
+/// Declared sizes of the fixture archive (the real files are a few KB). Required space = wine archive + installed + prefix.
 let wineFixtureArchiveSize: Int64 = 450_000_000
-let wineFixtureDXMTArchiveSize: Int64 = 30_000_000
 let wineFixtureInstalledSize: Int64 = 2_000_000_000
 let wineFixturePrefixSize: Int64 = 600_000_000
 
@@ -130,40 +129,29 @@ func makeWineFixtures(in directory: URL, options: WineFixtureOptions = .init()) 
     try handle.close()
   }
 
-  // DXMT: zip > dxmt-<commit>.tar.gz > <commit>/...
-  let dxmtStage = directory.appending(path: "dxmt-stage", directoryHint: .isDirectory)
-  let commitDir = dxmtStage.appending(path: "payload/\(wineFixtureCommit)", directoryHint: .isDirectory)
+  // DXMT as it sits in the app: <bundle>/{x86_64-windows,x86_64-unix,VERSION}
+  let bundle = directory.appending(path: "dxmt-bundle", directoryHint: .isDirectory)
   if options.dxmtHasX64 {
     for name in WineFixtureContent.dxmtWindowsFiles {
-      try write(WineFixtureContent.dxmt(name), to: commitDir.appending(path: "x86_64-windows/\(name)"))
+      try write(WineFixtureContent.dxmt(name), to: bundle.appending(path: "x86_64-windows/\(name)"))
     }
-    try write(WineFixtureContent.dxmt("winemetal.so"), to: commitDir.appending(path: "x86_64-unix/winemetal.so"))
+    try write(WineFixtureContent.dxmt("winemetal.so"), to: bundle.appending(path: "x86_64-unix/winemetal.so"))
   }
   for wrong in ["aarch64-windows", "i386-windows"] {
     for name in WineFixtureContent.dxmtWindowsFiles {
-      try write(WineFixtureContent.wrongArch, to: commitDir.appending(path: "\(wrong)/\(name)"))
+      try write(WineFixtureContent.wrongArch, to: bundle.appending(path: "\(wrong)/\(name)"))
     }
   }
-  try write(WineFixtureContent.wrongArch, to: commitDir.appending(path: "aarch64-unix/winemetal.so"))
-  let tarGz = dxmtStage.appending(path: "dxmt-\(wineFixtureCommit).tar.gz")
-  try wineRunFixtureTool(
-    "/usr/bin/tar",
-    ["-czf", tarGz.path, "-C", dxmtStage.appending(path: "payload").path, wineFixtureCommit])
-  let dxmtZip = directory.appending(path: "fixture-dxmt.zip")
-  try wineRunFixtureTool("/usr/bin/ditto", ["-c", "-k", tarGz.path, dxmtZip.path])
-  let dxmtSHA = try wineSHA256(ofFile: dxmtZip)
+  try write(WineFixtureContent.wrongArch, to: bundle.appending(path: "aarch64-unix/winemetal.so"))
+  try write(Data("\(wineFixtureCommit)\n".utf8), to: bundle.appending(path: "VERSION"))
 
   return WineFixtures(
     wineArchive: wineArchive,
-    dxmtZip: dxmtZip,
     distribution: WineDistribution(
       id: "test-wine-1", url: URL(string: "https://fixtures.invalid/wine.tar.xz")!, sha256: wineSHA,
       winePath: options.winePath, archiveSize: wineFixtureArchiveSize, installedSize: wineFixtureInstalledSize,
       prefixSize: wineFixturePrefixSize),
-    dxmt: DXMTRelease(
-      version: "abc1234", commit: wineFixtureCommit,
-      zipURL: URL(string: "https://fixtures.invalid/dxmt-\(wineFixtureCommit).zip")!, sha256: dxmtSHA,
-      archiveSize: wineFixtureDXMTArchiveSize))
+    dxmt: DXMTBundle(directory: bundle, version: wineFixtureCommit))
 }
 
 // MARK: - Stub downloader
@@ -189,7 +177,7 @@ final class WineStubDownloader: Downloading, @unchecked Sendable {
   /// `chunks`: how many progress reports one download makes, each after a short suspension so concurrent
   /// downloads interleave.
   init(fixtures: WineFixtures, failing: Set<URL> = [], delay: Duration? = nil, chunks: Int = 4) {
-    sources = [fixtures.distribution.url: fixtures.wineArchive, fixtures.dxmt.zipURL: fixtures.dxmtZip]
+    sources = [fixtures.distribution.url: fixtures.wineArchive]
     _failing = failing
     self.delay = delay
     self.chunks = chunks
@@ -321,21 +309,17 @@ final class WineProgressCollector: @unchecked Sendable {
   private let lock = NSLock()
   private var labels: [String] = []
   private var _wine: [DownloadProgress] = []
-  private var _dxmt: [DownloadProgress] = []
 
   var wineDownloads: [DownloadProgress] { lock.withLock { _wine } }
-  var dxmtDownloads: [DownloadProgress] { lock.withLock { _dxmt } }
 
   func record(_ progress: WineInstallProgress) {
     switch progress {
     case .downloadingWine(let value): lock.withLock { _wine.append(value) }
-    case .downloadingDXMT(let value): lock.withLock { _dxmt.append(value) }
     default: break
     }
     let label: String
     switch progress {
     case .downloadingWine: label = "downloadingWine"
-    case .downloadingDXMT: label = "downloadingDXMT"
     case .extracting: label = "extracting"
     case .configuring: label = "configuring"
     case .initializingPrefix: label = "initializingPrefix"

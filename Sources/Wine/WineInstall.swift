@@ -42,32 +42,33 @@ public struct WineDistribution: Sendable, Equatable {
   )
 }
 
-/// The DXMT build installed together with Wine. Names are derived from one description.
-public struct DXMTRelease: Sendable, Equatable {
+/// The DXMT build that ships inside the app (`Contents/Resources/dxmt`, built by `scripts/build-dxmt` from the
+/// pinned `third_party/dxmt` submodule, docs/adr/0003). The composition root finds it; `Wine` never reads
+/// `Bundle.main`.
+public struct DXMTBundle: Sendable, Equatable {
+  /// Holds `x86_64-windows/`, `x86_64-unix/` and `VERSION`.
+  public var directory: URL
+  /// The DXMT commit; compared with the stamp to decide whether the installed files are current.
   public var version: String
-  public var commit: String
-  public var zipURL: URL
-  public var sha256: String
-  public var archiveSize: Int64
 
-  public init(version: String, commit: String, zipURL: URL, sha256: String, archiveSize: Int64 = 0) {
+  public init(directory: URL, version: String) {
+    self.directory = directory
     self.version = version
-    self.commit = commit
-    self.zipURL = zipURL
-    self.sha256 = sha256
-    self.archiveSize = archiveSize
   }
 
-  public static let pinned = DXMTRelease(
-    version: "654f547",
-    commit: "654f547ffab4e0c395ee368aad52bb4586b04576",
-    zipURL: URL(
-      string:
-        "https://github.com/yaagl/anime-game-wine/releases/download/dxmt-654f547/dxmt-654f547ffab4e0c395ee368aad52bb4586b04576.zip"
-    )!,
-    sha256: "fbc0721fb72ebafd2bad0dbdd3d13a52056fd10c4a9a699cee2689363823255b",
-    archiveSize: 32_603_639
-  )
+  /// `nil` when the directory has no readable `VERSION` (a build that did not run `scripts/build-dxmt`).
+  public static func load(from directory: URL) -> DXMTBundle? {
+    let file = directory.appending(path: "VERSION", directoryHint: .notDirectory)
+    guard let text = try? String(contentsOf: file, encoding: .utf8) else { return nil }
+    let version = text.trimmingCharacters(in: .whitespacesAndNewlines)
+    return version.isEmpty ? nil : DXMTBundle(directory: directory, version: version)
+  }
+
+  /// For the Wine settings page.
+  public var shortVersion: String { String(version.prefix(7)) }
+
+  var windowsDirectory: URL { directory.appending(path: "x86_64-windows", directoryHint: .isDirectory) }
+  var unixDirectory: URL { directory.appending(path: "x86_64-unix", directoryHint: .isDirectory) }
 }
 
 /// Written last when an install completes, inside `wine/`, so it disappears with the runtime.
@@ -139,8 +140,11 @@ public enum WineReinstallReason: Sendable, Equatable {
   case notInstalled
   /// `wine/` exists but the stamp does not: an install was interrupted.
   case interrupted
-  /// The stamp is unreadable or names another Wine or DXMT version.
+  /// The stamp is unreadable or names another Wine version.
   case versionMismatch
+  /// Wine is current but the installed DXMT is not the one in the app. Refreshing it copies a few files; Wine
+  /// and the prefix stay.
+  case dxmtOutdated
   /// The stamp matches but a required file is gone (loader, DXMT files, prefix).
   case corrupt(missing: String)
 }
@@ -152,7 +156,6 @@ public enum WineStatus: Sendable, Equatable {
 
 public enum WineInstallProgress: Sendable, Equatable {
   case downloadingWine(DownloadProgress)
-  case downloadingDXMT(DownloadProgress)
   case extracting
   case configuring
   case initializingPrefix
@@ -165,7 +168,8 @@ public enum WineInstallError: Error, Equatable {
   case extractionFailed(tool: String, exitCode: Int32, output: String)
   /// Not enough free space on the data volume; raised before anything is downloaded or deleted.
   case insufficientDiskSpace(required: Int64, available: Int64)
-  case dxmtArchiveInvalid
+  /// The app has no DXMT, or it lacks a file the launcher installs. Raised before anything is deleted.
+  case dxmtBundleInvalid
   /// `wineboot` or `winecfg` failed; the log is at `logURL`.
   case prefixInitializationFailed(logURL: URL)
   case certificateSectionNotFound

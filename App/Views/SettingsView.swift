@@ -176,7 +176,7 @@ private struct WinePage: View {
     Form {
       Section("Runtime") {
         LabeledContent("Wine", value: WineRuntime.pinnedVersion)
-        LabeledContent("DXMT", value: DXMTRelease.pinned.version)
+        LabeledContent("DXMT", value: DXMTBundle.inApp?.shortVersion ?? "-")
       }
       Section("Tools") {
         Button("Show Wine Prefix in Finder") {

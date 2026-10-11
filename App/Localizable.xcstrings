@@ -409,23 +409,6 @@
         }
       }
     },
-    "Downloading DXMT": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Downloading DXMT"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "正在下载 DXMT"
-          }
-        }
-      }
-    },
     "Downloading Wine": {
       "extractionState": "manual",
       "localizations": {
