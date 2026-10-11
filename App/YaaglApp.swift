@@ -6,14 +6,44 @@ import Sparkle
 import SwiftUI
 import Wine
 
+/// Everything built on a prepared data directory.
+@MainActor
+struct AppRuntime {
+  let controller: MainController
+  let client: GenshinCNClient
+  let notifier: EventNotifier
+  let dataDirectory: DataDirectory
+
+  /// `prepare()` migrates a TS-launcher data directory before anything reads it, so nothing here is built
+  /// when it fails. `--autolaunch` may point at a sandbox root.
+  init(autoLaunch: AutoLaunchOptions) throws {
+    let data = try autoLaunch.prepareDataDirectory()
+    // One `WineRuntime` for the client (launches the game with it) and the model (prepares it).
+    let wine = WineRuntime(dataDirectory: data)
+    let client = GenshinCNClient.bundled(wine: wine, dataDirectory: data)
+    let settings = SettingsModel()
+    let onboarding = OnboardingModel(hosts: GenshinCN.hostsBlocklist(), settings: settings)
+    // A diagnostic run names its own game folder; it must not touch the one saved in the real preferences.
+    let launcher = LauncherModel(
+      client: client, wine: wine,
+      startup: StartupSteps(
+        rosettaInstalled: { StartupSteps.isRosettaInstalled() }, recoverSession: { await client.recover() }),
+      gameDirectory: autoLaunch.enabled ? autoLaunch.gameDirectory : settings.gameDirectory)
+    launcher.makeLaunchOptions = { settings.launchOptions(gameDirectory: $0) }
+    controller = MainController(launcher: launcher, settings: settings, onboarding: onboarding)
+    self.client = client
+    notifier = EventNotifier(delivery: UserNotificationDelivery())
+    dataDirectory = data
+    AppDelegate.launcher = launcher
+  }
+}
+
 @main
 struct YaaglApp: App {
   @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
-  @State private var controller: MainController
   @State private var meter = ProgressMeter()
-  private let client: GenshinCNClient
-  private let notifier: EventNotifier
-  private let dataDirectory = DataDirectory.defaultRoot
+  private let runtime: AppRuntime?
+  private let startupFailure: DataDirectoryFailure?
   private let autoLaunch = AutoLaunchOptions.current
 
   // Sparkle refuses to start without an EdDSA public key, so builds made before
@@ -38,51 +68,42 @@ struct YaaglApp: App {
 
   init() {
     updater = UpdaterModel(updater: updaterController.updater)
-    // `prepare()` migrates a TS-launcher data directory before anything reads it; if it fails the app stops
-    // rather than run on a directory it could not migrate. `--autolaunch` may point at a sandbox root.
-    let data: DataDirectory
     do {
-      data = try AutoLaunchOptions.current.prepareDataDirectory()
+      runtime = try AppRuntime(autoLaunch: autoLaunch)
+      startupFailure = nil
     } catch {
-      fatalError("Cannot prepare the data directory: \(error)")
+      runtime = nil
+      let failure = DataDirectoryFailure(error, root: autoLaunch.dataRoot ?? DataDirectory.defaultRoot)
+      startupFailure = failure
+      // `--autolaunch` has no one to read the window: report on stderr and exit.
+      if autoLaunch.enabled {
+        FileHandle.standardError.write(Data("yaagl: \(failure.message)\n".utf8))
+        exit(1)
+      }
     }
-    // One `WineRuntime` for the client (launches the game with it) and the model (prepares it).
-    let wine = WineRuntime(dataDirectory: data)
-    let client = GenshinCNClient.bundled(wine: wine, dataDirectory: data)
-    let settings = SettingsModel()
-    let onboarding = OnboardingModel(hosts: GenshinCN.hostsBlocklist(), settings: settings)
-    // A diagnostic run names its own game folder; it must not touch the one saved in the real preferences.
-    let launcher = LauncherModel(
-      client: client, wine: wine,
-      startup: StartupSteps(
-        rosettaInstalled: { StartupSteps.isRosettaInstalled() }, recoverSession: { await client.recover() }),
-      gameDirectory: AutoLaunchOptions.current.enabled ? AutoLaunchOptions.current.gameDirectory : settings.gameDirectory)
-    launcher.makeLaunchOptions = { settings.launchOptions(gameDirectory: $0) }
-    let controller = MainController(launcher: launcher, settings: settings, onboarding: onboarding)
-    self.client = client
-    _controller = State(initialValue: controller)
-    notifier = EventNotifier(delivery: UserNotificationDelivery())
-    AppDelegate.launcher = launcher
   }
 
   /// `--autolaunch` (APP-020): drive one session without clicks, log to `<data>/logs/launcher.log`, quit.
-  private func runAutoLaunch() async {
+  private func runAutoLaunch(_ runtime: AppRuntime) async {
     guard autoLaunch.enabled else { return }
-    controller.onboarding.refresh()
-    let root = autoLaunch.dataRoot ?? DataDirectory.defaultRoot
+    runtime.controller.onboarding.refresh()
     await AutoLaunch.runIfRequested(
-      autoLaunch, model: controller.launcher, log: DiagLog(logsDirectory: DataDirectory(root: root).logs)
+      autoLaunch, model: runtime.controller.launcher, log: DiagLog(logsDirectory: runtime.dataDirectory.logs)
     ) { NSApp.terminate(nil) }
   }
 
   var body: some Scene {
     Window("Yaagl", id: "main") {
-      MainView(
-        notifier: notifier, drivenByAutoLaunch: autoLaunch.enabled,
-        backgroundProvider: { await client.backgroundImage() })
-        .environment(controller)
-        .environment(meter)
-        .task { await runAutoLaunch() }
+      if let runtime {
+        MainView(
+          notifier: runtime.notifier, drivenByAutoLaunch: autoLaunch.enabled,
+          backgroundProvider: { await runtime.client.backgroundImage() })
+          .environment(runtime.controller)
+          .environment(meter)
+          .task { await runAutoLaunch(runtime) }
+      } else if let startupFailure {
+        DataDirectoryFailureView(failure: startupFailure)
+      }
     }
     .windowStyle(.hiddenTitleBar)
     .windowResizability(.contentMinSize)
@@ -98,8 +119,10 @@ struct YaaglApp: App {
     }
 
     Settings {
-      SettingsView(dataDirectory: dataDirectory, updater: updater)
-        .environment(controller)
+      if let runtime {
+        SettingsView(dataDirectory: runtime.dataDirectory.root, updater: updater)
+          .environment(runtime.controller)
+      }
     }
   }
 }
