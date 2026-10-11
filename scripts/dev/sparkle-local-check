@@ -76,7 +76,7 @@ if curl -fs -o /dev/null "http://127.0.0.1:$port/"; then
   echo "port $port is in use; run '$0 stop' or set SPARKLE_CHECK_PORT" >&2
   exit 1
 fi
-mkdir -p "$work"/{tools,keys,derived,stage,serve}
+mkdir -p "$work"/{tools,keys,derived}
 
 echo "== Sparkle tools"
 if [ ! -x "$work/tools/bin/generate_appcast" ]; then
@@ -122,7 +122,7 @@ done
 
 echo "== Sign test.2 and write the appcast"
 ditto -c -k --sequesterRsrc --keepParent "$work/stage/2/Yaagl.app" "$work/serve/Yaagl-1.0.0-test.2.zip"
-printf '%s' "$(cat "$work/keys/ed.key")" | "$work/tools/bin/generate_appcast" --ed-key-file - \
+"$work/tools/bin/generate_appcast" --ed-key-file - <"$work/keys/ed.key" \
   --download-url-prefix "http://127.0.0.1:$port/" -o "$work/serve/appcast.xml" "$work/serve"
 grep -q 'sparkle:edSignature' "$work/serve/appcast.xml"
 grep -q '<sparkle:shortVersionString>1.0.0-test.2<' "$work/serve/appcast.xml"
@@ -130,8 +130,8 @@ sig=$(grep -o 'sparkle:edSignature="[^"]*"' "$work/serve/appcast.xml" | head -1 
 swift scripts/release/verify-ed-signature.swift "$pub" "$sig" "$work/serve/Yaagl-1.0.0-test.2.zip"
 
 echo "== Serve the feed on 127.0.0.1:$port"
-(cd "$work/serve" && nohup python3 -I -m http.server "$port" --bind 127.0.0.1 --directory "$work/serve" \
-  >"$work/server.log" 2>&1 & echo $! >"$work/server.pid")
+nohup python3 -I -m http.server "$port" --bind 127.0.0.1 --directory "$work/serve" >"$work/server.log" 2>&1 &
+echo $! >"$work/server.pid"
 for _ in 1 2 3 4 5 6 7 8 9 10; do
   curl -fs -o /dev/null "http://127.0.0.1:$port/appcast.xml" && break
   sleep 0.5
