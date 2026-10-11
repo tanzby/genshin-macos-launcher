@@ -120,7 +120,7 @@ final class BackgroundStub: URLProtocol, @unchecked Sendable {
     #expect(BackgroundStub.seen(id).filter { $0.absoluteString == Self.imageURL }.count == 1)
   }
 
-  @Test func APP_021_newImageReplacesOldCacheEntry() async throws {
+  @Test func APP_021_supersededImageIsPrunedAfterRetention() async throws {
     let cache = makeCache()
     defer { try? FileManager.default.removeItem(at: cache) }
     let current = LockedBox(Self.imageURL)
@@ -128,10 +128,82 @@ final class BackgroundStub: URLProtocol, @unchecked Sendable {
       url.path.hasSuffix("getAllGameBasicInfo")
         ? (200, Self.info([(current.value, false)])) : (200, Self.png)
     }
-    _ = await provider(cache, session).backgroundImage()
+    _ = await BackgroundImageProvider(cacheDirectory: cache, session: session, retention: 0).backgroundImage()
+    try await Task.sleep(for: .milliseconds(20))
     current.value = Self.otherURL
-    _ = await provider(cache, session).backgroundImage()
+    _ = await BackgroundImageProvider(cacheDirectory: cache, session: session, retention: 0).backgroundImage()
     #expect(try FileManager.default.contentsOfDirectory(atPath: cache.path).count == 1)
+  }
+
+  @Test func APP_021_recentImagesSurviveRapidRotation() async throws {
+    let cache = makeCache()
+    defer { try? FileManager.default.removeItem(at: cache) }
+    let current = LockedBox(Self.imageURL)
+    let (session, _) = BackgroundStub.session { url in
+      url.path.hasSuffix("getAllGameBasicInfo")
+        ? (200, Self.info([(current.value, false)])) : (200, Self.png)
+    }
+    var handedOut: [BackgroundImage] = []
+    for version in [Self.imageURL, Self.otherURL, Self.imageURL + "?v=3"] {
+      current.value = version
+      handedOut.append(await provider(cache, session).backgroundImage())
+    }
+    for case .remote(let file) in handedOut {
+      #expect(FileManager.default.fileExists(atPath: file.path))
+    }
+  }
+
+  @Test func APP_021_concurrentUpdatesNeverReturnADeletedFile() async throws {
+    let cache = makeCache()
+    defer { try? FileManager.default.removeItem(at: cache) }
+    let calls = LockedBox(0)
+    let (session, _) = BackgroundStub.session { url in
+      guard url.path.hasSuffix("getAllGameBasicInfo") else { return (200, Self.png) }
+      calls.value += 1  // old and new URL interleave, as when upstream rotates the image mid-launch
+      return (200, Self.info([(calls.value.isMultiple(of: 2) ? Self.imageURL : Self.otherURL, false)]))
+    }
+    let results = await withTaskGroup(of: BackgroundImage.self) { group in
+      for _ in 0..<8 { group.addTask { await provider(cache, session).backgroundImage() } }
+      return await group.reduce(into: []) { $0.append($1) }
+    }
+    #expect(results.count == 8)
+    for case .remote(let file) in results {
+      #expect(FileManager.default.fileExists(atPath: file.path))
+    }
+  }
+
+  @Test func APP_021_headerOnlyImageIsNotCached() async throws {
+    let cache = makeCache()
+    defer { try? FileManager.default.removeItem(at: cache) }
+    // Signature and IHDR intact, no pixel data: counts as an image container but has no decodable frame.
+    let corrupt = Self.png.prefix(40)
+    let (session, _) = BackgroundStub.session { url in
+      url.path.hasSuffix("getAllGameBasicInfo")
+        ? (200, Self.info([(Self.imageURL, false)])) : (200, Data(corrupt))
+    }
+    #expect(await provider(cache, session).backgroundImage() == .bundledDefault)
+    #expect(((try? FileManager.default.contentsOfDirectory(atPath: cache.path)) ?? []).isEmpty)
+  }
+
+  @Test func APP_021_failedWriteKeepsTheOldCachedImage() async throws {
+    let cache = makeCache()
+    defer {
+      try? FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: cache.path)
+      try? FileManager.default.removeItem(at: cache)
+    }
+    let current = LockedBox(Self.imageURL)
+    let (session, _) = BackgroundStub.session { url in
+      url.path.hasSuffix("getAllGameBasicInfo")
+        ? (200, Self.info([(current.value, false)])) : (200, Self.png)
+    }
+    let old = await BackgroundImageProvider(cacheDirectory: cache, session: session, retention: 0).backgroundImage()
+    try await Task.sleep(for: .milliseconds(20))
+    try FileManager.default.setAttributes([.posixPermissions: 0o555], ofItemAtPath: cache.path)
+    current.value = Self.otherURL
+    let result = await BackgroundImageProvider(cacheDirectory: cache, session: session, retention: 0).backgroundImage()
+    #expect(result == old)
+    guard case .remote(let file) = old else { return }
+    #expect(FileManager.default.fileExists(atPath: file.path))
   }
 
   @Test func APP_021_apiFailureWithoutCacheFallsBackToBundledDefault() async {

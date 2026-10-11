@@ -16,21 +16,26 @@ public struct BackgroundImageProvider: Sendable {
 
   let cacheDirectory: URL
   let session: URLSession
+  /// How long a superseded image stays on disk, so a URL handed out just before an update is still readable.
+  let retention: TimeInterval
   private var fileManager: FileManager { .default }
 
   /// `cacheDirectory` holds at most one image; it is created on first download.
-  public init(cacheDirectory: URL, session: URLSession = .shared) {
+  public init(
+    cacheDirectory: URL, session: URLSession = .shared, retention: TimeInterval = 3600
+  ) {
     self.cacheDirectory = cacheDirectory
     self.session = session
+    self.retention = retention
   }
 
   public func backgroundImage() async -> BackgroundImage {
     if let remote = try? await officialImageURL() {
       let cached = cacheFile(for: remote)
-      if fileManager.fileExists(atPath: cached.path) { return .remote(cached) }
+      if touch(cached) { return .remote(cached) }
       if let downloaded = try? await download(remote, to: cached) { return .remote(downloaded) }
     }
-    return cachedFiles().first.map { .remote(cacheDirectory.appending(path: $0.lastPathComponent)) }
+    return sortedNewestFirst(cachedFiles()).first.map { .remote(cacheDirectory.appending(path: $0.lastPathComponent)) }
       ?? .bundledDefault
   }
 
@@ -84,26 +89,57 @@ public struct BackgroundImageProvider: Sendable {
     return cacheDirectory.appending(path: ext.isEmpty ? name : "\(name).\(ext)")
   }
 
-  /// Writes only after the bytes decode as an image, then drops every older entry.
+  /// Writes only after a frame decodes. ImageIO tolerates damaged pixel streams, so a transfer cut short is
+  /// caught by URLSession's Content-Length check instead, not here.
   private func download(_ remote: URL, to destination: URL) async throws -> URL {
     var request = URLRequest(url: remote)
     request.timeoutInterval = Self.requestTimeout
     let (body, response) = try await session.data(for: request)
     guard (response as? HTTPURLResponse)?.statusCode == 200,
       let source = CGImageSourceCreateWithData(body as CFData, nil),
-      CGImageSourceGetCount(source) > 0
+      CGImageSourceGetCount(source) > 0,
+      CGImageSourceCreateImageAtIndex(source, 0, [kCGImageSourceShouldCacheImmediately: true] as CFDictionary) != nil
     else { throw URLError(.cannotDecodeContentData) }
-    try fileManager.createDirectory(at: cacheDirectory, withIntermediateDirectories: true)
-    try body.write(to: destination, options: .atomic)
-    for stale in cachedFiles() where stale.lastPathComponent != destination.lastPathComponent {
-      try? fileManager.removeItem(at: stale)
+    try Self.cacheLock.withLock {
+      try fileManager.createDirectory(at: cacheDirectory, withIntermediateDirectories: true)
+      try body.write(to: destination, options: .atomic)
+      prune(keeping: destination)  // only after the new file is safely on disk
     }
     return destination
   }
 
-  /// The directory holds at most one image, so any entry is the newest.
+  /// Serializes the write-and-prune step across providers in this process.
+  private static let cacheLock = NSLock()
+
+  /// Marks `file` as in use so that pruning spares it. False when it is not cached.
+  private func touch(_ file: URL) -> Bool {
+    try Self.cacheLock.withLock {
+      guard fileManager.fileExists(atPath: file.path) else { return false }
+      try? fileManager.setAttributes([.modificationDate: Date()], ofItemAtPath: file.path)
+      return true
+    }
+  }
+
+  /// Removes every entry but `current` that has not been written or used within `retention`.
+  private func prune(keeping current: URL) {
+    let cutoff = Date().addingTimeInterval(-retention)
+    for file in cachedFiles() where file.lastPathComponent != current.lastPathComponent {
+      if modified(file) <= cutoff { try? fileManager.removeItem(at: file) }
+    }
+  }
+
   private func cachedFiles() -> [URL] {
     (try? fileManager.contentsOfDirectory(
-      at: cacheDirectory, includingPropertiesForKeys: nil, options: .skipsHiddenFiles)) ?? []
+      at: cacheDirectory, includingPropertiesForKeys: [.contentModificationDateKey],
+      options: .skipsHiddenFiles)) ?? []
+  }
+
+  private func modified(_ url: URL) -> Date {
+    (try? url.resourceValues(forKeys: [.contentModificationDateKey]))?.contentModificationDate
+      ?? .distantPast
+  }
+
+  private func sortedNewestFirst(_ files: [URL]) -> [URL] {
+    files.sorted { modified($0) > modified($1) }
   }
 }
