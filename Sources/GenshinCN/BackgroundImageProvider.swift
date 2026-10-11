@@ -100,12 +100,11 @@ public struct BackgroundImageProvider: Sendable {
       CGImageSourceGetCount(source) > 0,
       CGImageSourceCreateImageAtIndex(source, 0, [kCGImageSourceShouldCacheImmediately: true] as CFDictionary) != nil
     else { throw URLError(.cannotDecodeContentData) }
-    Self.cacheLock.withLock {
-      try? fileManager.createDirectory(at: cacheDirectory, withIntermediateDirectories: true)
-      try? body.write(to: destination, options: .atomic)
-      prune(keeping: destination)
+    try Self.cacheLock.withLock {
+      try fileManager.createDirectory(at: cacheDirectory, withIntermediateDirectories: true)
+      try body.write(to: destination, options: .atomic)
+      prune(keeping: destination)  // only after the new file is safely on disk
     }
-    guard fileManager.fileExists(atPath: destination.path) else { throw CocoaError(.fileWriteUnknown) }
     return destination
   }
 
@@ -114,7 +113,7 @@ public struct BackgroundImageProvider: Sendable {
 
   /// Marks `file` as in use so that pruning spares it. False when it is not cached.
   private func touch(_ file: URL) -> Bool {
-    Self.cacheLock.withLock {
+    try Self.cacheLock.withLock {
       guard fileManager.fileExists(atPath: file.path) else { return false }
       try? fileManager.setAttributes([.modificationDate: Date()], ofItemAtPath: file.path)
       return true

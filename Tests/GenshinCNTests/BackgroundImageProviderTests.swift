@@ -185,6 +185,27 @@ final class BackgroundStub: URLProtocol, @unchecked Sendable {
     #expect(((try? FileManager.default.contentsOfDirectory(atPath: cache.path)) ?? []).isEmpty)
   }
 
+  @Test func APP_021_failedWriteKeepsTheOldCachedImage() async throws {
+    let cache = makeCache()
+    defer {
+      try? FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: cache.path)
+      try? FileManager.default.removeItem(at: cache)
+    }
+    let current = LockedBox(Self.imageURL)
+    let (session, _) = BackgroundStub.session { url in
+      url.path.hasSuffix("getAllGameBasicInfo")
+        ? (200, Self.info([(current.value, false)])) : (200, Self.png)
+    }
+    let old = await BackgroundImageProvider(cacheDirectory: cache, session: session, retention: 0).backgroundImage()
+    try await Task.sleep(for: .milliseconds(20))
+    try FileManager.default.setAttributes([.posixPermissions: 0o555], ofItemAtPath: cache.path)
+    current.value = Self.otherURL
+    let result = await BackgroundImageProvider(cacheDirectory: cache, session: session, retention: 0).backgroundImage()
+    #expect(result == old)
+    guard case .remote(let file) = old else { return }
+    #expect(FileManager.default.fileExists(atPath: file.path))
+  }
+
   @Test func APP_021_apiFailureWithoutCacheFallsBackToBundledDefault() async {
     let cache = makeCache()
     defer { try? FileManager.default.removeItem(at: cache) }
