@@ -169,6 +169,19 @@ private func isError(_ error: (any Error)?, _ expected: SophonError) -> Bool {
     #expect(!rig.exists(".tmp"))
     #expect(!rig.exists("ldiff"))
   }
+
+  @Test func INS_016_aRefusedInstallDeletesNothingFromTheChosenFolder() async throws {
+    let rig = ClientRig(main: .game("5.6.0"))
+    rig.install(.game("5.5.0"))
+    rig.write(".tmp/notes.txt", Data("mine".utf8))
+    rig.write("ldiff/keep.bin", Data("mine".utf8))
+
+    let result = await rig.run(.install)
+
+    #expect(isError(result.error, .installDirectoryNotEmpty))
+    #expect(rig.exists(".tmp/notes.txt"))
+    #expect(rig.exists("ldiff/keep.bin"))
+  }
 }
 
 @Suite struct ClientRepairLaunchTests {

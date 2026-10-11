@@ -29,7 +29,8 @@ extension GenshinCNClient {
 
   private func perform(_ job: GameJob, report: @escaping @Sendable (JobProgress) -> Void) async throws {
     let directory = try requireGameDirectory()
-    SophonInstallation.removeLegacyTemporaryFolders(in: directory)
+    // An install is only known to target a game directory once `prepareForInstall` accepted it.
+    if job != .install { SophonInstallation.removeLegacyTemporaryFolders(in: directory) }
     let sophonReport: @Sendable (SophonProgress) -> Void = { report(Self.jobProgress($0)) }
     switch job {
     case .install: try await install(in: directory, report: report, progress: sophonReport)
@@ -55,6 +56,7 @@ extension GenshinCNClient {
   ) async throws {
     report(.preparing)
     try SophonInstallation.prepareForInstall(in: directory)  // INS-005: refuses before any request
+    SophonInstallation.removeLegacyTemporaryFolders(in: directory)
     let (main, ref, manifest) = try await mainReleaseWithManifest()
     try await downloader.install(
       manifest.files, using: ref, into: directory, tempDirectory: SophonInstallation.tempDirectory(in: directory),
