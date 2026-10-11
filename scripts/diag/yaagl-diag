@@ -603,14 +603,15 @@ def hostname_probe(dylib, work):
     if built.returncode:
         return None, "cannot build the x86_64 probe: " + built.stderr.strip()[:120]
     own = os.uname().nodename
-    base = own[:-6] if own.lower().endswith(".local") else own
+    # The host also answers to its name without ".local", but only when the host name has that suffix.
+    spellings = {own, own.upper()} | ({own[:-6]} if own.lower().endswith(".local") else set())
     env = {**os.environ, "DYLD_INSERT_LIBRARIES": str(dylib), "YAAGL_GAMEHOST_LOG": str(log)}
 
     def resolve(name):
         out = run([str(exe), name], env=env, timeout=60)  # Rosetta runs it; `arch` would drop DYLD_INSERT_LIBRARIES
         return out.stdout.strip()
 
-    for name in {own, base, base + ".local", base.upper()}:
+    for name in spellings:
         log.write_text("")
         got = resolve(name)
         answered = re.findall(r"answered own host name (\S+) with (\S+) ", log.read_text())
@@ -620,7 +621,7 @@ def hostname_probe(dylib, work):
     other = resolve("localhost")
     if "answered own host name" in log.read_text() or other != "127.0.0.1":
         return False, f"localhost went to {other!r} or was intercepted"
-    return True, f"{base} -> local address without the resolver; localhost untouched"
+    return True, f"{own} -> local address without the resolver; localhost untouched"
 
 
 def cmd_probe(a):
