@@ -111,16 +111,18 @@ final class FakeGameClient: GameClient, Sendable {
   let statusQueries = AsyncQueue<Void>()
   let statusGate = AsyncQueue<Void>()
 
+  /// The answer is fixed when the query starts, like a response to a request already sent.
   func status() async throws -> GameStatus {
+    let answer = state.withLock { s -> Result<GameStatus, Error> in
+      s.statusCalls += 1
+      return s.status
+    }
     if stallsStatus.withLock({ $0 }) {
       statusQueries.push(())
       _ = await statusGate.pop()
       try Task.checkCancellation()
     }
-    return try state.withLock { s -> GameStatus in
-      s.statusCalls += 1
-      return try s.status.get()
-    }
+    return try answer.get()
   }
 
   /// When set, `requiredDiskSpace` signals `diskQueries` and suspends until cancelled.

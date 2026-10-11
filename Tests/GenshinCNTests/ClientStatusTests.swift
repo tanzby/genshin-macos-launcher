@@ -190,4 +190,25 @@ import Testing
 
     #expect(needed == Int64(release.files["pkg_version"]!.count + release.files["YuanShen.exe"]!.count))
   }
+
+  @Test func INS_004_aCdnWithoutSizeStatsIsAContractBreakNotZeroBytes() async throws {
+    var full = FakeRelease.game("5.6.0")
+    full.omitsStats = true
+    let install = ClientRig(main: full)
+    await #expect(throws: SophonError.malformedResponse) { try await install.client.requiredDiskSpace(for: .install) }
+
+    var main = FakeRelease.game("5.6.0", diffTags: ["5.5.0"])
+    main.omitsStats = true
+    let update = ClientRig(main: main)
+    update.install(.game("5.5.0"))
+    await #expect(throws: SophonError.malformedResponse) { try await update.client.requiredDiskSpace(for: .update) }
+
+    var pre = FakeRelease.game("5.7.0", diffTags: ["5.6.0"])
+    pre.omitsStats = true
+    let preDownload = ClientRig(main: .game("5.6.0"), pre: pre)
+    preDownload.install(.game("5.6.0"))
+    await #expect(throws: SophonError.malformedResponse) {
+      try await preDownload.client.requiredDiskSpace(for: .preDownload)
+    }
+  }
 }
