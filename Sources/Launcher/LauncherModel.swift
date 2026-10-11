@@ -120,8 +120,7 @@ public final class LauncherModel {
     while !FileManager.default.fileExists(atPath: probe.path), probe.pathComponents.count > 1 {
       probe.deleteLastPathComponent()
     }
-    let values = try? probe.resourceValues(forKeys: [.volumeAvailableCapacityForImportantUsageKey])
-    return values?.volumeAvailableCapacityForImportantUsage
+    return WineRuntime.volumeAvailableSpace(probe)
   }
 
   // MARK: Status
@@ -254,8 +253,7 @@ public final class LauncherModel {
         try Task.checkCancellation()
         stream = try begin(job, store: store)
       } catch {
-        exclusive = .idle
-        exclusiveTask = nil
+        releaseSlot(preDownload: false)
         readySink.finish(throwing: error)
         return
       }
@@ -287,8 +285,7 @@ public final class LauncherModel {
         }
         stream = try begin(.preDownload, store: store)
       } catch {
-        isPreDownloading = false
-        preDownloadTask = nil
+        releaseSlot(preDownload: true)
         readySink.finish(throwing: error)
         return
       }
@@ -302,13 +299,11 @@ public final class LauncherModel {
     client.setGameDirectory(store.gameDirectory)
     let pending = PendingJob(kind: job, targetVersion: job == .preDownload ? status?.preDownloadTarget : status?.remoteVersion)
     // A pre-download must not replace the marker of an unfinished install/update/repair: that one blocks launch.
-    if job == .preDownload, let existing = store.load(), existing.kind != .preDownload {
-      progress = .preparing
-      return client.run(job)
+    if !Self.leavesMarkerAlone(job, store: store) {
+      // Without a marker an interrupted job could neither be continued nor block launching: refuse to start.
+      do { try store.save(pending) } catch { throw LauncherError.unexpected("job.json could not be written") }
+      pendingJob = pending
     }
-    // Without a marker an interrupted job could neither be continued nor block launching: refuse to start.
-    do { try store.save(pending) } catch { throw LauncherError.unexpected("job.json could not be written") }
-    pendingJob = pending
     progress = .preparing
     return client.run(job)
   }
@@ -334,7 +329,7 @@ public final class LauncherModel {
       eventSink.yield(.failed(job, error))
     } else {
       // A finished pre-download leaves an unfinished install/update/repair marker alone.
-      let foreign = job == .preDownload && store.load().map { $0.kind != .preDownload } == true
+      let foreign = Self.leavesMarkerAlone(job, store: store)
       let cleared = foreign || store.clear()
       if !foreign { pendingJob = nil }
       await refresh()
@@ -349,7 +344,17 @@ public final class LauncherModel {
     }
     ProcessInfo.processInfo.endActivity(activity)
     progress = nil
-    if job == .preDownload {
+    releaseSlot(preDownload: job == .preDownload)
+  }
+
+  /// A pre-download running beside an unfinished install/update/repair neither writes nor clears its marker.
+  private static func leavesMarkerAlone(_ job: GameJob, store: PendingJobStore) -> Bool {
+    job == .preDownload && store.load()?.blocksLaunch == true
+  }
+
+  /// Frees the pre-download slot, or the exclusive one that install/update/repair, Wine and launch share.
+  private func releaseSlot(preDownload: Bool) {
+    if preDownload {
       isPreDownloading = false
       preDownloadTask = nil
     } else {
@@ -360,9 +365,7 @@ public final class LauncherModel {
 
   /// Cancels the chosen slots' Tasks and returns once all of them have stopped.
   private func cancelAndWait(exclusive: Bool, preDownload: Bool) async {
-    var tasks: [Task<Void, Never>] = []
-    if exclusive { tasks += [exclusiveTask].compactMap { $0 } }
-    if preDownload { tasks += [preDownloadTask].compactMap { $0 } }
+    let tasks = [exclusive ? exclusiveTask : nil, preDownload ? preDownloadTask : nil].compactMap { $0 }
     for task in tasks { task.cancel() }
     for task in tasks { await task.value }
     // The streams are over, but the work behind them may still be finishing a file.
@@ -503,8 +506,7 @@ public final class LauncherModel {
     }
     ProcessInfo.processInfo.endActivity(activity)
     progress = nil
-    exclusive = .idle
-    exclusiveTask = nil
+    releaseSlot(preDownload: false)
   }
 
   // MARK: Launch
@@ -524,7 +526,7 @@ public final class LauncherModel {
     guard !isWineNotReady else { throw LauncherError.wineNotReady }
     guard let status, status.localVersion != nil else { throw LauncherError.notInstalled }
     guard let gameDirectory else { throw LauncherError.noGameDirectory }
-    if let kind = store?.load()?.kind, kind != .preDownload { throw LauncherError.pendingJob(kind) }
+    if let pending = store?.load(), pending.blocksLaunch { throw LauncherError.pendingJob(pending.kind) }
     guard isOnline else { throw LauncherError.offline }
     guard !status.canUpdate else { throw LauncherError.updateRequired }
     exclusive = .launching
@@ -578,8 +580,7 @@ public final class LauncherModel {
     }
     launchGate = nil
     launchWork = nil
-    exclusive = .idle
-    exclusiveTask = nil
+    releaseSlot(preDownload: false)
   }
 
   /// Test hook: returns once no job or launch Task is outstanding.

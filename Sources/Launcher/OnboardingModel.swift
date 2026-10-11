@@ -57,11 +57,8 @@ public final class OnboardingModel {
   }
 
   private func checkGameDirectory() {
-    guard let url = settings.gameDirectory else {
-      gameDirectoryUsable = true
-      return
-    }
-    gameDirectoryUsable = GameDirectoryValidator.isUsable(url)
+    // No folder chosen yet is not a problem to report here.
+    gameDirectoryUsable = settings.gameDirectory.map(GameDirectoryValidator.isUsable) ?? true
   }
 
   /// Returns the read error's description, nil on success.

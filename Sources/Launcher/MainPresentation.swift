@@ -83,13 +83,10 @@ public struct MainPresentation: Sendable, Equatable {
     let idleLike = s.phase == .idle || s.phase == .preDownloading
     // Pre-download may overlap with launching and running (APP-015), but not with install/update/repair.
     let preDownloadPhase = idleLike || s.phase == .launching || s.phase == .running
-    let noBlockingJob = s.pendingJob.map { $0.kind == .preDownload } ?? true
+    let noBlockingJob = s.pendingJob?.blocksLaunch != true
     let repairable = installed && s.isOnline && idleLike && noBlockingJob && !s.wineNotReady && s.status?.canUpdate != true
 
     let offline = s.hasLoaded && !s.isOnline
-    // Download jobs and Wine preparation are paused by the same button.
-    let pauseButton: (PrimaryButton, Bool) = (s.isPausing ? .pausing : .pause, !s.isPausing)
-
     func make(_ button: PrimaryButton, _ enabled: Bool, _ status: StatusLine) -> MainPresentation {
       MainPresentation(
         button: button, buttonEnabled: enabled, status: status, canRepair: repairable,
@@ -97,16 +94,18 @@ public struct MainPresentation: Sendable, Equatable {
           && s.status?.canPreDownload == true,
         activePreDownload: s.isPreDownloading ? ActivePreDownload(progress: s.progress, isPausing: s.isPausing) : nil)
     }
+    // Download jobs and Wine preparation are paused by the same button.
+    func pausable(_ status: StatusLine) -> MainPresentation { make(s.isPausing ? .pausing : .pause, !s.isPausing, status) }
 
     switch s.phase {
     case .preparingWine:
       // The download resumes from its .part files, so Wine preparation can be paused like a game job.
-      return make(pauseButton.0, pauseButton.1, .wine(s.progress))
+      return pausable(.wine(s.progress))
     case .running: return make(.running, false, .running)
     case .launching: return make(.launching, false, .launching)
-    case .installing: return make(pauseButton.0, pauseButton.1, .job(.install, s.progress, paused: false))
-    case .updating: return make(pauseButton.0, pauseButton.1, .job(.update, s.progress, paused: false))
-    case .repairing: return make(pauseButton.0, pauseButton.1, .job(.repair, s.progress, paused: false))
+    case .installing: return pausable(.job(.install, s.progress, paused: false))
+    case .updating: return pausable(.job(.update, s.progress, paused: false))
+    case .repairing: return pausable(.job(.repair, s.progress, paused: false))
     case .idle, .preDownloading:
       break
     }
@@ -115,7 +114,7 @@ public struct MainPresentation: Sendable, Equatable {
       return make(.prepareWine, true, s.lastError.map { .error($0) } ?? .wineRequired)
     }
 
-    if let pending = s.pendingJob, pending.kind != .preDownload {
+    if let pending = s.pendingJob, pending.blocksLaunch {
       // Continuing needs the network, like every other download.
       if let error = s.lastError { return make(.retry, s.isOnline, .error(error)) }
       if offline { return make(.resume, false, .offline) }

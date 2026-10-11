@@ -13,6 +13,11 @@ public struct PendingJob: Codable, Sendable, Equatable {
   }
 }
 
+extension PendingJob {
+  /// An unfinished install/update/repair: launching waits for it. A pre-download marker does not block.
+  var blocksLaunch: Bool { kind != .preDownload }
+}
+
 /// Reads and writes `job.json`. Unknown fields are ignored; an unreadable file counts as absent.
 struct PendingJobStore: Sendable {
   static let directoryName = ".yaagl-tmp"
