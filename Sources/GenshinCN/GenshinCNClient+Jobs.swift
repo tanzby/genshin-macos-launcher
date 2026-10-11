@@ -92,18 +92,22 @@ extension GenshinCNClient {
   ) async throws {
     let installed = try installedVersion(in: directory)
     GenshinGameFiles.healBackups(in: directory)
-    let (main, ref, manifest) = try await mainReleaseWithManifest()
+    let (main, ref) = try await mainRelease()
     guard SophonVersion.isOlder(installed, than: main.tag) else { throw GenshinCNClientError.noUpdate }
     let temp = SophonInstallation.tempDirectory(in: directory)
 
     if main.diffTags.contains(installed) {
-      let (diffRef, diff) = try await diffManifest(for: main)
+      // Both are needed for the plan; awaiting the chunk manifest first keeps its error the one reported.
+      async let pendingDiff = diffManifest(for: main)
+      let manifest = try await sophon.manifest(for: ref)
+      let (diffRef, diff) = try await pendingDiff
       let plan = try await updater.plan(
         from: installed, diff: diff, manifest: manifest, gameDirectory: directory, progress: progress)
       try await updater.update(
         plan, diff: diffRef, chunks: ref, gameDirectory: directory, tempDirectory: temp, progress: progress)
     } else {
       // No patch from this version: sync every file against the chunk manifest. Intact files are skipped.
+      let manifest = try await sophon.manifest(for: ref)
       try await downloader.install(manifest.files, using: ref, into: directory, tempDirectory: temp, progress: progress)
       try SophonInstallation.verifySizes(of: manifest.files, in: directory)
     }
@@ -126,10 +130,10 @@ extension GenshinCNClient {
       throw GenshinCNClientError.noPreDownload
     }
     guard pre.diffTags.contains(installed) else { throw SophonError.versionNotPatchable(installed) }
-    let build = try await sophon.build(for: pre)
-    let ref = try build.manifest(matching: "game")
+    async let pendingDiff = diffManifest(for: pre)
+    let ref = try await sophon.build(for: pre).manifest(matching: "game")
     let manifest = try await sophon.manifest(for: ref)
-    let (diffRef, diff) = try await diffManifest(for: pre)
+    let (diffRef, diff) = try await pendingDiff
     let plan = try await updater.plan(
       from: installed, diff: diff, manifest: manifest, gameDirectory: directory, progress: progress)
     try await updater.predownload(
@@ -152,9 +156,11 @@ extension GenshinCNClient {
         return try SophonInstallation.bytesToFetch(for: manifest.files, in: directory)
       case .update:
         let installed = try installedVersion(in: directory)
-        let (main, ref) = try await mainRelease()
+        guard let main = try await sophon.gameBranches().main else { throw SophonError.malformedResponse }
         guard SophonVersion.isOlder(installed, than: main.tag) else { return 0 }
-        guard main.diffTags.contains(installed) else { return try Self.sizes(of: ref.stats).uncompressedSize }
+        guard main.diffTags.contains(installed) else {
+          return try Self.sizes(of: await chunkManifestRef(for: main).stats).uncompressedSize
+        }
         let stats = try Self.sizes(of: await diffManifestRef(for: main).patchStats[installed])
         let temp = SophonInstallation.tempDirectory(in: directory)
         let downloaded = SophonUpdater.isPredownloaded(main.tag, from: installed, in: temp)
@@ -187,7 +193,11 @@ extension GenshinCNClient {
   /// The main branch with the manifest of its `game` category (voice packs are not managed, UPG-014).
   private func mainRelease() async throws -> (branch: SophonGameBranch, ref: SophonManifestRef) {
     guard let main = try await sophon.gameBranches().main else { throw SophonError.malformedResponse }
-    return (main, try await sophon.build(for: main).manifest(matching: "game"))
+    return (main, try await chunkManifestRef(for: main))
+  }
+
+  private func chunkManifestRef(for branch: SophonGameBranch) async throws -> SophonManifestRef {
+    try await sophon.build(for: branch).manifest(matching: "game")
   }
 
   private func mainReleaseWithManifest() async throws -> (
