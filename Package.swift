@@ -5,7 +5,8 @@ import PackageDescription
 //   GenshinCN -> Launcher, Sophon, Wine, Platform
 //   Launcher  -> Platform, Wine
 //   Wine      -> Platform
-//   Sophon    -> swift-protobuf, CZstd (vendored facebook/zstd, decompression only)
+//   Sophon    -> swift-protobuf, CZstd (vendored facebook/zstd, decompression only),
+//                CHDiffPatch (vendored sisong/HDiffPatch v4.5.2, patching only)
 // The SwiftUI app (project.yml) sits on top of Launcher and GenshinCN.
 let package = Package(
   name: "YaaglKit",
@@ -27,9 +28,12 @@ let package = Package(
       exclude: ["LICENSE"],
       cSettings: [.define("ZSTD_DISABLE_ASM", to: "1"), .headerSearchPath("common")]
     ),
+    // sisong/HDiffPatch v4.5.2 (MIT), the patcher only (no diffing, no compression plugins), plus a small
+    // file-descriptor front end. The CN ldiff files are uncompressed single-stream diffs.
+    .target(name: "CHDiffPatch", exclude: ["LICENSE"]),
     .target(
       name: "Sophon",
-      dependencies: ["CZstd", .product(name: "SwiftProtobuf", package: "swift-protobuf")],
+      dependencies: ["CZstd", "CHDiffPatch", .product(name: "SwiftProtobuf", package: "swift-protobuf")],
       exclude: ["Proto/manifest.proto", "Proto/manifest_ldiff.proto"]
     ),
     .target(name: "Platform"),
