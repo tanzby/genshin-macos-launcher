@@ -15,13 +15,15 @@ struct YaaglApp: App {
   private static func makeLauncher() -> LauncherModel {
     let data: DataDirectory
     do {
-      data = try DataDirectory.prepare()
+      // `--autolaunch` may point at a sandbox root; then nothing outside it is cleaned.
+      data = try AutoLaunchOptions.current.prepareDataDirectory()
     } catch {
       fatalError("Cannot prepare the data directory: \(error)")
     }
     let wine = WineRuntime(dataDirectory: data)
     return LauncherModel(client: GenshinCNClient.bundled(wine: wine, dataDirectory: data), wine: wine)
   }
+  private let autoLaunch = AutoLaunchOptions.current
 
   // Sparkle refuses to start without an EdDSA public key, so builds made before
   // the key exists (SUPublicEDKey empty) leave the updater stopped. Debug builds
@@ -47,10 +49,20 @@ struct YaaglApp: App {
     #endif
   }
 
+  /// `--autolaunch` (APP-020): drive one session without clicks, log to `<data>/logs/launcher.log`, quit.
+  private func runAutoLaunch() async {
+    guard autoLaunch.enabled else { return }
+    let root = autoLaunch.dataRoot ?? DataDirectory.defaultRoot
+    await AutoLaunch.runIfRequested(
+      autoLaunch, model: launcher, log: DiagLog(logsDirectory: DataDirectory(root: root).logs)
+    ) { NSApp.terminate(nil) }
+  }
+
   var body: some Scene {
     Window("Yaagl", id: "main") {
       MainView()
         .environment(launcher)
+        .task { await runAutoLaunch() }
     }
     .commands {
       CommandGroup(after: .appInfo) {

@@ -37,6 +37,7 @@ public final class GenshinCNClient: GameClient {
   let sophon: SophonAPI
   let downloader: SophonDownloader
   let updater: SophonUpdater
+  let background: BackgroundImageProvider?
   private let location = Mutex<URL?>(nil)
   let serializer = JobSerializer()
 
@@ -46,7 +47,8 @@ public final class GenshinCNClient: GameClient {
     launcher: any GameLaunching,
     sophon: SophonAPI = SophonAPI(),
     downloader: SophonDownloader = SophonDownloader(),
-    updater: SophonUpdater = SophonUpdater()
+    updater: SophonUpdater = SophonUpdater(),
+    background: BackgroundImageProvider? = nil
   ) {
     self.dataDirectory = dataDirectory
     self.protonExtras = protonExtras
@@ -54,6 +56,7 @@ public final class GenshinCNClient: GameClient {
     self.sophon = sophon
     self.downloader = downloader
     self.updater = updater
+    self.background = background
   }
 
   /// The production composition: the game runs in `wine`'s prefix through a `GameSession`.
@@ -63,7 +66,9 @@ public final class GenshinCNClient: GameClient {
     let session = GameSession(
       layout: wine.layout, runner: SystemProcessRunner(allowedRoots: [wine.runtimeDirectory]),
       launchServices: SystemLaunchServices(), helpers: helpers)
-    return GenshinCNClient(dataDirectory: dataDirectory.root, protonExtras: protonExtras, launcher: session)
+    return GenshinCNClient(
+      dataDirectory: dataDirectory.root, protonExtras: protonExtras, launcher: session,
+      background: BackgroundImageProvider(cacheDirectory: dataDirectory.background))
   }
 
   /// The composition for the app: helpers and protonextras come from `bundle` (`Contents/Helpers`, `Resources`).
@@ -157,9 +162,9 @@ public final class GenshinCNClient: GameClient {
     }
   }
 
-  /// Not implemented yet (ticket #39): the launcher shows the bundled picture.
+  /// The official launcher picture (APP-021); without a provider (tests) the bundled one.
   public func backgroundImage() async -> BackgroundImage {
-    .bundledDefault
+    await background?.backgroundImage() ?? .bundledDefault
   }
 
   // MARK: - Errors
