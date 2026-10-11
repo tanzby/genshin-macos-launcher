@@ -1,3 +1,4 @@
+import Diagnostics
 import Foundation
 import Testing
 import Wine
