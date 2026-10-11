@@ -18,7 +18,7 @@ import Testing
       let call = try #require(f.runner.calls.first)
       #expect(f.runner.calls.count == 1)
       #expect(call.executable == f.layout.loader.path)
-      #expect(call.arguments == ["cmd"])
+      #expect(call.arguments == ["start", "/wait", "cmd"])
       #expect(call.workingDirectory == f.layout.root.path)
       #expect(call.environment["WINEPREFIX"] == f.layout.prefixDirectory.path)
       #expect(call.environment["WINEDEBUG"] == "fixme-all,err-unwind,+timestamp")
@@ -40,7 +40,7 @@ import Testing
       _ = await f.session.openCommandPrompt(makeLaunchRecipe(registry: [LaunchRegistry.widthEdit(2560)]), gameDirectory: nil)
       #expect(!FileManager.default.fileExists(atPath: f.layout.launchJournal.path))
       #expect(!FileManager.default.fileExists(atPath: f.layout.configBatch.path))
-      #expect(f.runner.calls.allSatisfy { $0.arguments == ["cmd"] })
+      #expect(f.runner.calls.allSatisfy { $0.arguments == ["start", "/wait", "cmd"] })
     }
   }
 
