@@ -21,6 +21,12 @@ public enum GameDirectoryValidator {
     return isDirectory.boolValue
   }
 
+  /// A directory that is there and can be listed (a missing path or a file cannot). Unlike `validate` this accepts
+  /// any content: a saved folder may hold a half-finished install.
+  static func isUsable(_ url: URL) -> Bool {
+    (try? FileManager.default.contentsOfDirectory(atPath: url.path)) != nil
+  }
+
   /// Names that do not count as content: this app's temp directory and Finder litter.
   static let ignored: Set<String> = [PendingJobStore.directoryName, ".DS_Store"]
 

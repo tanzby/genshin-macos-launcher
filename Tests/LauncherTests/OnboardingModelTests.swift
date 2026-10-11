@@ -134,4 +134,20 @@ private func tempDirectory() -> URL {
     #expect(model.step == .gameDirectory)
     #expect(!model.isComplete)
   }
+
+  @Test func CFG_009_aSavedGameFolderThatBecameUnreadableSendsTheUserBackToThePicker() throws {
+    let settings = settings()
+    let dir = tempDirectory()
+    defer {
+      try? FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: dir.path)
+      try? FileManager.default.removeItem(at: dir)
+    }
+    settings.gameDirectory = dir
+    let model = OnboardingModel(hosts: FakeHosts(.current), settings: settings)
+    model.refresh()
+    #expect(model.isComplete)
+    try FileManager.default.setAttributes([.posixPermissions: 0o000], ofItemAtPath: dir.path)
+    model.refresh()
+    #expect(model.step == .gameDirectory)
+  }
 }

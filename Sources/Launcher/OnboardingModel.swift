@@ -54,7 +54,7 @@ public final class OnboardingModel {
       gameDirectoryUsable = true
       return
     }
-    gameDirectoryUsable = GameDirectoryValidator.exists(url) == true
+    gameDirectoryUsable = GameDirectoryValidator.isUsable(url)
   }
 
   /// Returns the read error's description, nil on success.
