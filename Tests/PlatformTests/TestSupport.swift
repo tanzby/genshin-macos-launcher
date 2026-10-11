@@ -1,18 +1,11 @@
 import Foundation
+import TestSupport
 
 @testable import Platform
 
-/// A fresh directory under the system temp dir, removed by `cleanup()`.
+/// A fresh directory under the test root (TestSupport), removed when the test process exits.
 struct TempDir {
-  let url: URL
-
-  init() throws {
-    url = FileManager.default.temporaryDirectory
-      .appending(path: "yaagl-platform-tests-\(UUID().uuidString)", directoryHint: .isDirectory)
-    try FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
-  }
-
-  func cleanup() { try? FileManager.default.removeItem(at: url) }
+  let url = makeTemporaryDirectory("yaagl-platform-tests")
 
   func path(_ components: String...) -> URL {
     components.reduce(url) { $0.appending(path: $1) }

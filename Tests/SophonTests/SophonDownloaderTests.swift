@@ -1,6 +1,7 @@
 import CryptoKit
 import Foundation
 import Testing
+import TestSupport
 
 @testable import Sophon
 
@@ -218,17 +219,12 @@ private struct Sandbox {
   let temp: URL
 
   init() throws {
-    let base = FileManager.default.temporaryDirectory.appendingPathComponent(
-      "sophon-downloader-\(UUID().uuidString)", isDirectory: true)
-    try FileManager.default.createDirectory(at: base, withIntermediateDirectories: true)
-    root = base.resolvingSymlinksInPath()
+    root = makeTemporaryDirectory("sophon-downloader")
     game = root.appendingPathComponent("game", isDirectory: true)
     temp = root.appendingPathComponent("tmp", isDirectory: true)
     try FileManager.default.createDirectory(at: game, withIntermediateDirectories: true)
     try FileManager.default.createDirectory(at: temp, withIntermediateDirectories: true)
   }
-
-  func remove() { try? FileManager.default.removeItem(at: root) }
 
   func read(_ relativePath: String) -> Data? {
     try? Data(contentsOf: game.appendingPathComponent(relativePath))
@@ -328,15 +324,6 @@ private struct RunningInstall {
   }
 }
 
-private func waitUntil(timeout: Duration = .seconds(5), _ condition: () -> Bool) async -> Bool {
-  let deadline = ContinuousClock.now + timeout
-  while ContinuousClock.now < deadline {
-    if condition() { return true }
-    try? await Task.sleep(for: .milliseconds(5))
-  }
-  return condition()
-}
-
 private final class Rig: @unchecked Sendable {
   let sandbox: Sandbox
   let cdn: FakeCDN
@@ -353,8 +340,6 @@ private final class Rig: @unchecked Sendable {
     let cdn = self.cdn
     (session, id) = StubURLProtocol.session(reply: { cdn.reply(to: $0) })
   }
-
-  func remove() { sandbox.remove() }
 
   func downloader(
     concurrency: Int = 4, maxAttempts: Int = 5, retryDelay: Duration = .zero,
@@ -427,7 +412,6 @@ private final class Rig: @unchecked Sendable {
 
   @Test func HARNESS_fakeCDNServesRangesPartialBodiesAndHeldRequests() async throws {
     let rig = try Rig()
-    defer { rig.remove() }
     let file = SyntheticFile("h.bin", sizes: [5_000])
     rig.cdn.serve(file)
     let id = file.pieces[0].id
@@ -463,9 +447,9 @@ private final class Rig: @unchecked Sendable {
     rig.cdn.script(chunk: id) { request in .held(gate, then: request.standard) }
     let before = rig.requests.count
     let task = Task { try await rig.session.data(from: url) }
-    #expect(await waitUntil { StubURLProtocol.inFlight(rig.id) == 1 && rig.requests.count == before + 1 })
+    #expect(await pollUntil { StubURLProtocol.inFlight(rig.id) == 1 && rig.requests.count == before + 1 })
     task.cancel()
-    #expect(await waitUntil { StubURLProtocol.inFlight(rig.id) == 0 })
+    #expect(await pollUntil { StubURLProtocol.inFlight(rig.id) == 0 })
     gate.open()
     await #expect(throws: (any Error).self) { try await task.value }
   }
@@ -474,7 +458,6 @@ private final class Rig: @unchecked Sendable {
 
   @Test func INS_008_multiChunkFileIsAssembledAtItsRelativePathWithCorrectContent() async throws {
     let rig = try Rig()
-    defer { rig.remove() }
     // The 200 000 byte chunk is a multi-block zstd frame.
     let file = SyntheticFile("GenshinImpact_Data/Persistent/a.bin", sizes: [40_000, 200_000, 12_345])
     rig.cdn.serve(file)
@@ -492,7 +475,6 @@ private final class Rig: @unchecked Sendable {
 
   @Test func INS_008_directoryEntryOnlyCreatesTheDirectory() async throws {
     let rig = try Rig()
-    defer { rig.remove() }
     let directory = SophonFile(
       path: "GenshinImpact_Data/Plugins", isDirectory: true, size: 0, md5: "", chunks: [])
 
@@ -507,7 +489,6 @@ private final class Rig: @unchecked Sendable {
 
   @Test func INS_008_sameBasenameInDifferentDirectoriesDoesNotOverwriteEachOther() async throws {
     let rig = try Rig(delay: .milliseconds(40))
-    defer { rig.remove() }
     let first = SyntheticFile("a/data.bin", sizes: [30_000, 30_000])
     let second = SyntheticFile("b/data.bin", sizes: [25_000, 35_000])
     rig.cdn.serve(first, second)
@@ -520,7 +501,6 @@ private final class Rig: @unchecked Sendable {
 
   @Test func INS_008_filesSharingAChunkIdAreBothAssembledCorrectly() async throws {
     let rig = try Rig(delay: .milliseconds(40))
-    defer { rig.remove() }
     let shared = ChunkPiece("shared", size: 20_000)
     let first = SyntheticFile(
       "one.bin", pieces: [shared, ChunkPiece("only-in-one", size: 10_000)])
@@ -536,7 +516,6 @@ private final class Rig: @unchecked Sendable {
 
   @Test func INS_008_chunkWithWrongMD5ThrowsChecksumMismatchAndCreatesNoTargetFile() async throws {
     let rig = try Rig()
-    defer { rig.remove() }
     let clean = SyntheticFile("Data/bad.bin", sizes: [10_000, 10_000])
     let badChunk = clean.file.chunks[1].replacing(md5: md5Hex(Data("not this chunk".utf8)))
     let file = clean.file.replacing(chunks: [clean.file.chunks[0], badChunk])
@@ -552,7 +531,6 @@ private final class Rig: @unchecked Sendable {
 
   @Test func INS_008_wholeFileMD5MismatchThrowsAndCreatesNoTargetFile() async throws {
     let rig = try Rig()
-    defer { rig.remove() }
     let clean = SyntheticFile("Data/whole.bin", sizes: [10_000, 5_000])
     let file = clean.file.replacing(md5: md5Hex(Data("some other file".utf8)))
     rig.cdn.serve(clean)
@@ -567,7 +545,6 @@ private final class Rig: @unchecked Sendable {
 
   @Test func INS_008_wholeFileMD5MismatchLeavesAnExistingFileUntouched() async throws {
     let rig = try Rig()
-    defer { rig.remove() }
     let clean = SyntheticFile("Data/whole.bin", sizes: [10_000, 5_000])
     let file = clean.file.replacing(md5: md5Hex(Data("some other file".utf8)))
     rig.cdn.serve(clean)
@@ -584,7 +561,6 @@ private final class Rig: @unchecked Sendable {
 
   @Test func INS_008_completedFileLeavesNoChunkCacheOrAssemblyFileInTempDirectory() async throws {
     let rig = try Rig()
-    defer { rig.remove() }
     let first = SyntheticFile("Data/x/one.bin", sizes: [20_000, 20_000])
     let second = SyntheticFile("two.bin", sizes: [5_000])
     rig.cdn.serve(first, second)
@@ -600,7 +576,6 @@ private final class Rig: @unchecked Sendable {
 
   @Test func INS_008_chunkRangeBeyondFileSizeIsAnInvalidManifest() async throws {
     let rig = try Rig()
-    defer { rig.remove() }
     let clean = SyntheticFile("Data/short.bin", sizes: [500, 500])
     let file = clean.file.replacing(size: 900)  // second chunk ends at 1000
     rig.cdn.serve(clean)
@@ -616,7 +591,6 @@ private final class Rig: @unchecked Sendable {
   @Test(arguments: [4_000, 6_000])
   func INS_008_decompressedLengthDifferentFromDeclaredIsAnInvalidManifest(actual: Int) async throws {
     let rig = try Rig()
-    defer { rig.remove() }
     let clean = SyntheticFile("Data/len.bin", sizes: [actual])
     // The chunk MD5 is right for what the frame really holds; only the declared length is wrong.
     let chunk = clean.file.chunks[0].replacing(uncompressedSize: 5_000)
@@ -641,7 +615,6 @@ private final class Rig: @unchecked Sendable {
   @Test(arguments: Damage.allCases)
   func REP_004_installFixesFilesThatAreMissingOrDamaged(damage: Damage) async throws {
     let rig = try Rig()
-    defer { rig.remove() }
     let file = SyntheticFile("Data/fix.bin", sizes: [30_000, 30_000])
     rig.cdn.serve(file)
     switch damage {
@@ -663,7 +636,6 @@ private final class Rig: @unchecked Sendable {
 
   @Test func REP_004_installSendsNoRequestWhenSizeAndMD5BothMatch() async throws {
     let rig = try Rig()
-    defer { rig.remove() }
     let file = SyntheticFile("Data/ok.bin", sizes: [30_000, 30_000])
     rig.cdn.serve(file)
     try rig.sandbox.write(file.file.path, file.plain)
@@ -676,7 +648,6 @@ private final class Rig: @unchecked Sendable {
 
   @Test func REP_003_findDamagedFilesReturnsMissingWrongSizeAndWrongMD5Only() async throws {
     let rig = try Rig()
-    defer { rig.remove() }
     let intact = SyntheticFile("intact.bin", sizes: [3_000])
     let missing = SyntheticFile("missing.bin", sizes: [3_000])
     let wrongSize = SyntheticFile("Data/wrong-size.bin", sizes: [3_000])
@@ -697,7 +668,6 @@ private final class Rig: @unchecked Sendable {
 
   @Test func REP_003_findDamagedFilesReturnsNothingWhenEveryFileIsIntact() async throws {
     let rig = try Rig()
-    defer { rig.remove() }
     let files = (0..<3).map { SyntheticFile("Data/f\($0).bin", sizes: [2_000 + $0]) }
     for file in files { try rig.sandbox.write(file.file.path, file.plain) }
     let log = ProgressLog()
@@ -712,7 +682,6 @@ private final class Rig: @unchecked Sendable {
 
   @Test func REP_003_findDamagedFilesReportsVerifyingProgressEndingComplete() async throws {
     let rig = try Rig()
-    defer { rig.remove() }
     let files = (0..<12).map { SyntheticFile("Data/v\($0).bin", sizes: [4_000 + $0]) }
     for file in files.prefix(8) { try rig.sandbox.write(file.file.path, file.plain) }
     let log = ProgressLog()
@@ -733,7 +702,6 @@ private final class Rig: @unchecked Sendable {
 
   @Test func INS_009_partialChunkInCacheIsResumedWithARangeRequestAndAppended() async throws {
     let rig = try Rig()
-    defer { rig.remove() }
     let file = SyntheticFile("Data/resume.bin", sizes: [30_000])
     rig.cdn.serve(file)
     let have = file.pieces[0].frame.count / 3
@@ -748,7 +716,6 @@ private final class Rig: @unchecked Sendable {
 
   @Test func INS_009_serverIgnoringRangeAnswers200AndTheChunkIsRewrittenNotDuplicated() async throws {
     let rig = try Rig()
-    defer { rig.remove() }
     let file = SyntheticFile("Data/resume.bin", sizes: [30_000])
     rig.cdn.serve(file)
     rig.cdn.ignoreRange(for: file.pieces[0].id)
@@ -764,7 +731,6 @@ private final class Rig: @unchecked Sendable {
 
   @Test func INS_009_chunkAlreadyCompleteInCacheSendsNoRequest() async throws {
     let rig = try Rig()
-    defer { rig.remove() }
     let file = SyntheticFile("Data/cached.bin", sizes: [30_000])
     rig.cdn.serve(file)
     try rig.seedChunkCache(file.file.chunks[0], of: file.file.path, with: file.pieces[0].frame)
@@ -777,7 +743,6 @@ private final class Rig: @unchecked Sendable {
 
   @Test func INS_009_cachedChunkLargerThanExpectedIsDeletedAndDownloadedAgain() async throws {
     let rig = try Rig()
-    defer { rig.remove() }
     let file = SyntheticFile("Data/big.bin", sizes: [30_000])
     rig.cdn.serve(file)
     let oversized = file.pieces[0].frame + Data(repeating: 0xFF, count: 100)
@@ -795,7 +760,6 @@ private final class Rig: @unchecked Sendable {
   @Test func INS_009_http416RestartsTheChunkFromScratch() async throws {
     // Native fix: legacy treated 416 as "already complete" and kept whatever was on disk.
     let rig = try Rig()
-    defer { rig.remove() }
     let file = SyntheticFile("Data/416.bin", sizes: [30_000])
     rig.cdn.serve(file)
     rig.cdn.script(chunk: file.pieces[0].id) { request in
@@ -814,7 +778,6 @@ private final class Rig: @unchecked Sendable {
 
   @Test func INS_009_afterAMidStreamDropTheNextInstallRequestsOnlyTheRemainingBytes() async throws {
     let rig = try Rig()
-    defer { rig.remove() }
     let file = SyntheticFile("Data/drop.bin", sizes: [60_000])
     rig.cdn.serve(file)
     let frameSize = file.pieces[0].frame.count
@@ -843,7 +806,6 @@ private final class Rig: @unchecked Sendable {
 
   @Test func INS_009_midStreamDropIsRetriedInsideTheSameInstallWithARange() async throws {
     let rig = try Rig()
-    defer { rig.remove() }
     let file = SyntheticFile("Data/drop.bin", sizes: [60_000])
     rig.cdn.serve(file)
     let frameSize = file.pieces[0].frame.count
@@ -864,7 +826,6 @@ private final class Rig: @unchecked Sendable {
 
   @Test func INS_010_serverErrorsAreRetriedUntilTheFileSucceeds() async throws {
     let rig = try Rig()
-    defer { rig.remove() }
     let file = SyntheticFile("Data/flaky.bin", sizes: [20_000])
     rig.cdn.serve(file)
     rig.cdn.script(chunk: file.pieces[0].id) { request in
@@ -879,7 +840,6 @@ private final class Rig: @unchecked Sendable {
 
   @Test func INS_010_exceedingMaxAttemptsThrowsTheOriginalHTTPError() async throws {
     let rig = try Rig()
-    defer { rig.remove() }
     let file = SyntheticFile("Data/down.bin", sizes: [20_000])
     rig.cdn.serve(file)
     rig.cdn.script(chunk: file.pieces[0].id) { _ in .response(status: 503, body: Data()) }
@@ -894,7 +854,6 @@ private final class Rig: @unchecked Sendable {
 
   @Test func INS_009_aBodyLongerThanTheManifestSaysIsRejectedAndNotKept() async throws {
     let rig = try Rig()
-    defer { rig.remove() }
     let file = SyntheticFile("Data/long.bin", sizes: [20_000])
     rig.cdn.serve(file)
     let frame = file.pieces[0].frame
@@ -912,7 +871,6 @@ private final class Rig: @unchecked Sendable {
 
   @Test func INS_010_http404IsNotRetried() async throws {
     let rig = try Rig()
-    defer { rig.remove() }
     let file = SyntheticFile("Data/gone.bin", sizes: [20_000])  // never served: the CDN answers 404
 
     await #expect(throws: SophonError.http(status: 404)) {
@@ -924,7 +882,6 @@ private final class Rig: @unchecked Sendable {
 
   @Test func INS_010_retryDelayDoublesBetweenAttempts() async throws {
     let rig = try Rig()
-    defer { rig.remove() }
     let file = SyntheticFile("Data/backoff.bin", sizes: [10_000])
     rig.cdn.serve(file)
     let id = file.pieces[0].id
@@ -944,7 +901,6 @@ private final class Rig: @unchecked Sendable {
 
   @Test func INS_010_cancellationIsNotRetried() async throws {
     let rig = try Rig()
-    defer { rig.remove() }
     let file = SyntheticFile("Data/held.bin", sizes: [20_000])
     rig.cdn.serve(file)
     let gate = StubGate()
@@ -968,7 +924,6 @@ private final class Rig: @unchecked Sendable {
 
   @Test func INS_009_pausedInstallStopsCleanlyAndResumesWithoutRepeatingFinishedFiles() async throws {
     let rig = try Rig()
-    defer { rig.remove() }
     let a = SyntheticFile("a.bin", sizes: [20_000])
     let b = SyntheticFile("b.bin", sizes: [20_000, 20_000])
     let c = SyntheticFile("c.bin", sizes: [20_000])
@@ -983,14 +938,14 @@ private final class Rig: @unchecked Sendable {
     // concurrency 1 and equal sort keys: a finishes, then b's first chunk hangs.
     let running = rig.startInstall(files, downloader: rig.downloader(concurrency: 1))
     guard await running.waitForRequests(2, in: rig) else { return }
-    #expect(await waitUntil { rig.requestCount(for: b.pieces[0].id) >= 1 })
+    #expect(await pollUntil { rig.requestCount(for: b.pieces[0].id) >= 1 })
     running.task.cancel()
     await running.expectCancelled()
     // Taken the moment the install has returned: nothing may change after this point.
     let requestsAtStop = rig.requests.count
     let filesAtStop = rig.sandbox.snapshot()
 
-    #expect(await waitUntil { StubURLProtocol.inFlight(rig.id) == 0 }, "a request is still running")
+    #expect(await pollUntil { StubURLProtocol.inFlight(rig.id) == 0 }, "a request is still running")
     #expect(rig.sandbox.read("a.bin") == a.plain)
     #expect(!rig.sandbox.exists("b.bin"))
     #expect(!rig.sandbox.exists("c.bin"))
@@ -1014,7 +969,6 @@ private final class Rig: @unchecked Sendable {
   @Test(arguments: [1, 2])
   func INS_007_neverMoreThanConcurrencyFilesAreInFlight(concurrency: Int) async throws {
     let rig = try Rig(delay: .milliseconds(60))
-    defer { rig.remove() }
     let files = (0..<6).map { SyntheticFile("f\($0).bin", sizes: [5_000]) }
     rig.cdn.serve(files)
 
@@ -1027,7 +981,6 @@ private final class Rig: @unchecked Sendable {
 
   @Test func INS_007_pkgVersionAndGlobalgamemanagersGoFirstAndSlashPathsGoLast() async throws {
     let rig = try Rig()
-    defer { rig.remove() }
     let order = [
       "Data/a.bin", "root_a.bin", "pkg_version", "Data/b.bin", "root_b.bin",
       "Data/globalgamemanagers",
@@ -1061,7 +1014,6 @@ private final class Rig: @unchecked Sendable {
   @Test(arguments: unsafePaths)
   func INS_011_resolveRejectsUnsafePath(path: String) throws {
     let sandbox = try Sandbox()
-    defer { sandbox.remove() }
     #expect(throws: SophonError.unsafePath(path)) {
       _ = try SophonPathPolicy.resolve(path, in: sandbox.game)
     }
@@ -1069,7 +1021,6 @@ private final class Rig: @unchecked Sendable {
 
   @Test func INS_011_resolveAcceptsARelativePathInsideTheRoot() throws {
     let sandbox = try Sandbox()
-    defer { sandbox.remove() }
     let url = try SophonPathPolicy.resolve("GenshinImpact_Data/Persistent/a.bin", in: sandbox.game)
     #expect(
       url.standardizedFileURL.path
@@ -1078,7 +1029,6 @@ private final class Rig: @unchecked Sendable {
 
   @Test func INS_011_resolveRejectsAPathWhoseParentIsASymlinkLeavingTheRoot() throws {
     let sandbox = try Sandbox()
-    defer { sandbox.remove() }
     let outside = sandbox.root.appendingPathComponent("outside", isDirectory: true)
     try FileManager.default.createDirectory(at: outside, withIntermediateDirectories: true)
     try FileManager.default.createSymbolicLink(
@@ -1092,7 +1042,6 @@ private final class Rig: @unchecked Sendable {
   @Test(arguments: ["../escape.bin", "sub/../../escape.bin"])
   func INS_011_installWithAnUnsafePathFailsBeforeAnyRequestAndWritesNothing(bad: String) async throws {
     let rig = try Rig()
-    defer { rig.remove() }
     let good = SyntheticFile("good.bin", sizes: [3_000])
     let evil = SyntheticFile(bad, sizes: [3_000])
     rig.cdn.serve(good, evil)
@@ -1110,7 +1059,6 @@ private final class Rig: @unchecked Sendable {
   @Test(arguments: ["../x", "a/b", "..", ""])
   func INS_011_unsafeChunkIDInALaterFileFailsBeforeAnyRequest(id: String) async throws {
     let rig = try Rig()
-    defer { rig.remove() }
     let good = SyntheticFile("good.bin", sizes: [3_000])
     let other = SyntheticFile("later.bin", sizes: [3_000])
     let c = other.file.chunks[0]
@@ -1131,7 +1079,6 @@ private final class Rig: @unchecked Sendable {
 
   @Test func INS_011_chunkOffsetNearUInt64MaxIsAnInvalidManifestNotACrash() async throws {
     let rig = try Rig()
-    defer { rig.remove() }
     let base = SyntheticFile("big.bin", sizes: [3_000])
     let c = base.file.chunks[0]
     let huge = SophonChunk(
@@ -1148,7 +1095,6 @@ private final class Rig: @unchecked Sendable {
 
   @Test func INS_011_aRepeatedPathWithAnUnsafeChunkStillFailsBeforeAnyRequest() async throws {
     let rig = try Rig()
-    defer { rig.remove() }
     let good = SyntheticFile("dup.bin", sizes: [3_000])
     let c = good.file.chunks[0]
     let evilChunk = SophonChunk(
@@ -1165,7 +1111,6 @@ private final class Rig: @unchecked Sendable {
 
   @Test func INS_011_aliasedPathsWithConflictingContentAreRefusedAndEqualOnesCollapse() async throws {
     let rig = try Rig()
-    defer { rig.remove() }
     let a = SyntheticFile("Data/a.bin", sizes: [3_000])
     rig.cdn.serve(a)
     let alias = SophonFile(
@@ -1187,7 +1132,6 @@ private final class Rig: @unchecked Sendable {
 
   @Test func INS_008_chunkLargerThanTheSanityCapIsAnInvalidManifest() async throws {
     let rig = try Rig()
-    defer { rig.remove() }
     let base = SyntheticFile("huge.bin", sizes: [3_000])
     let c = base.file.chunks[0]
     let huge = SophonChunk(
@@ -1203,7 +1147,6 @@ private final class Rig: @unchecked Sendable {
 
   @Test func REP_003_cancellingTheScanThrowsEvenWhenEveryFileIsMissing() async throws {
     let rig = try Rig()
-    defer { rig.remove() }
     let files = (0..<20).map { SyntheticFile("Data/m\($0).bin", sizes: [1_000]).file }
     let downloader = rig.downloader()
     let game = rig.sandbox.game
@@ -1217,7 +1160,6 @@ private final class Rig: @unchecked Sendable {
 
   @Test func INS_011_pathsDifferingOnlyInCaseAreOneFile() async throws {
     let rig = try Rig()
-    defer { rig.remove() }
     let a = SyntheticFile("Data/a.bin", sizes: [3_000])
     let upper = SophonFile(
       path: "Data/A.bin", isDirectory: false, size: a.file.size, md5: "00" + a.file.md5.dropFirst(2),
@@ -1233,7 +1175,6 @@ private final class Rig: @unchecked Sendable {
 
   @Test func INS_011_aFileAndAFolderWithTheSameNameAreRefusedBeforeAnyRequest() async throws {
     let rig = try Rig()
-    defer { rig.remove() }
     let plain = SyntheticFile("Data/a", sizes: [3_000])
     let nested = SyntheticFile("Data/a/b.bin", sizes: [3_000])
     rig.cdn.serve(plain, nested)
@@ -1249,7 +1190,6 @@ private final class Rig: @unchecked Sendable {
 
   @Test func INS_008_progressEndsAtTotalCompressedSizeIncludingFilesAlreadyInPlace() async throws {
     let rig = try Rig()
-    defer { rig.remove() }
     let inPlace = SyntheticFile("done.bin", sizes: [10_000, 10_000])
     let first = SyntheticFile("Data/one.bin", sizes: [30_000, 20_000])
     let second = SyntheticFile("Data/two.bin", sizes: [15_000])
@@ -1272,7 +1212,6 @@ private final class Rig: @unchecked Sendable {
 
   @Test func INS_008_progressReportsCompleteWhenEverythingIsAlreadyInPlace() async throws {
     let rig = try Rig()
-    defer { rig.remove() }
     let files = (0..<3).map { SyntheticFile("p\($0).bin", sizes: [4_000, 4_000]) }
     for file in files { try rig.sandbox.write(file.file.path, file.plain) }
     let total = files.reduce(Int64(0)) { $0 + $1.compressedSize }
@@ -1286,7 +1225,6 @@ private final class Rig: @unchecked Sendable {
 
   @Test func INS_008_largeProgressIntervalLimitsCallbacksButKeepsFirstAndLast() async throws {
     let rig = try Rig()
-    defer { rig.remove() }
     let files = (0..<12).map { SyntheticFile("Data/q\($0).bin", sizes: [3_000]) }
     rig.cdn.serve(files)
     let total = files.reduce(Int64(0)) { $0 + $1.compressedSize }

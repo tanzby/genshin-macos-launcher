@@ -2,6 +2,7 @@ import Foundation
 import Launcher
 import Sophon
 import Synchronization
+import TestSupport
 import Wine
 
 @testable import GenshinCN
@@ -70,7 +71,7 @@ final class ClientRig: @unchecked Sendable {
   let client: GenshinCNClient
 
   init(main: FakeRelease, pre: FakeRelease? = nil, withGameDirectory: Bool = true) {
-    root = FileManager.default.temporaryDirectory.appending(path: "yaagl-client-\(UUID().uuidString)")
+    root = temporaryURL("yaagl-client")
     game = root.appending(path: "Game", directoryHint: .isDirectory)
     data = root.appending(path: "Data", directoryHint: .isDirectory)
     protonExtras = root.appending(path: "protonextras", directoryHint: .isDirectory)
@@ -83,8 +84,6 @@ final class ClientRig: @unchecked Sendable {
       updater: SophonUpdater(session: cdn.session, configuration: configuration))
     if withGameDirectory { client.setGameDirectory(game) }
   }
-
-  deinit { try? FileManager.default.removeItem(at: root) }
 
   func url(_ path: String) -> URL { game.appending(path: path) }
 
@@ -101,13 +100,8 @@ final class ClientRig: @unchecked Sendable {
   var configText: String? { read("config.ini").map { String(decoding: $0, as: UTF8.self) } }
 
   /// Polls until `config.ini` says `version`, so a test does not depend on how fast a loaded runner gets there.
-  func waitForConfig(version: String, timeout: Duration = .seconds(10)) async -> Bool {
-    let deadline = ContinuousClock.now + timeout
-    while ContinuousClock.now < deadline {
-      if configText?.contains("game_version=\(version)") == true { return true }
-      try? await Task.sleep(for: .milliseconds(5))
-    }
-    return false
+  func waitForConfig(version: String) async -> Bool {
+    await pollUntil { configText?.contains("game_version=\(version)") == true }
   }
 
   /// Puts `release` on disk as a finished install, with `config.ini` saying `version` (default: its tag).

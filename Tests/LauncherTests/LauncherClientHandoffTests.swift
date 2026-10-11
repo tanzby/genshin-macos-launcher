@@ -1,5 +1,6 @@
 import Foundation
 import Testing
+import TestSupport
 
 @testable import Launcher
 
@@ -14,10 +15,8 @@ private func waitForLaunch(_ fake: FakeGameClient) async {
   @MainActor
   @Test func WIN_005_theCurrentGameDirectoryReachesTheClientBeforeEveryRefreshStartAndLaunch() async throws {
     let fake = FakeGameClient(status: GameStatus(localVersion: "5.6.0", remoteVersion: "5.6.0"))
-    let first = FileManager.default.temporaryDirectory.appending(path: "handoff-\(UUID().uuidString)")
+    let first = makeTemporaryDirectory("handoff")
     let second = URL(filePath: "/Games/B")
-    try FileManager.default.createDirectory(at: first, withIntermediateDirectories: true)
-    defer { try? FileManager.default.removeItem(at: first) }
     let model = LauncherModel(client: fake, gameDirectory: first)
 
     await model.refresh()
@@ -36,9 +35,7 @@ private func waitForLaunch(_ fake: FakeGameClient) async {
   @MainActor
   @Test func LCH_005_launchPassesTheSettingsSnapshotFromTheProvider() async throws {
     let fake = FakeGameClient(status: GameStatus(localVersion: "5.6.0", remoteVersion: "5.6.0"))
-    let directory = FileManager.default.temporaryDirectory.appending(path: "handoff-\(UUID().uuidString)")
-    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-    defer { try? FileManager.default.removeItem(at: directory) }
+    let directory = makeTemporaryDirectory("handoff")
     let model = LauncherModel(client: fake, gameDirectory: directory)
     model.makeLaunchOptions = { LaunchOptions(gameDirectory: $0, retina: true, hdr: true, proxyHost: "127.0.0.1:7890") }
     await model.refresh()
@@ -60,9 +57,7 @@ private func waitForLaunch(_ fake: FakeGameClient) async {
   @MainActor
   @Test func WIN_005_aRejectedStartDoesNotRepointTheClientAwayFromTheRunningJob() async throws {
     let fake = FakeGameClient(status: GameStatus(localVersion: "4.9.0", remoteVersion: "5.0.0", canUpdate: true))
-    let running = FileManager.default.temporaryDirectory.appending(path: "handoff-\(UUID().uuidString)")
-    try FileManager.default.createDirectory(at: running, withIntermediateDirectories: true)
-    defer { try? FileManager.default.removeItem(at: running) }
+    let running = makeTemporaryDirectory("handoff")
     let model = LauncherModel(client: fake, gameDirectory: running)
     await model.refresh()
     try await model.start(.update)
@@ -124,9 +119,7 @@ private func waitForLaunch(_ fake: FakeGameClient) async {
   @MainActor
   @Test func PRG_006_pauseWaitsForTheClientToQuiesceAfterTheJobStream() async throws {
     let fake = FakeGameClient(status: GameStatus(localVersion: "4.9.0", remoteVersion: "5.0.0", canUpdate: true))
-    let directory = FileManager.default.temporaryDirectory.appending(path: "handoff-\(UUID().uuidString)")
-    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-    defer { try? FileManager.default.removeItem(at: directory) }
+    let directory = makeTemporaryDirectory("handoff")
     let model = LauncherModel(client: fake, gameDirectory: directory)
     await model.refresh()
     try await model.start(.update)
@@ -142,9 +135,7 @@ private func waitForLaunch(_ fake: FakeGameClient) async {
     let fake = FakeGameClient(
       status: GameStatus(
         localVersion: "5.0.0", remoteVersion: "5.0.0", canPreDownload: true, preDownloadVersion: "5.1.0"))
-    let directory = FileManager.default.temporaryDirectory.appending(path: "handoff-\(UUID().uuidString)")
-    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-    defer { try? FileManager.default.removeItem(at: directory) }
+    let directory = makeTemporaryDirectory("handoff")
     let model = LauncherModel(client: fake, gameDirectory: directory)
     await model.refresh()
     try await model.start(.preDownload)

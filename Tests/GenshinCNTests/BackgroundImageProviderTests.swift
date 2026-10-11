@@ -1,6 +1,7 @@
 import Foundation
 import Launcher
 import Testing
+import TestSupport
 
 @testable import GenshinCN
 
@@ -71,7 +72,7 @@ final class BackgroundStub: URLProtocol, @unchecked Sendable {
   }
 
   func makeCache() -> URL {
-    FileManager.default.temporaryDirectory.appending(path: "bg-\(UUID().uuidString)", directoryHint: .isDirectory)
+    temporaryURL("bg")
   }
 
   func provider(_ cache: URL, _ session: URLSession) -> BackgroundImageProvider {
@@ -80,7 +81,6 @@ final class BackgroundStub: URLProtocol, @unchecked Sendable {
 
   @Test func APP_021_downloadsOfficialImageIntoCacheAndReturnsFileURL() async throws {
     let cache = makeCache()
-    defer { try? FileManager.default.removeItem(at: cache) }
     let (session, id) = BackgroundStub.session { url in
       url.path.hasSuffix("getAllGameBasicInfo")
         ? (200, Self.info([(Self.imageURL, false)])) : (200, Self.png)
@@ -97,7 +97,6 @@ final class BackgroundStub: URLProtocol, @unchecked Sendable {
 
   @Test func APP_021_prefersVideoTypeEntryStaticImage() async throws {
     let cache = makeCache()
-    defer { try? FileManager.default.removeItem(at: cache) }
     let (session, id) = BackgroundStub.session { url in
       url.path.hasSuffix("getAllGameBasicInfo")
         ? (200, Self.info([(Self.otherURL, false), (Self.imageURL, true)])) : (200, Self.png)
@@ -109,7 +108,6 @@ final class BackgroundStub: URLProtocol, @unchecked Sendable {
 
   @Test func APP_021_cacheHitSkipsImageDownload() async throws {
     let cache = makeCache()
-    defer { try? FileManager.default.removeItem(at: cache) }
     let (session, id) = BackgroundStub.session { url in
       url.path.hasSuffix("getAllGameBasicInfo")
         ? (200, Self.info([(Self.imageURL, false)])) : (200, Self.png)
@@ -122,7 +120,6 @@ final class BackgroundStub: URLProtocol, @unchecked Sendable {
 
   @Test func APP_021_supersededImageIsPrunedAfterRetention() async throws {
     let cache = makeCache()
-    defer { try? FileManager.default.removeItem(at: cache) }
     let current = LockedBox(Self.imageURL)
     let (session, _) = BackgroundStub.session { url in
       url.path.hasSuffix("getAllGameBasicInfo")
@@ -137,7 +134,6 @@ final class BackgroundStub: URLProtocol, @unchecked Sendable {
 
   @Test func APP_021_recentImagesSurviveRapidRotation() async throws {
     let cache = makeCache()
-    defer { try? FileManager.default.removeItem(at: cache) }
     let current = LockedBox(Self.imageURL)
     let (session, _) = BackgroundStub.session { url in
       url.path.hasSuffix("getAllGameBasicInfo")
@@ -155,7 +151,6 @@ final class BackgroundStub: URLProtocol, @unchecked Sendable {
 
   @Test func APP_021_concurrentUpdatesNeverReturnADeletedFile() async throws {
     let cache = makeCache()
-    defer { try? FileManager.default.removeItem(at: cache) }
     let calls = LockedBox(0)
     let (session, _) = BackgroundStub.session { url in
       guard url.path.hasSuffix("getAllGameBasicInfo") else { return (200, Self.png) }
@@ -174,7 +169,6 @@ final class BackgroundStub: URLProtocol, @unchecked Sendable {
 
   @Test func APP_021_headerOnlyImageIsNotCached() async throws {
     let cache = makeCache()
-    defer { try? FileManager.default.removeItem(at: cache) }
     // Signature and IHDR intact, no pixel data: counts as an image container but has no decodable frame.
     let corrupt = Self.png.prefix(40)
     let (session, _) = BackgroundStub.session { url in
@@ -187,10 +181,8 @@ final class BackgroundStub: URLProtocol, @unchecked Sendable {
 
   @Test func APP_021_failedWriteKeepsTheOldCachedImage() async throws {
     let cache = makeCache()
-    defer {
-      try? FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: cache.path)
-      try? FileManager.default.removeItem(at: cache)
-    }
+    // Writable again, so TestSupport can remove it.
+    defer { try? FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: cache.path) }
     let current = LockedBox(Self.imageURL)
     let (session, _) = BackgroundStub.session { url in
       url.path.hasSuffix("getAllGameBasicInfo")
@@ -208,14 +200,12 @@ final class BackgroundStub: URLProtocol, @unchecked Sendable {
 
   @Test func APP_021_apiFailureWithoutCacheFallsBackToBundledDefault() async {
     let cache = makeCache()
-    defer { try? FileManager.default.removeItem(at: cache) }
     let (session, _) = BackgroundStub.session { _ in nil }
     #expect(await provider(cache, session).backgroundImage() == .bundledDefault)
   }
 
   @Test func APP_021_apiFailureReusesLastCachedImage() async throws {
     let cache = makeCache()
-    defer { try? FileManager.default.removeItem(at: cache) }
     let online = LockedBox(true)
     let (session, _) = BackgroundStub.session { url in
       guard online.value else { return nil }
@@ -230,8 +220,7 @@ final class BackgroundStub: URLProtocol, @unchecked Sendable {
   @Test func APP_021_missingGameOrEmptyBackgroundsFallBack() async {
     for body in [Self.info([(Self.imageURL, false)], biz: "hk4e_global"), Self.info([])] {
       let cache = makeCache()
-      defer { try? FileManager.default.removeItem(at: cache) }
-      let (session, _) = BackgroundStub.session { _ in (200, body) }
+        let (session, _) = BackgroundStub.session { _ in (200, body) }
       #expect(await provider(cache, session).backgroundImage() == .bundledDefault)
     }
   }
@@ -239,8 +228,7 @@ final class BackgroundStub: URLProtocol, @unchecked Sendable {
   @Test func APP_021_badRetcodeOrMalformedJSONFallBack() async {
     for body in [Data(#"{"retcode":-1,"message":"x","data":null}"#.utf8), Data("<html>".utf8)] {
       let cache = makeCache()
-      defer { try? FileManager.default.removeItem(at: cache) }
-      let (session, _) = BackgroundStub.session { _ in (200, body) }
+        let (session, _) = BackgroundStub.session { _ in (200, body) }
       #expect(await provider(cache, session).backgroundImage() == .bundledDefault)
     }
   }
@@ -248,8 +236,7 @@ final class BackgroundStub: URLProtocol, @unchecked Sendable {
   @Test func APP_021_nonImageOrHTTPErrorDownloadIsNotCached() async throws {
     for image in [(200, Data("not an image".utf8)), (404, Self.png)] {
       let cache = makeCache()
-      defer { try? FileManager.default.removeItem(at: cache) }
-      let (session, _) = BackgroundStub.session { url in
+        let (session, _) = BackgroundStub.session { url in
         url.path.hasSuffix("getAllGameBasicInfo")
           ? (200, Self.info([(Self.imageURL, false)])) : image
       }

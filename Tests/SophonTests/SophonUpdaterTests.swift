@@ -1,6 +1,7 @@
 import CryptoKit
 import Foundation
 import Testing
+import TestSupport
 
 @testable import Sophon
 
@@ -212,9 +213,7 @@ private struct Rig {
 
   init() throws {
     world = try World()
-    root = FileManager.default.temporaryDirectory.appendingPathComponent(
-      "sophon-updater-\(UUID().uuidString)", isDirectory: true
-    ).resolvingSymlinksInPath()
+    root = makeTemporaryDirectory("sophon-updater")
     game = root.appendingPathComponent("game", isDirectory: true)
     temp = root.appendingPathComponent("tmp", isDirectory: true)
     try FileManager.default.createDirectory(at: game, withIntermediateDirectories: true)
@@ -223,8 +222,6 @@ private struct Rig {
     let cdn = self.cdn
     (session, id) = StubURLProtocol.session(reply: { cdn.reply(to: $0) })
   }
-
-  func remove() { try? FileManager.default.removeItem(at: root) }
 
   /// The installed 7.0.0: old a/b/c, the unchanged d, and a file that 7.1.0 drops.
   func installOldVersion() throws {
@@ -287,28 +284,13 @@ private struct Rig {
 }
 
 private func withRig(_ body: (Rig) async throws -> Void) async throws {
-  let rig = try Rig()
-  defer { rig.remove() }
-  try await body(rig)
-}
-
-private func waitUntil(timeout: Duration = .seconds(5), _ condition: () -> Bool) async -> Bool {
-  let deadline = ContinuousClock.now + timeout
-  while ContinuousClock.now < deadline {
-    if condition() { return true }
-    try? await Task.sleep(for: .milliseconds(5))
-  }
-  return condition()
+  try await body(Rig())
 }
 
 // MARK: - HDiffPatch
 
 @Suite(.timeLimit(.minutes(1))) struct HDiffPatcherTests {
-  private func scratch() throws -> URL {
-    let url = FileManager.default.temporaryDirectory.appendingPathComponent("hdiff-\(UUID().uuidString)")
-    try FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
-    return url
-  }
+  private func scratch() -> URL { makeTemporaryDirectory("hdiff") }
 
   private func fixtureURL(_ name: String) throws -> URL {
     try #require(Bundle.module.url(forResource: name, withExtension: nil, subdirectory: "Fixtures/ldiff"))
@@ -318,8 +300,7 @@ private func waitUntil(timeout: Duration = .seconds(5), _ condition: () -> Bool)
   func UPG_009_appliesTheSliceOfAnLdiffFileAtItsOffset(name: String) throws {
     let meta = try LdiffMeta.load()
     let entry = meta.entry(name)
-    let directory = try scratch()
-    defer { try? FileManager.default.removeItem(at: directory) }
+    let directory = scratch()
     let output = directory.appendingPathComponent("out")
     try HDiffPatcher.apply(
       old: fixtureURL("\(name).old"), ldiff: fixtureURL("fixture.ldiff"), offset: entry.offset,
@@ -343,8 +324,7 @@ private func waitUntil(timeout: Duration = .seconds(5), _ condition: () -> Bool)
   @Test func UPG_009_aSliceThatIsNotADiffFails() throws {
     let meta = try LdiffMeta.load()
     let entry = meta.entry("a")
-    let directory = try scratch()
-    defer { try? FileManager.default.removeItem(at: directory) }
+    let directory = scratch()
     // Starts one byte late: the header is gone.
     #expect(throws: SophonError.patchFailed(path: "a")) {
       try HDiffPatcher.apply(
@@ -357,8 +337,7 @@ private func waitUntil(timeout: Duration = .seconds(5), _ condition: () -> Bool)
   @Test func UPG_009_aWrongOldFileFails() throws {
     let meta = try LdiffMeta.load()
     let entry = meta.entry("a")
-    let directory = try scratch()
-    defer { try? FileManager.default.removeItem(at: directory) }
+    let directory = scratch()
     // b.old has another size than the diff of a was made for.
     #expect(throws: SophonError.patchFailed(path: "a")) {
       try HDiffPatcher.apply(
@@ -370,8 +349,7 @@ private func waitUntil(timeout: Duration = .seconds(5), _ condition: () -> Bool)
   @Test func UPG_009_aWrongExpectedSizeFails() throws {
     let meta = try LdiffMeta.load()
     let entry = meta.entry("a")
-    let directory = try scratch()
-    defer { try? FileManager.default.removeItem(at: directory) }
+    let directory = scratch()
     #expect(throws: SophonError.patchFailed(path: "a")) {
       try HDiffPatcher.apply(
         old: fixtureURL("a.old"), ldiff: fixtureURL("fixture.ldiff"), offset: entry.offset, length: entry.length,
@@ -383,8 +361,7 @@ private func waitUntil(timeout: Duration = .seconds(5), _ condition: () -> Bool)
   @Test func UPG_009_aCancelledPatchStopsWithCancellationError() throws {
     let meta = try LdiffMeta.load()
     let entry = meta.entry("a")
-    let directory = try scratch()
-    defer { try? FileManager.default.removeItem(at: directory) }
+    let directory = scratch()
     let flag = CancelFlag()
     flag.set()
     #expect(throws: CancellationError.self) {
@@ -850,7 +827,7 @@ private func waitUntil(timeout: Duration = .seconds(5), _ condition: () -> Bool)
       let gate = StubGate()
       rig.cdn.holdLdiff(gate)
       let task = Task { try await rig.update(plan) }
-      #expect(await waitUntil { rig.ldiffRequests.count >= 1 })
+      #expect(await pollUntil { rig.ldiffRequests.count >= 1 })
       task.cancel()  // pause = cancel and wait until everything has stopped
       await #expect(throws: CancellationError.self) { try await task.value }
       #expect(try snapshot(rig).filter { $0.key.hasPrefix("game/") } == before.filter { $0.key.hasPrefix("game/") })
@@ -1020,7 +997,7 @@ private func waitUntil(timeout: Duration = .seconds(5), _ condition: () -> Bool)
       let gate = StubGate()
       rig.cdn.holdLdiff(gate)
       let task = Task { try await rig.predownload(plan) }
-      #expect(await waitUntil { rig.ldiffRequests.count >= 1 })
+      #expect(await pollUntil { rig.ldiffRequests.count >= 1 })
       task.cancel()
       await #expect(throws: CancellationError.self) { try await task.value }
       #expect(!SophonUpdater.isPredownloaded(World.target, from: World.installed, in: rig.temp))

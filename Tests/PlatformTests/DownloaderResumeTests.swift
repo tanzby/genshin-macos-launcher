@@ -1,6 +1,7 @@
 import CryptoKit
 import Foundation
 import Testing
+import TestSupport
 
 @testable import Platform
 
@@ -117,15 +118,10 @@ private func withResumeFixture(
   server: RangeStubProtocol.Server = .init(body: body),
   _ test: (Downloader, URL, URL, URL) async throws -> Void
 ) async throws {
-  let dir = FileManager.default.temporaryDirectory
-    .appending(path: "yaagl-resume-test-\(UUID().uuidString)", directoryHint: .isDirectory)
-  try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+  let dir = makeTemporaryDirectory("yaagl-resume-test")
   let url = URL(string: "https://downloads.invalid/\(UUID().uuidString)/archive.bin")!
   RangeStubProtocol.register(server, for: url)
-  defer {
-    RangeStubProtocol.unregister(url)
-    try? FileManager.default.removeItem(at: dir)
-  }
+  defer { RangeStubProtocol.unregister(url) }
   let configuration = URLSessionConfiguration.ephemeral
   configuration.protocolClasses = [RangeStubProtocol.self]
   try await test(Downloader(configuration: configuration), url, dir.appending(path: "archive.bin"), dir)

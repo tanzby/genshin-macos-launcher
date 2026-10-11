@@ -2,13 +2,14 @@ import Foundation
 import Platform
 import Synchronization
 import Testing
+import TestSupport
 
 @testable import Launcher
 
 @MainActor
 private func makeController(
   status: GameStatus = GameStatus(localVersion: "5.0.0", remoteVersion: "5.0.0"),
-  hosts: HostsBlocklist.Status = .current, startup: StartupSteps? = nil, gameDirectory: URL? = FileManager.default.temporaryDirectory.appending(path: "yaagl-mc-\(UUID().uuidString)")
+  hosts: HostsBlocklist.Status = .current, startup: StartupSteps? = nil, gameDirectory: URL? = temporaryURL("yaagl-mc")
 ) -> (MainController, FakeGameClient, SettingsModel) {
   let suite = "yaagl-controller-\(UUID().uuidString)"
   let defaults = UserDefaults(suiteName: suite)!
@@ -80,7 +81,7 @@ private func makeController(
   @Test func APP_017_installRightAfterPickingAFolderDoesNotWaitForARefresh() async throws {
     let (controller, client, settings) = makeController(status: GameStatus(), gameDirectory: nil)
     await controller.refresh()
-    settings.gameDirectory = FileManager.default.temporaryDirectory.appending(path: "yaagl-mc-\(UUID().uuidString)")
+    settings.gameDirectory = temporaryURL("yaagl-mc")
     await controller.perform(.install)
     #expect(controller.actionError == nil)
     _ = try await client.nextRun()

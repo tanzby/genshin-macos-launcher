@@ -2,6 +2,7 @@ import Darwin
 import Foundation
 import Platform
 import Testing
+import TestSupport
 
 @testable import Wine
 
@@ -564,12 +565,7 @@ func makeLaunchRecipe(
     command: command, gameExecutableName: "YuanShen.exe", gameDisplayName: "原神")
 }
 
-/// Starts `body` on a task, waits (bounded) until the game run has been entered, returns the task.
-func waitUntilGameRuns(_ runner: FakeProcessRunner, timeout: Duration = .seconds(5)) async -> Bool {
-  let deadline = ContinuousClock.now + timeout
-  while runner.gameCalls.isEmpty {
-    if ContinuousClock.now > deadline { return false }
-    try? await Task.sleep(for: .milliseconds(1))
-  }
-  return true
+/// Waits (bounded) until the game run has been entered.
+func waitUntilGameRuns(_ runner: FakeProcessRunner) async -> Bool {
+  await pollUntil { !runner.gameCalls.isEmpty }
 }

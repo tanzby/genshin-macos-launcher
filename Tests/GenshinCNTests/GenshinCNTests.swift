@@ -1,6 +1,7 @@
 import Foundation
 import Launcher
 import Testing
+import TestSupport
 
 @testable import GenshinCN
 
@@ -13,8 +14,7 @@ import Testing
   }
 
   @Test func APP_021_clientServesTheProvidersImageAndItsFallback() async throws {
-    let cache = FileManager.default.temporaryDirectory.appending(path: "bg-\(UUID().uuidString)", directoryHint: .isDirectory)
-    defer { try? FileManager.default.removeItem(at: cache) }
+    let cache = temporaryURL("bg")
     let (session, _) = BackgroundStub.session { url in
       url.path.hasSuffix("getAllGameBasicInfo")
         ? (200, BackgroundImageProviderTests.info([(BackgroundImageProviderTests.imageURL, false)]))

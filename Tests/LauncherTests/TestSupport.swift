@@ -1,85 +1,8 @@
 import Foundation
 import Synchronization
+import TestSupport
 
 @testable import Launcher
-
-struct TestTimeout: Error, CustomStringConvertible {
-  var what: String
-  var description: String { "timed out waiting for \(what) (failsafe, not a synchronization primitive)" }
-}
-
-/// FIFO hand-off between a producer and an awaiting test. `pop()` suspends without polling. The
-/// failsafe only exists so a red test fails instead of hanging; it never decides a passing outcome.
-final class AsyncQueue<T: Sendable>: Sendable {
-  private struct State {
-    var items: [T] = []
-    var waiters: [(id: Int, continuation: CheckedContinuation<T?, Never>)] = []
-    var nextID = 0
-  }
-  private let state = Mutex(State())
-  static var failsafe: Duration { .seconds(5) }
-
-  func push(_ item: T) {
-    let waiter: CheckedContinuation<T?, Never>? = state.withLock { s in
-      if s.waiters.isEmpty {
-        s.items.append(item)
-        return nil
-      }
-      return s.waiters.removeFirst().continuation
-    }
-    waiter?.resume(returning: item)
-  }
-
-  /// Returns nil when the failsafe expires.
-  func pop() async -> T? {
-    await withTaskGroup(of: T?.self) { group in
-      group.addTask { await self.popUnbounded() }
-      group.addTask {
-        try? await Task.sleep(for: Self.failsafe)
-        return nil
-      }
-      let first = await group.next() ?? nil
-      group.cancelAll()
-      return first
-    }
-  }
-
-  func pop(_ what: String) async throws -> T {
-    guard let item = await pop() else { throw TestTimeout(what: what) }
-    return item
-  }
-
-  private func popUnbounded() async -> T? {
-    let id = state.withLock { s -> Int in
-      s.nextID += 1
-      return s.nextID
-    }
-    return await withTaskCancellationHandler {
-      await withCheckedContinuation { (continuation: CheckedContinuation<T?, Never>) in
-        let immediate: T?? = state.withLock { s in
-          if !s.items.isEmpty { return .some(s.items.removeFirst()) }
-          s.waiters.append((id, continuation))
-          return nil
-        }
-        if let immediate {
-          continuation.resume(returning: immediate)
-        } else if Task.isCancelled {
-          cancelWaiter(id)
-        }
-      }
-    } onCancel: {
-      cancelWaiter(id)
-    }
-  }
-
-  private func cancelWaiter(_ id: Int) {
-    let continuation = state.withLock { s -> CheckedContinuation<T?, Never>? in
-      guard let index = s.waiters.firstIndex(where: { $0.id == id }) else { return nil }
-      return s.waiters.remove(at: index).continuation
-    }
-    continuation?.resume(returning: nil)
-  }
-}
 
 /// Injected `sleep`: suspends until the test calls `fire()`; throws `CancellationError` when cancelled.
 final class ManualSleeper: Sendable {

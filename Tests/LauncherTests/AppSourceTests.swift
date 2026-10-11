@@ -1,5 +1,6 @@
 import Foundation
 import Testing
+import TestSupport
 
 @testable import Launcher
 
@@ -50,9 +51,7 @@ enum AppSource {
 
   @MainActor @Test func APP_018_aSettingChangedWhileTheGameRunsOnlyAffectsTheNextLaunch() async throws {
     let fake = FakeGameClient(status: GameStatus(localVersion: "5.6.0", remoteVersion: "5.6.0"))
-    let directory = FileManager.default.temporaryDirectory.appending(path: "settings-\(UUID().uuidString)")
-    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-    defer { try? FileManager.default.removeItem(at: directory) }
+    let directory = makeTemporaryDirectory("settings")
     let model = LauncherModel(client: fake, gameDirectory: directory)
     let retina = RetinaSwitch()
     model.makeLaunchOptions = { LaunchOptions(gameDirectory: $0, retina: retina.value) }

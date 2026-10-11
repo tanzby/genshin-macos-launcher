@@ -2,6 +2,7 @@ import CryptoKit
 import Foundation
 import Platform
 import Testing
+import TestSupport
 
 @testable import Wine
 
@@ -11,14 +12,9 @@ import Testing
 
 // MARK: - Temp directories
 
-/// Runs `body` with a fresh, symlink-resolved temp directory and deletes it afterwards.
+/// Runs `body` with a fresh, symlink-resolved temp directory (TestSupport removes it when the process exits).
 func withWineTempDirectory<T>(_ body: (URL) async throws -> T) async throws -> T {
-  let dir = FileManager.default.temporaryDirectory
-    .appending(path: "yaagl-wine-test-\(UUID().uuidString)", directoryHint: .isDirectory)
-    .resolvingSymlinksInPath()
-  try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-  defer { try? FileManager.default.removeItem(at: dir) }
-  return try await body(dir)
+  try await body(makeTemporaryDirectory("yaagl-wine-test"))
 }
 
 /// Relative paths of every file and directory below `root` (sorted), without following symlinks.

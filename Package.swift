@@ -46,18 +46,20 @@ let package = Package(
     .target(name: "GenshinCN", dependencies: ["Launcher", "Sophon", "Wine", "Platform"]),
     .target(name: "Updates", dependencies: [.product(name: "Sparkle", package: "Sparkle")]),
 
+    // Shared by the test targets only: temporary directories and waiting helpers.
+    .target(name: "TestSupport", path: "Tests/TestSupport"),
     .testTarget(
       name: "SophonTests",
-      dependencies: ["Sophon", .product(name: "SwiftProtobuf", package: "swift-protobuf")],
+      dependencies: ["Sophon", "TestSupport", .product(name: "SwiftProtobuf", package: "swift-protobuf")],
       resources: [.copy("Fixtures")]
     ),
-    .testTarget(name: "PlatformTests", dependencies: ["Platform"]),
-    .testTarget(name: "WineTests", dependencies: ["Wine"]),
-    .testTarget(name: "LauncherTests", dependencies: ["Launcher"]),
+    .testTarget(name: "PlatformTests", dependencies: ["Platform", "TestSupport"]),
+    .testTarget(name: "WineTests", dependencies: ["Wine", "TestSupport"]),
+    .testTarget(name: "LauncherTests", dependencies: ["Launcher", "TestSupport"]),
     .testTarget(
       name: "GenshinCNTests",
       dependencies: [
-        "GenshinCN", "Launcher", "Wine", "Sophon", "Platform",
+        "GenshinCN", "Launcher", "Wine", "Sophon", "Platform", "TestSupport",
         .product(name: "SwiftProtobuf", package: "swift-protobuf"),
       ]),
   ],

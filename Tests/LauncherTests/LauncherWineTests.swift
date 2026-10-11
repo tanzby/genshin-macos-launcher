@@ -1,6 +1,7 @@
 import Foundation
 import Platform
 import Testing
+import TestSupport
 import Wine
 
 @testable import Launcher
@@ -26,13 +27,10 @@ private final class Harness {
   init(wine wineStatus: WineStatus, game: GameStatus = installed) {
     wine = FakeWinePreparer(status: wineStatus)
     fake = FakeGameClient(status: game)
-    directory = FileManager.default.temporaryDirectory.appending(path: "LauncherWineTests-\(UUID().uuidString)")
-    try! FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    directory = makeTemporaryDirectory("LauncherWineTests")
     model = LauncherModel(client: fake, wine: wine, gameDirectory: directory, chunkTempMargin: 0)
     log = EventLog(model.events)
   }
-
-  deinit { try? FileManager.default.removeItem(at: directory) }
 
   /// Runs `bootstrap()` in the background and returns once Wine is being prepared.
   func bootstrapUntilPreparing() async throws -> (task: Task<Void, Never>, install: Int) {
@@ -40,26 +38,6 @@ private final class Harness {
     let task = Task { @MainActor in await model.bootstrap() }
     let index = try await wine.nextInstall()
     return (task, index)
-  }
-
-  func waitUntil(_ predicate: @escaping @MainActor @Sendable () -> Bool) async -> Bool {
-    let outcome = AsyncQueue<Bool>()
-    let watcher = Task { @MainActor in
-      let values = Observations { predicate() }
-      for await value in values where value {
-        outcome.push(true)
-        return
-      }
-      outcome.push(false)
-    }
-    let timer = Task {
-      try? await Task.sleep(for: AsyncQueue<Int>.failsafe)
-      outcome.push(false)
-    }
-    let result = await outcome.pop() ?? false
-    watcher.cancel()
-    timer.cancel()
-    return result
   }
 }
 
@@ -163,7 +141,7 @@ private final class Harness {
     h.wine.statusGate.push(())  // bootstrap now sees needsInstall and finds the slot taken
     h.wine.stallsStatus.withLock { $0 = false }
 
-    #expect(await h.waitUntil { h.model.wineStatus == missing })  // bootstrap has now seen the slot taken
+    #expect(await waitUntil { h.model.wineStatus == missing })  // bootstrap has now seen the slot taken
     let finished = AsyncQueue<Void>()
     let watcher = Task { await boot.value; finished.push(()) }
     #expect(h.fake.statusCalls == 0)
@@ -196,9 +174,9 @@ private final class Harness {
 
     let download = DownloadProgress(completed: 10, total: 100)
     h.wine.yield(.downloadingWine(download), install: install)
-    #expect(await h.waitUntil { h.model.progress == .wine(.downloadingWine(download)) })
+    #expect(await waitUntil { h.model.progress == .wine(.downloadingWine(download)) })
     h.wine.yield(.extracting, install: install)
-    #expect(await h.waitUntil { h.model.progress == .wine(.extracting) })
+    #expect(await waitUntil { h.model.progress == .wine(.extracting) })
 
     h.wine.finish(install: install)
     await task.value
@@ -306,7 +284,7 @@ private final class Harness {
 
     let pause = Task { @MainActor in await h.model.pause() }
     #expect(try await h.wine.nextCancellation() == first)
-    #expect(await h.waitUntil { h.model.isPausing })
+    #expect(await waitUntil { h.model.isPausing })
     #expect(h.model.phase == .preparingWine, "pause must not report idle before the install stopped")
     #expect(!h.wine.log.contains("stopped:0"))
 
@@ -382,7 +360,7 @@ private final class Harness {
     #expect(h.model.phase == .preparingWine)
 
     let pause = Task { @MainActor in await h.model.pause() }
-    #expect(await h.waitUntil { h.model.isPausing })
+    #expect(await waitUntil { h.model.isPausing })
     h.fake.statusGate.push(())
     await pause.value
     await task.value

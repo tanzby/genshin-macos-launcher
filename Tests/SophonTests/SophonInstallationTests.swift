@@ -1,5 +1,6 @@
 import Foundation
 import Testing
+import TestSupport
 
 @testable import Sophon
 
@@ -9,7 +10,7 @@ import Testing
 private func makeGame(
   ggm: String? = "\0" + "5.6.0_100_200" + "\0", config: String? = nil, executable: Bool = true, pcGameSDK: Bool = false
 ) throws -> URL {
-  let root = FileManager.default.temporaryDirectory.appending(path: "yaagl-inst-\(UUID().uuidString)")
+  let root = temporaryURL("yaagl-inst")
   let data = root.appending(path: "YuanShen_Data")
   try FileManager.default.createDirectory(at: data.appending(path: "Plugins"), withIntermediateDirectories: true)
   if executable { try Data("MZ".utf8).write(to: root.appending(path: "YuanShen.exe")) }
@@ -26,23 +27,19 @@ private func iniWith(_ version: String) -> String {
 @Suite struct SophonInstallationVersionTests {
   @Test func UPG_005_versionComesFromGlobalGameManagersWhenConfigIsMissing() throws {
     let game = try makeGame()
-    defer { try? FileManager.default.removeItem(at: game) }
     #expect(try SophonInstallation.installedVersion(in: game) == "5.6.0")
   }
 
   @Test func UPG_005_theSmallerOfGlobalGameManagersAndConfigWins() throws {
     let game = try makeGame(config: iniWith("5.5.0"))
-    defer { try? FileManager.default.removeItem(at: game) }
     #expect(try SophonInstallation.installedVersion(in: game) == "5.5.0")
 
     let newer = try makeGame(config: iniWith("5.7.0"))
-    defer { try? FileManager.default.removeItem(at: newer) }
     #expect(try SophonInstallation.installedVersion(in: newer) == "5.6.0")
   }
 
   @Test func UPG_005_versionsAreComparedNumericallyNotAsText() throws {
     let game = try makeGame(ggm: "\0" + "5.10.0_1_2" + "\0", config: iniWith("5.9.0"))
-    defer { try? FileManager.default.removeItem(at: game) }
     #expect(try SophonInstallation.installedVersion(in: game) == "5.9.0")
     #expect(SophonVersion.isOlder("5.9.0", than: "5.10.0"))
     #expect(!SophonVersion.isOlder("5.10.0", than: "5.9.0"))
@@ -51,55 +48,46 @@ private func iniWith(_ version: String) -> String {
 
   @Test func UPG_005_missingOrMalformedConfigOnlyFallsBackToGlobalGameManagers() throws {
     let game = try makeGame(config: "[General]\r\nnothing here\r\n")
-    defer { try? FileManager.default.removeItem(at: game) }
     #expect(try SophonInstallation.installedVersion(in: game) == "5.6.0")
   }
 
   @Test func UPG_005_theVersionPatternMustMatchExactlyOnce() throws {
     let none = try makeGame(ggm: "no version in here")
-    defer { try? FileManager.default.removeItem(at: none) }
     #expect(throws: SophonError.brokenInstallation) { try SophonInstallation.installedVersion(in: none) }
 
     let two = try makeGame(ggm: "\0" + "5.6.0_1_2" + "\0x\0" + "5.5.0_3_4" + "\0")
-    defer { try? FileManager.default.removeItem(at: two) }
     #expect(throws: SophonError.brokenInstallation) { try SophonInstallation.installedVersion(in: two) }
   }
 
   @Test func UPG_005_onlyTheChinaReleaseIsRecognised() throws {
     // The global release keeps its data in GenshinImpact_Data, so nothing is found under YuanShen_Data.
-    let global = FileManager.default.temporaryDirectory.appending(path: "yaagl-inst-\(UUID().uuidString)")
+    let global = temporaryURL("yaagl-inst")
     try FileManager.default.createDirectory(
       at: global.appending(path: "GenshinImpact_Data"), withIntermediateDirectories: true)
-    defer { try? FileManager.default.removeItem(at: global) }
     #expect(try SophonInstallation.installedVersion(in: global) == nil)
 
     // A China install that only lost its executable still has a version, so repair can bring the file back.
     let noExecutable = try makeGame(executable: false)
-    defer { try? FileManager.default.removeItem(at: noExecutable) }
     #expect(try SophonInstallation.installedVersion(in: noExecutable) == "5.6.0")
 
     let bilibili = try makeGame(pcGameSDK: true)
-    defer { try? FileManager.default.removeItem(at: bilibili) }
     #expect(throws: SophonError.brokenInstallation) { try SophonInstallation.installedVersion(in: bilibili) }
   }
 
   @Test func INS_005_anEmptyOrHalfInstalledDirectoryIsNotInstalled() throws {
-    let empty = FileManager.default.temporaryDirectory.appending(path: "yaagl-inst-\(UUID().uuidString)")
+    let empty = temporaryURL("yaagl-inst")
     try FileManager.default.createDirectory(at: empty, withIntermediateDirectories: true)
-    defer { try? FileManager.default.removeItem(at: empty) }
     #expect(try SophonInstallation.installedVersion(in: empty) == nil)
 
     // An interrupted install: the template still says 0.0.0, so the install can be continued.
     let half = try makeGame(config: iniWith("0.0.0"))
-    defer { try? FileManager.default.removeItem(at: half) }
     #expect(try SophonInstallation.installedVersion(in: half) == nil)
   }
 }
 
 @Suite struct SophonInstallationConfigTests {
   @Test func INS_005_prepareWritesTheChinaTemplateWithCRLFAndCreatesTheTempDirectory() throws {
-    let root = FileManager.default.temporaryDirectory.appending(path: "yaagl-inst-\(UUID().uuidString)")
-    defer { try? FileManager.default.removeItem(at: root) }
+    let root = temporaryURL("yaagl-inst")
 
     try SophonInstallation.prepareForInstall(in: root)
 
@@ -111,17 +99,15 @@ private func iniWith(_ version: String) -> String {
   }
 
   @Test func INS_005_prepareAcceptsTheTempDirectoryAndFinderLeftovers() throws {
-    let root = FileManager.default.temporaryDirectory.appending(path: "yaagl-inst-\(UUID().uuidString)")
+    let root = temporaryURL("yaagl-inst")
     try FileManager.default.createDirectory(at: SophonInstallation.tempDirectory(in: root), withIntermediateDirectories: true)
     try Data().write(to: root.appending(path: ".DS_Store"))
-    defer { try? FileManager.default.removeItem(at: root) }
 
     try SophonInstallation.prepareForInstall(in: root)
   }
 
   @Test func INS_005_prepareContinuesAnInterruptedInstallAndKeepsItsFiles() throws {
     let half = try makeGame(config: iniWith("0.0.0"))
-    defer { try? FileManager.default.removeItem(at: half) }
 
     try SophonInstallation.prepareForInstall(in: half)
 
@@ -130,14 +116,12 @@ private func iniWith(_ version: String) -> String {
 
   @Test func INS_005_prepareRefusesADirectoryWithAnotherInstallOrOtherFiles() throws {
     let installed = try makeGame(config: iniWith("5.6.0"))
-    defer { try? FileManager.default.removeItem(at: installed) }
     #expect(throws: SophonError.installDirectoryNotEmpty) { try SophonInstallation.prepareForInstall(in: installed) }
     #expect(try String(contentsOf: installed.appending(path: "config.ini"), encoding: .utf8) == iniWith("5.6.0"))
 
-    let stranger = FileManager.default.temporaryDirectory.appending(path: "yaagl-inst-\(UUID().uuidString)")
+    let stranger = temporaryURL("yaagl-inst")
     try FileManager.default.createDirectory(at: stranger, withIntermediateDirectories: true)
     try Data("x".utf8).write(to: stranger.appending(path: "photos.zip"))
-    defer { try? FileManager.default.removeItem(at: stranger) }
     #expect(throws: SophonError.installDirectoryNotEmpty) { try SophonInstallation.prepareForInstall(in: stranger) }
     #expect(!FileManager.default.fileExists(atPath: stranger.appending(path: "config.ini").path))
   }
@@ -145,11 +129,10 @@ private func iniWith(_ version: String) -> String {
   @Test func INS_005_validateJudgesLikePrepareButTouchesNothing() throws {
     let installed = try makeGame(config: iniWith("5.6.0"))
     let half = try makeGame(config: iniWith("0.0.0"))
-    let stranger = FileManager.default.temporaryDirectory.appending(path: "yaagl-inst-\(UUID().uuidString)")
-    let missing = FileManager.default.temporaryDirectory.appending(path: "yaagl-inst-\(UUID().uuidString)")
+    let stranger = temporaryURL("yaagl-inst")
+    let missing = temporaryURL("yaagl-inst")
     try FileManager.default.createDirectory(at: stranger, withIntermediateDirectories: true)
     try Data("x".utf8).write(to: stranger.appending(path: "photos.zip"))
-    defer { for url in [installed, half, stranger] { try? FileManager.default.removeItem(at: url) } }
 
     #expect(throws: SophonError.installDirectoryNotEmpty) { try SophonInstallation.validateInstallDirectory(installed) }
     #expect(throws: SophonError.installDirectoryNotEmpty) { try SophonInstallation.validateInstallDirectory(stranger) }
@@ -164,7 +147,6 @@ private func iniWith(_ version: String) -> String {
 
   @Test func UPG_011_writeVersionReplacesExactlyTheGameVersionLine() throws {
     let game = try makeGame(config: iniWith("5.5.0"))
-    defer { try? FileManager.default.removeItem(at: game) }
 
     try SophonInstallation.writeVersion("5.6.0", in: game)
 
@@ -174,19 +156,16 @@ private func iniWith(_ version: String) -> String {
   @Test func UPG_011_writeVersionSkipsAnUnrecognisedFileInsteadOfGuessing() throws {
     let text = "[General]\r\ngame_version=5.5.0\r\ngame_version=5.5.0\r\n"
     let game = try makeGame(config: text)
-    defer { try? FileManager.default.removeItem(at: game) }
 
     #expect(throws: SophonError.invalidConfig) { try SophonInstallation.writeVersion("5.6.0", in: game) }
     #expect(try String(contentsOf: game.appending(path: "config.ini"), encoding: .utf8) == text)
 
     let missing = try makeGame()
-    defer { try? FileManager.default.removeItem(at: missing) }
     #expect(throws: SophonError.invalidConfig) { try SophonInstallation.writeVersion("5.6.0", in: missing) }
   }
 
   @Test func INS_016_legacyTempFoldersAreRemovedOnlyFromARecognisedGameDirectory() throws {
     let game = try makeGame(config: iniWith("5.6.0"))
-    defer { try? FileManager.default.removeItem(at: game) }
     for name in [".tmp", "ldiff"] {
       try FileManager.default.createDirectory(at: game.appending(path: name), withIntermediateDirectories: true)
     }
@@ -200,9 +179,8 @@ private func iniWith(_ version: String) -> String {
     #expect(!FileManager.default.fileExists(atPath: game.appending(path: "ldiff").path))
     #expect(FileManager.default.fileExists(atPath: current.appending(path: "job.json").path))
 
-    let stranger = FileManager.default.temporaryDirectory.appending(path: "yaagl-inst-\(UUID().uuidString)")
+    let stranger = temporaryURL("yaagl-inst")
     try FileManager.default.createDirectory(at: stranger.appending(path: ".tmp"), withIntermediateDirectories: true)
-    defer { try? FileManager.default.removeItem(at: stranger) }
     SophonInstallation.removeLegacyTemporaryFolders(in: stranger)
     #expect(FileManager.default.fileExists(atPath: stranger.appending(path: ".tmp").path))
   }

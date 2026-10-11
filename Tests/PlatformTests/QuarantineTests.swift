@@ -1,6 +1,7 @@
 import Darwin
 import Foundation
 import Testing
+import TestSupport
 
 @testable import Platform
 
@@ -16,8 +17,7 @@ import Testing
   }
 
   @Test func WIN_010_removesQuarantineRecursivelyWithoutPrivileges() throws {
-    let temp = try TempDir()
-    defer { temp.cleanup() }
+    let temp = TempDir()
     try temp.makeFile("wine/bin/wine")
     try temp.makeFile("wine/lib/a.dylib")
     for name in ["wine", "wine/bin", "wine/bin/wine", "wine/lib/a.dylib"] {
@@ -32,16 +32,14 @@ import Testing
   }
 
   @Test func WIN_010_filesWithoutTheAttributeAreFine() throws {
-    let temp = try TempDir()
-    defer { temp.cleanup() }
+    let temp = TempDir()
     try temp.makeFile("wine/bin/wine")
 
     try Quarantine.remove(from: temp.path("wine"))
   }
 
   @Test func WIN_010_doesNotFollowSymlinksOutOfTheTree() throws {
-    let temp = try TempDir()
-    defer { temp.cleanup() }
+    let temp = TempDir()
     try temp.makeFile("wine/bin/wine")
     try temp.makeFile("outside/file")
     try setQuarantine(temp.path("outside/file"))
@@ -54,8 +52,7 @@ import Testing
   }
 
   @Test func WIN_010_missingRootIsAnError() throws {
-    let temp = try TempDir()
-    defer { temp.cleanup() }
+    let temp = TempDir()
     #expect(throws: (any Error).self) { try Quarantine.remove(from: temp.path("nope")) }
   }
 }
