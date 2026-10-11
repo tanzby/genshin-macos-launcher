@@ -58,7 +58,8 @@ public struct SystemProcessTable: ProcessTable {
 
   /// The C string in a fixed-size `char[MAXPATHLEN]` field, which Swift imports as a tuple.
   private static func string<Path>(from path: inout Path) -> String {
-    withUnsafePointer(to: &path) {
+    assert(MemoryLayout<Path>.size == Int(MAXPATHLEN))
+    return withUnsafePointer(to: &path) {
       $0.withMemoryRebound(to: CChar.self, capacity: Int(MAXPATHLEN)) { String(cString: $0) }
     }
   }

@@ -71,6 +71,17 @@ private func writeScript(_ body: String, named name: String = "tool.sh", in dir:
     }
   }
 
+  @Test("WIN-008 a rejected runLogging leaves the log file untouched")
+  func rejectedRunLoggingKeepsLog() async throws {
+    let log = try runnerTempDirectory().appending(path: "game.log")
+    try Data("previous run".utf8).write(to: log)
+    await #expect(throws: ProcessRunnerError.executableNotAllowed("/bin/sh")) {
+      _ = try await SystemProcessRunner().runLogging(
+        URL(filePath: "/bin/sh"), arguments: [], environment: [:], workingDirectory: nil, logFile: log)
+    }
+    #expect(try String(contentsOf: log, encoding: .utf8) == "previous run")
+  }
+
   @Test("WIN-008 rejects an executable below a path that merely shares an allowed root's prefix")
   func rejectsSiblingPrefix() async throws {
     let dir = try runnerTempDirectory()
