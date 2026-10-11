@@ -99,7 +99,7 @@ private struct Harness {
     #expect(h.wine.installCount == 0)
   }
 
-  @Test(.disabled("bisect")) func APP_001_prepareWineBeforeBootstrapStillChecksRosettaFirst() async throws {
+  @Test func APP_001_prepareWineBeforeBootstrapStillChecksRosettaFirst() async throws {
     let h = Harness(wine: missing, rosetta: false)
     defer { h.cleanUp() }
     await #expect(throws: LauncherError.rosettaMissing) { try await h.model.prepareWine() }
@@ -107,7 +107,7 @@ private struct Harness {
     #expect(h.model.phase == .idle)
   }
 
-  @Test(.disabled("bisect")) func APP_001_overlappingBootstrapsWaitForTheSameRecovery() async throws {
+  @Test func APP_001_overlappingBootstrapsWaitForTheSameRecovery() async throws {
     let h = Harness(wine: .ready)
     defer { h.cleanUp() }
     h.probe.stallRecovery()
@@ -128,7 +128,7 @@ private struct Harness {
     #expect(h.fake.statusCalls == 2)
   }
 
-  @Test(.disabled("bisect")) func APP_001_jobsAndLaunchAreBusyWhileTheRecoveryRuns() async throws {
+  @Test func APP_001_jobsAndLaunchAreBusyWhileTheRecoveryRuns() async throws {
     let h = Harness(wine: .ready)
     defer { h.cleanUp() }
     h.probe.stallRecovery()
@@ -147,7 +147,7 @@ private struct Harness {
     await h.model.shutdown()
   }
 
-  @Test(.disabled("bisect")) func APP_001_shutdownWaitsForARunningRecovery() async throws {
+  @Test func APP_001_shutdownWaitsForARunningRecovery() async throws {
     let h = Harness(wine: .ready)
     defer { h.cleanUp() }
     h.probe.stallRecovery()
@@ -246,15 +246,31 @@ private struct Harness {
   @Test func WIN_005_wineReinstallRequiredReturnsToPreparation() async throws {
     let h = Harness(wine: .ready)
     defer { h.cleanUp() }
-    await h.model.bootstrap()
-    try await h.model.launch()
-    try await h.fake.nextLaunch()
-    h.fake.failLaunch(GameClientError.wineReinstallRequired)
-    await h.model.waitUntilIdle()
+    try await failLaunchWithReinstall(h)
     #expect(h.model.primaryAction == .prepareWine)
+    #expect(h.model.wineStatus != .ready)
+    await #expect(throws: LauncherError.wineNotReady) { try await h.model.launch() }
+
+    // the disk still says "ready"; re-reading it must not undo the request
+    await h.model.refreshWine()
+    #expect(h.model.primaryAction == .prepareWine)
+
+    try await h.model.prepareWine()
+    let install = try await h.wine.nextInstall()
+    #expect(h.wine.isReinstall(install: install), "ensureInstalled would return at once on a ready stamp")
+    h.wine.finish(install: install)
+    await h.model.waitUntilIdle()
+    #expect(h.model.wineStatus == .ready)
+    #expect(h.model.primaryAction == .launch)
+
+    // satisfied: later refreshes follow the disk again
+    h.wine.setStatus(missing)
+    await h.model.refreshWine()
+    h.wine.setStatus(.ready)
+    await h.model.refreshWine()
+    #expect(h.model.primaryAction == .launch)
   }
 
-#if false
   @Test func WIN_005_aFailedReinstallStaysRequired() async throws {
     let h = Harness(wine: .ready)
     defer { h.cleanUp() }
@@ -272,10 +288,8 @@ private struct Harness {
     await h.model.waitUntilIdle()
     #expect(h.model.primaryAction == .launch)
   }
-#endif
 }
 
-#if false
 extension WIN_005_ReinstallTests {
   @Test func WIN_005_aPausedReinstallStaysRequired() async throws {
     let h = Harness(wine: .ready)
@@ -296,9 +310,7 @@ extension WIN_005_ReinstallTests {
     await h.model.waitUntilIdle()
   }
 }
-#endif
 
-#if false
 @MainActor @Suite struct WIN_005_RefreshWineTests {
   @Test func WIN_005_preparationReadsTheWineStatusOnceAfterAnyOutcome() async throws {
     for finish in [true, false] {
@@ -316,4 +328,3 @@ extension WIN_005_ReinstallTests {
     }
   }
 }
-#endif

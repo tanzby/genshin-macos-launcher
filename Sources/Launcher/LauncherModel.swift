@@ -184,11 +184,7 @@ public final class LauncherModel {
     guard let wine else { return }
     let status = await wine.status()
     // A launch that found Wine broken outranks the stamp: only a successful reinstall clears the request.
-    if needsForcedReinstall && status == .ready {
-      wineStatus = .needsInstall(.corrupt(missing: "reported by the game launch"))
-    } else {
-      wineStatus = status
-    }
+    wineStatus = needsForcedReinstall && status == .ready ? Self.reportedByLaunch : status
   }
 
   /// Re-checks Rosetta (when there is a check to make) and records the result. False: `lastError` says why.
@@ -206,6 +202,8 @@ public final class LauncherModel {
   /// Runs `recover()` once per process. Overlapping callers share the one running recovery and all wait for
   /// it; it counts as done only after it has returned, so nothing reads the game state before. While it runs
   /// every job and launch entry answers `busy` (it kills the prefix and rewrites game files).
+  private static let reportedByLaunch = WineStatus.needsInstall(.corrupt(missing: "reported by the game launch"))
+
   private func recoverOnce() async {
     guard !hasRecovered, let startup else { return }
     let task = recovery ?? Task { await startup.recoverSession() }
@@ -553,7 +551,7 @@ public final class LauncherModel {
       eventSink.yield(.launchFailed(failure))
       if failure == .client(.wineReinstallRequired) {
         needsForcedReinstall = true
-        await refreshWine()  // not ready any more: the main button goes back to "prepare Wine"
+        wineStatus = Self.reportedByLaunch  // not ready any more: the main button goes back to "prepare Wine"
       }
     }
     launchGate = nil
