@@ -15,6 +15,7 @@ final class FakeGameClient: GameClient, Sendable {
   private struct State {
     var status: Result<GameStatus, Error>
     var required: [GameJob: Int64] = [:]
+    var diskCheckFailure: (any Error)?
     var statusCalls = 0
     var runs: [RunRecord] = []
     var events: [String] = []
@@ -42,6 +43,8 @@ final class FakeGameClient: GameClient, Sendable {
   func setStatus(_ status: GameStatus) { state.withLock { $0.status = .success(status) } }
   func setStatusFailure(_ error: any Error) { state.withLock { $0.status = .failure(error) } }
   func setRequiredDiskSpace(_ bytes: Int64, for job: GameJob) { state.withLock { $0.required[job] = bytes } }
+  /// `requiredDiskSpace` also validates the folder; this makes it refuse.
+  func setDiskCheckFailure(_ error: any Error) { state.withLock { $0.diskCheckFailure = error } }
 
   // MARK: Observation
 
@@ -137,7 +140,10 @@ final class FakeGameClient: GameClient, Sendable {
         try await Task.sleep(for: .seconds(60))
       }
     }
-    return state.withLock { $0.required[job] ?? 0 }
+    return try state.withLock { s in
+      if let failure = s.diskCheckFailure { throw failure }
+      return s.required[job] ?? 0
+    }
   }
 
   func run(_ job: GameJob) -> AsyncThrowingStream<JobProgress, Error> {

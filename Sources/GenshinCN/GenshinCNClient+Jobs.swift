@@ -153,6 +153,7 @@ extension GenshinCNClient {
     do {
       switch job {
       case .install:
+        try SophonInstallation.validateInstallDirectory(directory)
         return try Self.sizes(of: await mainRelease().ref.stats).uncompressedSize
       case .repair:
         _ = try installedVersion(in: directory)

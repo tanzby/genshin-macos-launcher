@@ -65,7 +65,7 @@ private func isError(_ error: (any Error)?, _ expected: SophonError) -> Bool {
 
     let result = await rig.run(.install)
 
-    #expect(isError(result.error, .installDirectoryNotEmpty))
+    #expect(result.error as? GameClientError == .installDirectoryNotEmpty)
     #expect(rig.configText == before)
     #expect(rig.cdn.chunkRequests().isEmpty)
   }
@@ -192,7 +192,7 @@ private func isError(_ error: (any Error)?, _ expected: SophonError) -> Bool {
 
     let result = await rig.run(.install)
 
-    #expect(isError(result.error, .installDirectoryNotEmpty))
+    #expect(result.error as? GameClientError == .installDirectoryNotEmpty)
     #expect(rig.exists(".tmp/notes.txt"))
     #expect(rig.exists("ldiff/keep.bin"))
   }

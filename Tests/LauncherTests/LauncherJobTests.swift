@@ -406,6 +406,18 @@ private func jobJSON(kind: String, target: String? = nil, extra: String = "") ->
     #expect(h.model.pendingJob == nil)
   }
 
+  @Test func INS_005_aFolderTheClientRefusesLeavesNoJobFileBehind() async throws {
+    let h = await Harness(status: Status.notInstalled)
+    h.fake.setDiskCheckFailure(GameClientError.installDirectoryNotEmpty)
+
+    await #expect(throws: LauncherError.client(.installDirectoryNotEmpty)) { try await h.model.start(.install) }
+
+    #expect(h.model.phase == .idle)
+    #expect(h.jobFileExists == false)
+    #expect(h.fake.runs.isEmpty)
+    #expect(h.model.pendingJob == nil)
+  }
+
   @Test func INS_004_requiredIncludesChunkTempMargin() async throws {
     // 10_000 + 1_000 margin: 10_999 is one byte short.
     let h = await Harness(

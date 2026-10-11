@@ -148,6 +148,20 @@ import Testing
 }
 
 @Suite struct ClientDiskSpaceTests {
+  @Test func INS_005_theInstallDiskCheckRefusesAFolderTheInstallCouldNotUseAndTouchesNothing() async throws {
+    let rig = ClientRig(main: .game("5.6.0"))
+    rig.install(.game("5.5.0"))
+    rig.write("photos.zip", Data("mine".utf8))
+    let before = try FileManager.default.contentsOfDirectory(atPath: rig.game.path).sorted()
+
+    await #expect(throws: GameClientError.installDirectoryNotEmpty) {
+      try await rig.client.requiredDiskSpace(for: .install)
+    }
+
+    #expect(try FileManager.default.contentsOfDirectory(atPath: rig.game.path).sorted() == before)
+    #expect(rig.cdn.requests.isEmpty)
+  }
+
   @Test func INS_004_installNeedsTheUnpackedSizeOfTheGameCategory() async throws {
     let release = FakeRelease.game("5.6.0")
     let rig = ClientRig(main: release)
