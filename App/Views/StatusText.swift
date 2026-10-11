@@ -7,7 +7,6 @@ extension PrimaryButton {
   var title: LocalizedStringResource {
     switch self {
     case .prepareWine: "Set Up Wine"
-    case .preparingWine: "Preparing…"
     case .install: "Install Game"
     case .update: "Update Game"
     case .launch: "Start Game"

@@ -73,9 +73,14 @@ public final class MainController {
         try await self.launcher.launch()
       case .pause: await self.launcher.pause()
       case .resume, .retry: try await self.launcher.resume()
-      case .pausing, .preparingWine, .repairing, .launching, .running: break
+      case .pausing, .repairing, .launching, .running: break
       }
     }
+  }
+
+  /// Pauses the running pre-download (or whatever pausable work runs); `perform(.pause)` without the button.
+  public func pause() async {
+    await perform(.pause)
   }
 
   public func preDownload() async {

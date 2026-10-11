@@ -12,7 +12,9 @@ struct CapsuleView: View {
     GlassEffectContainer {
       HStack(spacing: 12) {
         if presentation.status != .none {
-          StatusArea(status: presentation.status, canPreDownload: presentation.canPreDownload)
+          StatusArea(
+            status: presentation.status, canPreDownload: presentation.canPreDownload,
+            preDownload: presentation.activePreDownload)
             .padding(.leading, 14)
             .transition(.opacity.combined(with: .move(edge: .trailing)))
         }
@@ -73,6 +75,7 @@ private struct StatusArea: View {
   @Environment(ProgressMeter.self) private var meter
   let status: StatusLine
   let canPreDownload: Bool
+  let preDownload: ActivePreDownload?
 
   var body: some View {
     HStack(spacing: 12) {
@@ -90,6 +93,13 @@ private struct StatusArea: View {
           // A `nil` fraction renders the indeterminate bar (PRG-005).
           ProgressView(value: progress.fraction)
             .progressViewStyle(.linear)
+        }
+        if let preDownload, !isPreDownloadStatus {
+          // Pre-download overlapping with launching or running: shown below the main status.
+          Text(preDownloadLine(preDownload))
+            .font(.caption)
+            .foregroundStyle(.secondary)
+            .lineLimit(1)
         }
       }
       .frame(minWidth: 180, maxWidth: 360, alignment: .leading)
@@ -139,7 +149,23 @@ private struct StatusArea: View {
     return "\(amount) · \(rate)/s"
   }
 
+  private var isPreDownloadStatus: Bool {
+    if case .job(.preDownload, _, _) = status { return true }
+    return false
+  }
+
+  private func preDownloadLine(_ active: ActivePreDownload) -> LocalizedStringResource {
+    guard let counts = active.progress?.counts else { return "Pre-downloading" }
+    return "Pre-downloading · \(ByteFormat.iec(counts.done)) / \(ByteFormat.iec(counts.total))"
+  }
+
   @ViewBuilder private var accessory: some View {
+    if let preDownload {
+      Button(preDownload.isPausing ? "Pausing…" : "Pause") { Task { await controller.pause() } }
+        .buttonStyle(.glass)
+        .controlSize(.large)
+        .disabled(preDownload.isPausing)
+    }
     if canPreDownload {
       Button("Pre-download") { Task { await controller.preDownload() } }
         .buttonStyle(.glass)

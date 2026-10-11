@@ -38,7 +38,7 @@ public struct MainSnapshot: Sendable, Equatable {
 
 /// The one accent-coloured button in the capsule (#21: the colour never changes with the state).
 public enum PrimaryButton: Sendable, Equatable {
-  case prepareWine, preparingWine
+  case prepareWine
   case install, update, launch
   case pause, pausing, resume, retry
   case repairing, launching, running
@@ -59,6 +59,13 @@ public enum StatusLine: Sendable, Equatable {
   case running
 }
 
+/// A pre-download that is running. It overlaps with launching and running, so it is reported next to the status
+/// line instead of replacing it.
+public struct ActivePreDownload: Sendable, Equatable {
+  public var progress: JobProgress?
+  public var isPausing: Bool
+}
+
 /// The state table of #21 as a pure function.
 public struct MainPresentation: Sendable, Equatable {
   public var button: PrimaryButton
@@ -68,6 +75,7 @@ public struct MainPresentation: Sendable, Equatable {
   public var canRepair: Bool
   /// The "Pre-download" button is offered (also next to an error, so a failed pre-download can be retried).
   public var canPreDownload: Bool
+  public var activePreDownload: ActivePreDownload?
 
   public static func derive(_ s: MainSnapshot) -> MainPresentation {
     let installed = s.status?.localVersion != nil
@@ -81,11 +89,14 @@ public struct MainPresentation: Sendable, Equatable {
       MainPresentation(
         button: button, buttonEnabled: enabled, status: status, canRepair: repairable,
         canPreDownload: installed && s.isOnline && preDownloadPhase && !s.isPreDownloading
-          && s.status?.canPreDownload == true)
+          && s.status?.canPreDownload == true,
+        activePreDownload: s.isPreDownloading ? ActivePreDownload(progress: s.progress, isPausing: s.isPausing) : nil)
     }
 
     switch s.phase {
-    case .preparingWine: return make(.preparingWine, false, .wine(s.progress))
+    case .preparingWine:
+      // The download resumes from its .part files, so Wine preparation can be paused like a game job.
+      return make(s.isPausing ? .pausing : .pause, !s.isPausing, .wine(s.progress))
     case .running: return make(.running, false, .running)
     case .launching: return make(.launching, false, .launching)
     case .installing, .updating:
@@ -102,8 +113,10 @@ public struct MainPresentation: Sendable, Equatable {
     }
 
     if let pending = s.pendingJob, pending.kind != .preDownload {
-      if let error = s.lastError { return make(.retry, true, .error(error)) }
-      return make(.resume, true, .job(pending.kind, nil, paused: true))
+      // Continuing needs the network, like every other download.
+      if let error = s.lastError { return make(.retry, s.isOnline, .error(error)) }
+      if s.hasLoaded && !s.isOnline { return make(.resume, false, .offline) }
+      return make(.resume, s.isOnline, .job(pending.kind, nil, paused: true))
     }
 
     let base = PrimaryAction.derive(s.status)

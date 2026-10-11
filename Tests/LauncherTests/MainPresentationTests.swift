@@ -114,6 +114,33 @@ private func snapshot(
     #expect(!MainPresentation.derive(snapshot(status: status, online: false)).canPreDownload)
   }
 
+  @Test func APP_015_aRunningPreDownloadIsReportedAlongsideLaunchingAndRunning() {
+    let status = GameStatus(localVersion: "5.0.0", remoteVersion: "5.0.0", canPreDownload: true)
+    let progress = JobProgress.running(done: 1, total: 4)
+    for phase in [LauncherPhase.launching, .running] {
+      let p = MainPresentation.derive(
+        snapshot(phase: phase, preDownloading: true, progress: progress, status: status))
+      #expect(p.status == (phase == .launching ? .launching : .running))
+      #expect(p.activePreDownload == ActivePreDownload(progress: progress, isPausing: false))
+    }
+    let pausing = MainPresentation.derive(
+      snapshot(phase: .preDownloading, preDownloading: true, pausing: true, progress: progress, status: status))
+    #expect(pausing.activePreDownload?.isPausing == true)
+    #expect(MainPresentation.derive(snapshot()).activePreDownload == nil)
+  }
+
+  @Test func APP_010_unfinishedDownloadsCannotBeContinuedOffline() {
+    let pending = PendingJob(kind: .install)
+    let paused = MainPresentation.derive(snapshot(pending: pending, online: false))
+    #expect(paused.button == .resume)
+    #expect(!paused.buttonEnabled)
+    #expect(paused.status == .offline)
+    let failed = MainPresentation.derive(snapshot(pending: pending, error: .client(.network), online: false))
+    #expect(failed.button == .retry)
+    #expect(!failed.buttonEnabled)
+    #expect(MainPresentation.derive(snapshot(pending: pending)).buttonEnabled)
+  }
+
   @Test func APP_017_pendingPreDownloadIsNotAResumeOfTheMainButton() {
     let p = MainPresentation.derive(snapshot(pending: PendingJob(kind: .preDownload)))
     #expect(p.button == .launch)
@@ -175,9 +202,11 @@ private func snapshot(
 
     let progress = JobProgress.wine(.extracting)
     let running = MainPresentation.derive(snapshot(phase: .preparingWine, progress: progress))
-    #expect(running.button == .preparingWine)
-    #expect(!running.buttonEnabled)
+    #expect(running.button == .pause, "Wine preparation resumes from .part files, so it can be paused")
+    #expect(running.buttonEnabled)
     #expect(running.status == .wine(progress))
+    let pausing = MainPresentation.derive(snapshot(phase: .preparingWine, pausing: true, progress: progress))
+    #expect(pausing.button == .pausing && !pausing.buttonEnabled)
 
     s.lastError = .wineInstall(.dxmtArchiveInvalid)
     #expect(MainPresentation.derive(s).status == .error(.wineInstall(.dxmtArchiveInvalid)))

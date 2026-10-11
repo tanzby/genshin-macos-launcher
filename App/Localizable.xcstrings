@@ -1106,6 +1106,23 @@
         }
       }
     },
+    "Pre-downloading · %@ / %@": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pre-downloading · %@ / %@"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "正在预下载 · %@ / %@"
+          }
+        }
+      }
+    },
     "Preparing Wine": {
       "extractionState": "manual",
       "localizations": {
@@ -1119,23 +1136,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "正在准备 Wine"
-          }
-        }
-      }
-    },
-    "Preparing…": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Preparing…"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "准备中…"
           }
         }
       }
