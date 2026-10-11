@@ -1,5 +1,3 @@
-#if false
-import Foundation
 import Synchronization
 import Testing
 import Wine
@@ -235,6 +233,7 @@ private struct Harness {
   }
 }
 
+#if false
 @MainActor @Suite struct WIN_005_ReinstallTests {
   private func failLaunchWithReinstall(_ h: Harness) async throws {
     await h.model.bootstrap()
