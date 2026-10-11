@@ -1,4 +1,5 @@
 import Foundation
+import Launcher
 import Testing
 import Wine
 
@@ -273,5 +274,39 @@ private func edits(_ recipe: LaunchRecipe, key: String) -> [RegistryEdit] {
     #expect(GenshinLaunchRecipe.isSupported(gameDirectory: URL(filePath: "/Games/原神 GI")))
     #expect(!GenshinLaunchRecipe.isSupported(gameDirectory: URL(filePath: "/Games/a\"b")))
     #expect(!GenshinLaunchRecipe.isSupported(gameDirectory: URL(filePath: "/Games/a\nb")))
+  }
+}
+
+// The switches of the TS launcher that are gone: Steam patch, Timeout Fix and Game Mode are always on (#28 A9)
+// and FPS unlock does nothing (#28 A6). Nothing in the settings that reach the recipe can name them.
+@Suite("Launch settings have no fixed-on switches") struct FixedSwitchTests {
+  private func labels(_ value: Any) -> [String] { Mirror(reflecting: value).children.compactMap(\.label) }
+
+  @Test func CFG_024_CFG_027_CFG_028_CFG_019_theLaunchSettingsOnlyCarryTheSwitchesThatRemain() {
+    let expected = [
+      "retina", "leftCommandIsControl", "metalHUD", "hdr", "metalFX", "customResolution", "proxyHost",
+    ]
+    #expect(labels(GenshinLaunchSettings()) == expected)
+    #expect(labels(LaunchOptions(gameDirectory: defaultGameDirectory)) == ["gameDirectory"] + expected)
+  }
+
+  @Test func CFG_024_theSteamPatchIsOnWhateverTheSettingsAre() {
+    for settings in [GenshinLaunchSettings(), GenshinLaunchSettings(hdr: true, metalFX: true)] {
+      let recipe = make(settings)
+      #expect(recipe.command.first == #"C:\windows\system32\steam.exe"#)
+      #expect(recipe.prefixCopies.map(\.destination).contains("system32/steam.exe"))
+      #expect(recipe.prefixCopies.map(\.destination).contains("system32/lsteamclient.dll"))
+    }
+  }
+
+  @Test func CFG_027_theTimeoutFixIsOnWhateverTheSettingsAre() {
+    #expect(make().environment["WINE_ENABLE_TIMEOUT_FIX"] == "1")
+    #expect(make(GenshinLaunchSettings(retina: true, metalHUD: true)).environment["WINE_ENABLE_TIMEOUT_FIX"] == "1")
+  }
+
+  @Test func CFG_019_theFrameRateCapIsFixedAt60WhateverTheSettingsAre() {
+    for settings in [GenshinLaunchSettings(), GenshinLaunchSettings(metalHUD: true, hdr: true, metalFX: true)] {
+      #expect(make(settings).environment["DXMT_CONFIG"] == "d3d11.preferredMaxFrameRate=60;")
+    }
   }
 }

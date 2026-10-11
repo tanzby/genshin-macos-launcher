@@ -12,8 +12,8 @@
 
 | 处置 | 含义 | 条数 |
 |---|---|---|
-| 照搬 | 行为不变，按旧行为验收 | 55 |
-| 改写 | 被后来的决定改变，按新行为验收 | 88 |
+| 照搬 | 行为不变，按旧行为验收 | 53 |
+| 改写 | 被后来的决定改变，按新行为验收 | 90 |
 | 作废 | 旧机制已不存在，不验收 | 37 |
 
 有意照搬的特殊项：LCH-011 的实测回退分支、UPG-014 语音包不管、WIN-009 根证书。有意放弃：UPG-002 音频目录迁移。[#28](https://github.com/tanzby/yet-another-anime-game-launcher/issues/28) 的 C 组（APP-004、APP-022、INS-008/009/010、PRG-001、WIN-016/019 等）是负面用例：旧版的缺陷在新版里必须不再出现。与 ADR 0002 冲突时以 #28 为准：ReShade 整个删除，DXMT 在安装 Wine 时一次装好。
@@ -44,8 +44,8 @@
 
 `scripts/dev/parity-coverage` 解析本清单，取处置为「照搬/改写」的 ID，在 `Tests/**/*.swift` 里含 `func ` 或 `@Test` 的行（测试名，注释不算）以及 `Diag/`、`scripts/diag/`（diag 检查项，目录存在时）里找引用。`APP-011` 与 `APP_011` 等价。
 
-- **报告模式**（默认）：列出未覆盖的 ID，退出码 0。各模块票还在补测试时 CI 用这个模式，已接入 `scripts/dev/macos-check`（因此也是 CI 和 pre-push）。
-- **严格模式**（`--strict` 或 `PARITY_STRICT=1`）：有任何未覆盖 ID 就失败。**1.0.0 发布前必须在严格模式下通过**，这是发布门槛第 2 项；发布 workflow 对正式版本（不带 `-rc.N` 后缀）显式用 `--strict`，所以 `1.0.0` 打 tag 时覆盖不全会被卡住，`1.0.0-rc.N` 只报告、不阻塞（rc 要先用来验证 Sparkle 更新）；最后一张模块票合并后，再在 CI 的 `swift` job 设 `PARITY_STRICT=1`，让日常 PR 也严格。
+- **报告模式**（默认）：列出未覆盖的 ID，退出码 0。模块票还在补测试时 CI 用过这个模式；现在只用于本地查看。
+- **严格模式**（`--strict` 或 `PARITY_STRICT=1`）：有任何未覆盖 ID 就失败。**1.0.0 发布前必须在严格模式下通过**，这是发布门槛第 2 项；发布 workflow 对正式版本（不带 `-rc.N` 后缀）显式用 `--strict`，所以 `1.0.0` 打 tag 时覆盖不全会被卡住，`1.0.0-rc.N` 只报告、不阻塞（rc 要先用来验证 Sparkle 更新）；规则补齐后（#64），`scripts/dev/macos-check`（因此也是 CI 和 pre-push）日常就用 `--strict`，新规则或改处置而没有测试会直接挡住 PR。
 - 两种模式都会在结构性错误时失败：清单行重复或处置不是照搬/改写/作废，或测试引用了清单里不存在的 ID。引用「作废」规则只警告。
 - 脚本是命名核对，不证明测试被执行：块注释、套件级 `@Suite(.disabled)` 之类的边角不处理，由发布门槛第 1 项「测试全绿」和 code review 兜底。
 - 脚本不看「对应测试」列，它只保证覆盖；该列是给人读的索引，由各票填写。
@@ -57,33 +57,33 @@
 | APP-001 | 应用启动顺序 | 改写 | [#28](https://github.com/tanzby/yet-another-anime-game-launcher/issues/28) B20 删死数据 / ADR 0002 启动顺序 | 组件 | `APP_001_*`（LauncherWineTests：Wine 就绪先于读取游戏状态；LauncherStartupTests：Rosetta 先于 Wine、`recover()` 在 Wine 就绪后且读取游戏状态前、每次运行只一次；hosts 在 OnboardingModel，清场归 DataDirectoryTests） |；diag：`yaagl-diag`
 | APP-002 | 数据目录的位置与解析 | 改写 | ADR 0001/0002 / [#27](https://github.com/tanzby/yet-another-anime-game-launcher/issues/27) (removexattr 不提权) | 组件 | `APP_002_*`（DataDirectoryTests）；diag：`yaagl-diag` |
 | APP-003 | 启动时把 App bundle 同步到数据目录 | 作废 | [#17](https://github.com/tanzby/yet-another-anime-game-launcher/issues/17)/[#13](https://github.com/tanzby/yet-another-anime-game-launcher/issues/13) 无 sidecar/Neutralino | — |  |
-| APP-004 | 部分路径依赖进程当前目录 | 改写 | [#28](https://github.com/tanzby/yet-another-anime-game-launcher/issues/28) C 负面用例 | 组件 |  |
+| APP-004 | 部分路径依赖进程当前目录 | 改写 | [#28](https://github.com/tanzby/yet-another-anime-game-launcher/issues/28) C 负面用例 | 组件 | `APP_004_*`（ParityGapTests：命令行相对路径在读取时变成绝对路径，Wine 布局全是绝对路径） |
 | APP-005 | aria2 下载服务启动 | 作废 | [#17](https://github.com/tanzby/yet-another-anime-game-launcher/issues/17)/[#13](https://github.com/tanzby/yet-another-anime-game-launcher/issues/13) 无 sidecar/Neutralino | — |  |
 | APP-006 | aria2 下载任务的去重与续传 | 作废 | [#17](https://github.com/tanzby/yet-another-anime-game-launcher/issues/17)/[#13](https://github.com/tanzby/yet-another-anime-game-launcher/issues/13) 无 sidecar/Neutralino | — |  |
 | APP-007 | Sophon 服务进程的启动与生命周期 | 作废 | [#17](https://github.com/tanzby/yet-another-anime-game-launcher/issues/17)/[#13](https://github.com/tanzby/yet-another-anime-game-launcher/issues/13) 无 sidecar/Neutralino | — |  |
 | APP-008 | 在线游戏信息 | 改写 | [#26](https://github.com/tanzby/yet-another-anime-game-launcher/issues/26) 端点/缓存 | 组件、线上 | `APP_008_*`（SophonProtocolTests、SophonManifestTests） |
 | APP-009 | CN 的 HoYoPlay / Sophon 接口端点 | 改写 | [#26](https://github.com/tanzby/yet-another-anime-game-launcher/issues/26) 端点/缓存 | 组件、线上 | `APP_009_*`（SophonProtocolTests、SophonManifestTests、SophonLiveContractTests） |
 | APP-010 | 在线信息查询失败 | 改写 | [#28](https://github.com/tanzby/yet-another-anime-game-launcher/issues/28) A1-A3 | 组件、线上 | `APP_010_*` |
-| APP-011 | 本地安装状态判定 | 照搬 | TS 行为不变，但依 ADR 0002 在 Sophon/Launcher 重做 | 单元 |  |
-| APP-012 | 从 globalgamemanagers 读取游戏版本 | 照搬 | TS 行为不变，但依 ADR 0002 在 Sophon/Launcher 重做 | 单元 |  |
+| APP-011 | 本地安装状态判定 | 照搬 | TS 行为不变，但依 ADR 0002 在 Sophon/Launcher 重做 | 单元 | `APP_011_*`（ClientParityStatusTests、ParityGapTests） |
+| APP-012 | 从 globalgamemanagers 读取游戏版本 | 改写 | ADR 0002 / UPG-005：Sophon 按构建串模式（`\0x.y.z_n_n\0`）读版本，不再用 `ic.app-category.` 后的固定偏移 | 单元 | `APP_012_*`（ClientParityStatusTests）；版本串解析另见 `UPG_005_*` |
 | APP-013 | 任务队列串行执行，出错即致命 | 改写 | [#28](https://github.com/tanzby/yet-another-anime-game-launcher/issues/28) A1-A3 | 组件 | `APP_013_*` |
-| APP-014 | 版本不可读时告警 | 照搬 | 行为不变（流程由 Launcher + Fake GameClient 承载） | 组件 |  |
+| APP-014 | 版本不可读时告警 | 改写 | UPG-005：版本不可读是 `brokenInstallation` 错误，不再按 0.0.0 走更新（会重置安装） | 组件 | `APP_014_*`（ClientParityStatusTests、ParityGapTests） |
 | APP-015 | 预下载队列与主队列可以并发 | 改写 | [#28](https://github.com/tanzby/yet-another-anime-game-launcher/issues/28) A1-A3 | 组件 | `APP_015_*` |
-| APP-016 | 是否需要更新 | 照搬 | TS 行为不变，但依 ADR 0002 在 Sophon/Launcher 重做 | 组件 |  |
+| APP-016 | 是否需要更新 | 照搬 | TS 行为不变，但依 ADR 0002 在 Sophon/Launcher 重做 | 组件 | `APP_016_*`（ClientParityStatusTests、ParityGapTests） |
 | APP-017 | 主按钮的文案与动作 | 改写 | [#21](https://github.com/tanzby/yet-another-anime-game-launcher/issues/21) SwiftUI 主界面 / 设置窗口重新设计 | 组件 |`APP_017_*`（MainPresentationTests、MainControllerTests） |
-| APP-018 | 设置按钮的可见性 | 改写 | [#21](https://github.com/tanzby/yet-another-anime-game-launcher/issues/21) SwiftUI 主界面 / 设置窗口重新设计 | 组件 | |
+| APP-018 | 设置按钮的可见性 | 改写 | [#21](https://github.com/tanzby/yet-another-anime-game-launcher/issues/21) SwiftUI 主界面 / 设置窗口重新设计 | 组件 | `APP_018_*`（AppSourceTests：「⋯」菜单里的设置入口始终可点，启动用设置快照） |
 | APP-019 | 启动器启动时还原残留补丁（init） | 改写 | [#28](https://github.com/tanzby/yet-another-anime-game-launcher/issues/28) B12：启动时 GameSession.recover() 自愈 | 组件 | `APP_019_*`（ClientLaunchTests、LauncherClientHandoffTests；GameSession 侧见 LCH_038）；diag：`yaagl-diag` |
 | APP-020 | YAAGL_AUTOLAUNCH 自动启动 | 改写 | ADR 0002 命令行入口，diag 适配票 | 组件 | `APP_020_*`（AutoLaunchTests）；diag：`yaagl-diag` |
 | APP-021 | 启动器背景资源 | 改写 | [#21](https://github.com/tanzby/yet-another-anime-game-launcher/issues/21) SwiftUI 主界面 / 设置窗口重新设计 | 组件 |  |
-| APP-022 | 窗口关闭与终止钩子 | 改写 | [#28](https://github.com/tanzby/yet-another-anime-game-launcher/issues/28) C 负面用例 | 组件 |  |
+| APP-022 | 窗口关闭与终止钩子 | 改写 | [#28](https://github.com/tanzby/yet-another-anime-game-launcher/issues/28) C 负面用例 | 组件 | `APP_022_*`（LauncherJobTests：`QuitPlanTests`） |
 | CFG-001 | 设置的持久化存储 | 改写 | [#29](https://github.com/tanzby/yet-another-anime-game-launcher/issues/29)/ADR 0001 | 组件 |`CFG_001_*`（SettingsModelTests） |
 | CFG-002 | 布尔值的解析 | 作废 | [#13](https://github.com/tanzby/yet-another-anime-game-launcher/issues/13) 设置改 UserDefaults 类型化属性（无字符串布尔） | — |  |
 | CFG-003 | 改动即时保存，不落盘默认值 | 作废 | [#13](https://github.com/tanzby/yet-another-anime-game-launcher/issues/13) 设置改 UserDefaults 类型化属性（无字符串布尔） | — |  |
-| CFG-004 | 设置入口 | 改写 | [#21](https://github.com/tanzby/yet-another-anime-game-launcher/issues/21) SwiftUI 主界面 / 设置窗口重新设计 | 组件 |  |
-| CFG-005 | 设置页的标签页结构 | 改写 | [#21](https://github.com/tanzby/yet-another-anime-game-launcher/issues/21) SwiftUI 主界面 / 设置窗口重新设计 | 组件 |  |
+| CFG-004 | 设置入口 | 改写 | [#21](https://github.com/tanzby/yet-another-anime-game-launcher/issues/21) SwiftUI 主界面 / 设置窗口重新设计 | 组件 | `CFG_004_*`（AppSourceTests） |
+| CFG-005 | 设置页的标签页结构 | 改写 | [#21](https://github.com/tanzby/yet-another-anime-game-launcher/issues/21) SwiftUI 主界面 / 设置窗口重新设计 | 组件 | `CFG_005_*`（AppSourceTests：设置窗口的侧栏页面结构） |
 | CFG-006 | 高级设置页的解锁手势 | 作废 | [#28](https://github.com/tanzby/yet-another-anime-game-launcher/issues/28) A7 删 ReShade/高级页手势（ADR 0002 已按此修订） | — |  |
-| CFG-007 | 关闭设置页 | 改写 | [#21](https://github.com/tanzby/yet-another-anime-game-launcher/issues/21) SwiftUI 主界面 / 设置窗口重新设计 | 组件 |  |
-| CFG-008 | Wine 版本：列表与切换流程 | 改写 | [#29](https://github.com/tanzby/yet-another-anime-game-launcher/issues/29)/ADR 0001 | 组件 |  |
+| CFG-007 | 关闭设置页 | 改写 | [#21](https://github.com/tanzby/yet-another-anime-game-launcher/issues/21) SwiftUI 主界面 / 设置窗口重新设计 | 组件 | `CFG_007_*`（SettingsBehaviourTests：改动即时写入，没有保存步骤） |
+| CFG-008 | Wine 版本：列表与切换流程 | 改写 | [#29](https://github.com/tanzby/yet-another-anime-game-launcher/issues/29)/ADR 0001 | 组件 | `CFG_008_*`（WineStatusTests：非固定版本一律重装；AppSourceTests：Wine 页只展示固定版本） |
 | CFG-009 | 游戏安装目录 | 照搬 | [#28](https://github.com/tanzby/yet-another-anime-game-launcher/issues/28) A9 保留的用户偏好 | 组件 |`CFG_009_*`（MainControllerTests） |
 | CFG-010 | 安装目录的选择校验 | 改写 | [#21](https://github.com/tanzby/yet-another-anime-game-launcher/issues/21) SwiftUI 主界面 / 设置窗口重新设计 | 组件 |`CFG_010_*`（SettingsModelTests） |
 | CFG-011 | Metal HUD | 照搬 | [#28](https://github.com/tanzby/yet-another-anime-game-launcher/issues/28) A9 保留的用户偏好 | 组件 |`CFG_011_*`（SettingsModelTests） |
@@ -91,25 +91,25 @@
 | CFG-013 | 左 CMD 映射为 Ctrl | 照搬 | [#28](https://github.com/tanzby/yet-another-anime-game-launcher/issues/28) A9 保留的用户偏好 | 组件 |`CFG_013_*`（SettingsModelTests） |
 | CFG-014 | HTTP 代理开关 | 改写 | [#28](https://github.com/tanzby/yet-another-anime-game-launcher/issues/28) B17 | 组件 |`CFG_014_*`（SettingsModelTests） |
 | CFG-015 | 代理主机 | 改写 | [#28](https://github.com/tanzby/yet-another-anime-game-launcher/issues/28) B17 | 组件 |`CFG_015_*`（SettingsModelTests） |
-| CFG-016 | 界面语言的默认值 | 改写 | [#28](https://github.com/tanzby/yet-another-anime-game-launcher/issues/28) A10 语言跟随系统 | 组件 |  |
-| CFG-017 | 界面语言的保存方式 | 改写 | [#28](https://github.com/tanzby/yet-another-anime-game-launcher/issues/28) A10 语言跟随系统 | 组件 |  |
-| CFG-018 | YAAGL 版本显示 | 改写 | [#21](https://github.com/tanzby/yet-another-anime-game-launcher/issues/21) SwiftUI 主界面 / 设置窗口重新设计 | 组件 |  |
-| CFG-019 | FPS 解锁（不起作用） | 改写 | [#28](https://github.com/tanzby/yet-another-anime-game-launcher/issues/28) A6 删 FPS，DXMT 固定 60 | 组件 |  |
+| CFG-016 | 界面语言的默认值 | 改写 | [#28](https://github.com/tanzby/yet-another-anime-game-launcher/issues/28) A10 语言跟随系统 | 组件 | `CFG_016_*`（SettingsBehaviourTests、AppSourceTests：语言跟随系统，不存语言） |
+| CFG-017 | 界面语言的保存方式 | 改写 | [#28](https://github.com/tanzby/yet-another-anime-game-launcher/issues/28) A10 语言跟随系统 | 组件 | `CFG_017_*`（同 CFG-016） |
+| CFG-018 | YAAGL 版本显示 | 改写 | [#21](https://github.com/tanzby/yet-another-anime-game-launcher/issues/21) SwiftUI 主界面 / 设置窗口重新设计 | 组件 | `CFG_018_*`（AppSourceTests） |
+| CFG-019 | FPS 解锁（不起作用） | 改写 | [#28](https://github.com/tanzby/yet-another-anime-game-launcher/issues/28) A6 删 FPS，DXMT 固定 60 | 组件 | `CFG_019_*`（FixedSwitchTests、SettingsBehaviourTests：FPS 设置已删，帧率上限固定 60） |
 | CFG-020 | ReShade | 作废 | [#28](https://github.com/tanzby/yet-another-anime-game-launcher/issues/28) A7 删 ReShade（ADR 0002 已按此修订） | — |  |
 | CFG-021 | 启用 HDR | 照搬 | [#28](https://github.com/tanzby/yet-another-anime-game-launcher/issues/28) A9 保留的用户偏好 | 组件 |`CFG_021_*`（SettingsModelTests） |
 | CFG-022 | Workaround #3（不起作用） | 作废 | [#28](https://github.com/tanzby/yet-another-anime-game-launcher/issues/28) A9 删除的开关 | — |  |
 | CFG-023 | 关闭反作弊补丁（patch-off） | 作废 | [#28](https://github.com/tanzby/yet-another-anime-game-launcher/issues/28) A9 删除的开关 | — |  |
-| CFG-024 | Steam 补丁 | 改写 | [#28](https://github.com/tanzby/yet-another-anime-game-launcher/issues/28) A9 固定开启 | 组件 |  |
+| CFG-024 | Steam 补丁 | 改写 | [#28](https://github.com/tanzby/yet-another-anime-game-launcher/issues/28) A9 固定开启 | 组件 | `CFG_024_*`（FixedSwitchTests） |
 | CFG-025 | Launch Fix（block-net） | 作废 | [#28](https://github.com/tanzby/yet-another-anime-game-launcher/issues/28) A9 删除的开关 | — |  |
 | CFG-026 | 自定义分辨率 | 改写 | [#28](https://github.com/tanzby/yet-another-anime-game-launcher/issues/28) B16 | 组件 |`CFG_026_*`（SettingsModelTests） |
-| CFG-027 | Timeout Fix | 改写 | [#28](https://github.com/tanzby/yet-another-anime-game-launcher/issues/28) A9 固定开启 | 组件 |  |
-| CFG-028 | 原生全屏与游戏模式 | 改写 | [#28](https://github.com/tanzby/yet-another-anime-game-launcher/issues/28) A9 固定开启 | 组件 |  |
+| CFG-027 | Timeout Fix | 改写 | [#28](https://github.com/tanzby/yet-another-anime-game-launcher/issues/28) A9 固定开启 | 组件 | `CFG_027_*`（FixedSwitchTests；LCH_032 另有） |
+| CFG-028 | 原生全屏与游戏模式 | 改写 | [#28](https://github.com/tanzby/yet-another-anime-game-launcher/issues/28) A9 固定开启 | 组件 | `CFG_028_*`（FixedSwitchTests：设置里没有游戏模式开关；游戏模式见 `LCH_022_*`） |
 | CFG-029 | MetalFX 超分 | 照搬 | [#28](https://github.com/tanzby/yet-another-anime-game-launcher/issues/28) A9 保留的用户偏好 | 组件 |`CFG_029_*`（SettingsModelTests） |
-| CFG-030 | "游戏"标签页的内容顺序 | 改写 | [#21](https://github.com/tanzby/yet-another-anime-game-launcher/issues/21) SwiftUI 主界面 / 设置窗口重新设计 | 组件 |  |
+| CFG-030 | "游戏"标签页的内容顺序 | 改写 | [#21](https://github.com/tanzby/yet-another-anime-game-launcher/issues/21) SwiftUI 主界面 / 设置窗口重新设计 | 组件 | `CFG_030_*`（AppSourceTests：游戏页 HDR、MetalFX、自定义分辨率的顺序） |
 | CFG-031 | 应用推荐设置 | 作废 | [#28](https://github.com/tanzby/yet-another-anime-game-launcher/issues/28) A8 删推荐设置按钮 | — |  |
-| CFG-032 | 打开 Wine 命令行、游戏目录、数据目录 | 改写 | [#21](https://github.com/tanzby/yet-another-anime-game-launcher/issues/21) SwiftUI 主界面 / 设置窗口重新设计 | 组件 | LauncherCommandPromptTests、StringCatalogTests |
+| CFG-032 | 打开 Wine 命令行、游戏目录、数据目录 | 改写 | [#21](https://github.com/tanzby/yet-another-anime-game-launcher/issues/21) SwiftUI 主界面 / 设置窗口重新设计 | 组件 | `CFG_032_*`（AppSourceTests）、WIN_022（CommandPromptTests） |
 | CFG-033 | 检查 YAAGL 更新 | 作废 | [#19](https://github.com/tanzby/yet-another-anime-game-launcher/issues/19) Sparkle | — |  |
-| CFG-034 | Licenses 标签页 | 改写 | [#21](https://github.com/tanzby/yet-another-anime-game-launcher/issues/21) SwiftUI 主界面 / 设置窗口重新设计 | 组件 |  |
+| CFG-034 | Licenses 标签页 | 改写 | [#21](https://github.com/tanzby/yet-another-anime-game-launcher/issues/21) SwiftUI 主界面 / 设置窗口重新设计 | 组件 | `CFG_034_*`（AppSourceTests：Valve 许可证在应用内列出并随文件分发） |
 | INS-001 | 安装目录选择的校验 | 照搬 | TS 行为不变，但依 ADR 0002 在 Sophon/Launcher 重做 | 组件 |  |
 | INS-002 | 判定"已有安装"还是"全新安装" | 照搬 | TS 行为不变，但依 ADR 0002 在 Sophon/Launcher 重做 | 组件 | `INS_002_*`（ClientStatusTests） |
 | INS-003 | 全新安装主流程（TS 侧） | 照搬 | 行为不变（流程由 Launcher + Fake GameClient 承载） | 组件 | `INS_003_*`（ClientInstallTests） |
@@ -156,7 +156,7 @@
 | LCH-028 | gamehost 把游戏窗口切到原生全屏 | 照搬 | x86_64 shim/host 原样搬 (ADR 0002)；只能 E2E | diag | diag：`yaagl-diag` |
 | LCH-029 | 全屏时覆盖刘海区域 | 照搬 | x86_64 shim/host 原样搬 (ADR 0002)；只能 E2E | diag | diag：`yaagl-diag` |
 | LCH-030 | 窗口关闭 15 秒后进程仍在则自行退出 | 照搬 | x86_64 shim/host 原样搬 (ADR 0002)；只能 E2E | diag | diag：`yaagl-diag` |
-| LCH-031 | 本机主机名在本地直接解析 | 照搬 | TS 行为不变；LaunchRecipe/GameSession 重做 | 单元 |  |
+| LCH-031 | 本机主机名在本地直接解析 | 照搬 | TS 行为不变；LaunchRecipe/GameSession 重做 | diag | diag：`yaagl-diag probe`（注入 gamehost.dylib 的 x86_64 探针解析本机主机名；完整 diag 运行也会做这一项） |
 | LCH-032 | Metal HUD、超时修复与 DLL 覆盖 | 改写 | [#28](https://github.com/tanzby/yet-another-anime-game-launcher/issues/28) A9：Timeout Fix 固定开启，`WINE_ENABLE_TIMEOUT_FIX` 恒为启用值 | diag | GenshinLaunchRecipeTests |
 | LCH-033 | DXMT 环境变量与 60 帧上限 | 改写 | [#28](https://github.com/tanzby/yet-another-anime-game-launcher/issues/28) A6 删 FPS，DXMT 固定 60 | 单元 | GenshinLaunchRecipeTests |
 | LCH-034 | 代理环境变量 | 改写 | [#28](https://github.com/tanzby/yet-another-anime-game-launcher/issues/28) B17 | 单元 | GenshinLaunchRecipeTests |
@@ -168,7 +168,7 @@
 | PRE-001 | 何时显示预下载提示 | 改写 | [#26](https://github.com/tanzby/yet-another-anime-game-launcher/issues/26) | 组件、线上 | `PRE_001_*`（SophonUpdaterTests：按目标版本的预下载记录；提示显示逻辑属 Launcher）；`PRE_001_*`（ClientStatusTests、ClientPreDownloadTests） |
 | PRE-002 | 执行预下载 | 改写 | [#26](https://github.com/tanzby/yet-another-anime-game-launcher/issues/26) | 组件、线上 | `PRE_002_*`（SophonUpdaterTests）、`PRE_002_live_*`；`PRE_002_*`（ClientPreDownloadTests） |
 | PRE-003 | 预下载版本的显示 | 照搬 | 行为不变（流程由 Launcher + Fake GameClient 承载） | 组件 | `PRE_003_*`（ClientStatusTests） |
-| PRG-001 | 任务事件推送（WebSocket） | 改写 | [#28](https://github.com/tanzby/yet-another-anime-game-launcher/issues/28) C 负面用例 | 单元 |  |
+| PRG-001 | 任务事件推送（WebSocket） | 改写 | [#28](https://github.com/tanzby/yet-another-anime-game-launcher/issues/28) C 负面用例 | 单元 | `PRG_001_*`（ClientParityStatusTests：作业先结束、后读事件，事件和结束/错误都不丢） |
 | PRG-002 | 进度与速度计算 | 改写 | [#21](https://github.com/tanzby/yet-another-anime-game-launcher/issues/21) SwiftUI 主界面 / 设置窗口重新设计 | 单元 |`PRG_002_*`（MainPresentationTests） |
 | PRG-003 | 事件与界面文案的对应关系 | 改写 | [#21](https://github.com/tanzby/yet-another-anime-game-launcher/issues/21) SwiftUI 主界面 / 设置窗口重新设计 | 单元 |`PRG_003_*`（MainPresentationTests、EventNotifierTests） |
 | PRG-004 | 字节数的可读格式 | 改写 | [#21](https://github.com/tanzby/yet-another-anime-game-launcher/issues/21) SwiftUI 主界面 / 设置窗口重新设计 | 单元 |`PRG_004_*`（MainPresentationTests） |
@@ -194,8 +194,8 @@
 | UPD-013 | 完成后重启 | 作废 | [#19](https://github.com/tanzby/yet-another-anime-game-launcher/issues/19) Sparkle 取代 TS updater | — |  |
 | UPD-014 | 更新失败时不回滚 | 作废 | [#19](https://github.com/tanzby/yet-another-anime-game-launcher/issues/19) Sparkle 取代 TS updater | — |  |
 | UPD-015 | 发布产物与命名约定 | 作废 | [#19](https://github.com/tanzby/yet-another-anime-game-launcher/issues/19) Sparkle 取代 TS updater | — |  |
-| UPD-016 | 代理不作用于启动器自身的网络请求 | 改写 | [#28](https://github.com/tanzby/yet-another-anime-game-launcher/issues/28) B17 | 单元 |  |
-| UPD-017 | Bundle 标识与 Info.plist | 改写 | [#28](https://github.com/tanzby/yet-another-anime-game-launcher/issues/28) A11 | 单元 |  |
+| UPD-016 | 代理不作用于启动器自身的网络请求 | 改写 | [#28](https://github.com/tanzby/yet-another-anime-game-launcher/issues/28) B17 | 单元 | `UPD_016_*`（AppSourceTests：只有 launch recipe 提到代理） |
+| UPD-017 | Bundle 标识与 Info.plist | 改写 | [#28](https://github.com/tanzby/yet-another-anime-game-launcher/issues/28) A11 | 单元 | `UPD_017_*`（ParityGapTests、AppSourceTests） |
 | UPD-018 | sidecar 的可执行权限 | 作废 | [#19](https://github.com/tanzby/yet-another-anime-game-launcher/issues/19) Sparkle 取代 TS updater | — |  |
 | UPG-001 | 更新资格 | 照搬 | TS 行为不变，但依 ADR 0002 在 Sophon/Launcher 重做 | 单元 | `UPG_001_*`（ClientStatusTests） |
 | UPG-002 | 3.6.0 及以上版本的音频目录迁移 | 作废 | [#26](https://github.com/tanzby/yet-another-anime-game-launcher/issues/26) D3 放弃音频迁移 | — |  |

@@ -137,8 +137,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
   func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { true }
 
   func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
-    guard let launcher = Self.launcher, launcher.phase != .idle else { return .terminateNow }
-    if launcher.phase == .running {
+    guard let launcher = Self.launcher, launcher.quitPlan != .quitNow else { return .terminateNow }
+    if launcher.quitPlan == .confirmThenShutDown {
       let alert = NSAlert()
       alert.messageText = String(localized: "The game is still running")
       alert.informativeText = String(localized: "Quitting Yaagl will close the game.")

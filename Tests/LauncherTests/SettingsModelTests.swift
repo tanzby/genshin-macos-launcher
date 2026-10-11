@@ -203,3 +203,61 @@ private func freshDefaults() -> UserDefaults {
     #expect(options == LaunchOptions(gameDirectory: URL(filePath: "/Games/GI")))
   }
 }
+
+// Settings that are saved the moment they change, a language that follows the system and switches that no longer
+// exist (docs/parity/hk4e-cn.md, CFG-007, CFG-016, CFG-017, CFG-019).
+@MainActor @Suite struct SettingsBehaviourTests {
+  private func everythingOn(_ settings: SettingsModel) {
+    settings.gameDirectory = URL(filePath: "/Volumes/Games/Genshin")
+    settings.retina = true
+    settings.metalHUD = true
+    settings.leftCommandIsControl = true
+    settings.hdr = true
+    settings.metalFX = true
+    settings.customResolutionEnabled = true
+    settings.setResolution(width: 2560, height: 1440)
+    settings.setProxyHost("127.0.0.1:7890")
+    settings.proxyEnabled = true
+  }
+
+  // CFG-007: the TS settings page saved nothing when it was closed. Native has no save step at all: each change
+  // is in the user defaults before the window could be closed, and closing a window cannot undo it.
+  @Test func CFG_007_everyChangeIsInTheUserDefaultsTheMomentItIsMade() {
+    let defaults = freshDefaults()
+    let settings = SettingsModel(defaults: defaults)
+
+    settings.retina = true
+    #expect(defaults.bool(forKey: "retina"))
+    settings.hdr = true
+    #expect(defaults.bool(forKey: "hdr"))
+    settings.setProxyHost("127.0.0.1:7890")
+    #expect(defaults.string(forKey: "proxyHost") == "127.0.0.1:7890")
+    settings.gameDirectory = URL(filePath: "/Games/GI")
+    #expect(defaults.string(forKey: "gameDirectory") == "/Games/GI")
+  }
+
+  /// The keys this app itself wrote into a private defaults domain.
+  private func storedKeys(afterEverythingOn body: (SettingsModel) -> Void) -> Set<String> {
+    let suite = "yaagl-tests-\(UUID().uuidString)"
+    let defaults = UserDefaults(suiteName: suite)!
+    defer { defaults.removePersistentDomain(forName: suite) }
+    body(SettingsModel(defaults: defaults))
+    return Set(defaults.persistentDomain(forName: suite)?.keys.map { $0 } ?? [])
+  }
+
+  // CFG-016 / CFG-017: the interface language is the system's (#28 A10). No language is stored, so there is
+  // nothing for a first run to pin and nothing a later system change could disagree with.
+  @Test func CFG_016_CFG_017_noLanguageIsEverStored() {
+    let keys = storedKeys(afterEverythingOn: everythingOn)
+
+    #expect(!keys.isEmpty)
+    #expect(keys.allSatisfy { key in !["locale", "language", "lang"].contains { key.lowercased().contains($0) } })
+  }
+
+  // CFG-019: FPS unlock did nothing in the TS launcher and is deleted; the cap is fixed (LCH-033).
+  @Test func CFG_019_noFpsSettingExists() {
+    let keys = storedKeys(afterEverythingOn: everythingOn)
+
+    #expect(keys.allSatisfy { !$0.lowercased().contains("fps") })
+  }
+}

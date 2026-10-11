@@ -507,6 +507,8 @@ def evaluate(a, data, work, m, mid, verdict_line, reg_before, hosts_before, left
     wine_dir = data.wine / "lib/wine/x86_64-unix"
     check("LCH-024", (wine_dir / "wine-host").exists() and (wine_dir / "wine").exists(), "loader shim installed beside wine-host")
     check("LCH-026", "gamehost: installed in pid" in hostlog, "game host dylib loaded in the game", "")
+    ok, detail = hostname_probe(work / "Contents/Helpers/yaagl-gamehost.dylib", CACHE / "probe")
+    check("LCH-031", ok, "own host name resolves locally, other names untouched", detail)
     check("LCH-022", "isIdentifiedGame=1" in hostlog, "Game Mode: game identified by gamepolicyd")
     game = mid.get("game_sample")
     split = [p for p in mid.get("procs", []) if "YaaglGame.app" in p["comm"]]
@@ -569,6 +571,65 @@ def evaluate(a, data, work, m, mid, verdict_line, reg_before, hosts_before, left
     sys.exit(1 if failed else 0)
 
 
+HOSTNAME_PROBE = r"""
+#include <arpa/inet.h>
+#include <netdb.h>
+#include <stdio.h>
+#include <sys/socket.h>
+#include <unistd.h>
+int main(int argc, char **argv) {
+  char own[256];
+  if (gethostname(own, sizeof own)) return 2;
+  struct addrinfo hints = {0}, *res;
+  hints.ai_family = AF_INET;
+  int err = getaddrinfo(argc > 1 ? argv[1] : own, NULL, &hints, &res);
+  if (err) { printf("error %s\n", gai_strerror(err)); return 1; }
+  char buf[64];
+  inet_ntop(AF_INET, &((struct sockaddr_in *)res->ai_addr)->sin_addr, buf, sizeof buf);
+  printf("%s\n", buf);
+  return 0;
+}
+"""
+
+
+def hostname_probe(dylib, work):
+    """LCH-031: with the game host dylib injected, this Mac's own host name resolves at once to a local address
+    (no mDNS), in every spelling the game may use, and every other name still goes to the real resolver.
+    Returns (ok, detail); ok is None when the probe cannot be built or run here."""
+    work.mkdir(parents=True, exist_ok=True)
+    src, exe, log = work / "probe.c", work / "probe", work / "probe.log"
+    src.write_text(HOSTNAME_PROBE)
+    built = run(["clang", "-arch", "x86_64", "-o", str(exe), str(src)])
+    if built.returncode:
+        return None, "cannot build the x86_64 probe: " + built.stderr.strip()[:120]
+    own = os.uname().nodename
+    # The host also answers to its name without ".local", but only when the host name has that suffix.
+    spellings = {own, own.upper()} | ({own[:-6]} if own.lower().endswith(".local") else set())
+    env = {**os.environ, "DYLD_INSERT_LIBRARIES": str(dylib), "YAAGL_GAMEHOST_LOG": str(log)}
+
+    def resolve(name):
+        out = run([str(exe), name], env=env, timeout=60)  # Rosetta runs it; `arch` would drop DYLD_INSERT_LIBRARIES
+        return out.stdout.strip()
+
+    for name in spellings:
+        log.write_text("")
+        got = resolve(name)
+        answered = re.findall(r"answered own host name (\S+) with (\S+) ", log.read_text())
+        if not answered or answered[0][1] != got or not re.fullmatch(r"\d+\.\d+\.\d+\.\d+", got):
+            return False, f"{name!r} resolved to {got!r}, log {answered}"
+    log.write_text("")
+    other = resolve("localhost")
+    if "answered own host name" in log.read_text() or other != "127.0.0.1":
+        return False, f"localhost went to {other!r} or was intercepted"
+    return True, f"{own} -> local address without the resolver; localhost untouched"
+
+
+def cmd_probe(a):
+    dylib = Path(a.app) / "Contents/Helpers/yaagl-gamehost.dylib"
+    ok, detail = hostname_probe(dylib, CACHE / "probe")
+    check("LCH-031", ok, "own host name resolves locally, other names untouched", detail)
+    sys.exit(0 if ok else 1)
+
 def verdict_of(out):
     m = re.search(r"verdict=(\w+)", out)
     return m.group(1) if m else out
@@ -605,6 +666,9 @@ def main():
     r.add_argument("--autoplay", action="store_true", help="enter the world with the dev companion (main-interface verdict)")
     r.add_argument("--screen-check", action="store_true", help="compare the screen with the game picture (needs Screen Recording)")
     r.set_defaults(fn=cmd_run)
+    pr = sub.add_parser("probe", help="LCH-031 only: resolve this Mac's host name through the game host dylib")
+    pr.add_argument("--app", required=True, help="path to the built Yaagl.app")
+    pr.set_defaults(fn=cmd_probe)
     for name, fn in (("ps", cmd_ps), ("kill", cmd_kill)):
         p = sub.add_parser(name)
         p.add_argument("--data-dir", default=str(DEFAULT_DATA))
