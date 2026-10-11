@@ -12,7 +12,7 @@
 
 - `third_party/dxmt` 是 `3Shain/dxmt` 的 git submodule，固定在一个提交（当前 `e94c312`，上游 main，含 `fb45156`）。升级 = 更新 submodule 指针 + 真机验证。
 - `scripts/build-dxmt` 构建出 `build/dxmt/`（`x86_64-windows` 的四个 DLL、`x86_64-unix/winemetal.so`、`VERSION`、许可证文本）。配方照搬上游 CI 的 `build-gcc-release-x86_64-windows-cross` 任务：mingw-w64 交叉编译、LLVM 15.0.7（x86_64 macOS，静态链接进 `winemetal.so`）、Wine `v8.16-3shain` 的头文件树（按 SHA-256 固定）、meson 1.10.0、Xcode 16.1（上游产出可用二进制的那套工具链）。不构建 arm64ec、i386、nvapi、nvngx：App 不安装它们。
-- CI：`.github/workflows/dxmt.yaml` 在 `macos-15` 上构建并上传 artifact `dxmt`；PR 和 main 上改动 submodule、脚本或工作流时运行；每周一次定时运行，让缓存里的 LLVM 不过期（Actions 的缓存 7 天未用即被清；冷构建 LLVM 约 20 分钟，热缓存约 4 分钟）。`release.yaml` 调用它，下载 artifact 到 `build/dxmt`，`project.yml` 把它放进 `Yaagl.app/Contents/Resources/dxmt`，`scripts/dev/check-bundle` 在发布构建里强制检查。每个 PR 的 `swift` 检查不构建 DXMT，保持快。
+- CI：`.github/workflows/dxmt.yaml` 在 `macos-15` 上构建并上传 artifact `dxmt`；PR 和 main 上改动 submodule、脚本或工作流时运行；每周一次定时运行，让缓存不过期（Actions 的缓存 7 天未用即被清）。有两层缓存：构建产物 `build/dxmt` 以 DXMT 提交 + `scripts/build-dxmt` 的哈希 + Xcode 版本为 key，只有换 DXMT 版本或工具链才重新编译，命中时跳过工具链和编译；LLVM 另有一份缓存，换 DXMT 版本时不用重编 LLVM。耗时：都没缓存约 25 分钟，只有 LLVM 缓存约 4 分钟，产物缓存命中约 1 分钟。tag 触发的 release 只能读 main 的缓存，所以 main 上必须先构建过同一个 key。`release.yaml` 调用它，下载 artifact 到 `build/dxmt`，`project.yml` 把它放进 `Yaagl.app/Contents/Resources/dxmt`，`scripts/dev/check-bundle` 在发布构建里强制检查。每个 PR 的 `swift` 检查不构建 DXMT，保持快。
 - `Wine` 模块：`WineRuntime` 由组合根注入 `DXMTBundle`（目录 + `VERSION`），`Wine` 不读 `Bundle.main`。安装 Wine 时从 bundle 拷贝 DXMT，不再下载（删掉 zip、sha256、体积、解压、`downloadingDXMT` 进度）。bundle 缺失或不完整在删除任何东西之前抛 `dxmtBundleInvalid`。
 - DXMT 现在随 App 更新而变。版本戳里的 DXMT 版本与 App 内的不同、Wine 版本相同时，状态是 `dxmtOutdated`，`ensureInstalled` 只重新拷贝几个文件并改写版本戳，不重装 2 GB 的 Wine，也不动 prefix。App 内没有 DXMT 的构建（开发构建）不比较 DXMT 版本。
 
