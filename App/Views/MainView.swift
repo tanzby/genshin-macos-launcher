@@ -7,6 +7,8 @@ struct MainView: View {
   @Environment(MainController.self) private var controller
   @Environment(ProgressMeter.self) private var meter
   let notifier: EventNotifier
+  /// `--autolaunch` drives the launcher itself (APP-020); the window must not start Wine preparation in parallel.
+  let drivenByAutoLaunch: Bool
   let backgroundProvider: @Sendable () async -> BackgroundImage
   @State private var background: BackgroundImage = .bundledDefault
 
@@ -21,7 +23,7 @@ struct MainView: View {
       OnboardingView()
         .interactiveDismissDisabled()
     }
-    .task { await controller.refresh() }
+    .task { if !drivenByAutoLaunch { await controller.refresh() } }
     .task { background = await backgroundProvider() }
     .task {
       for await event in controller.launcher.events { await notifier.handle(event) }
@@ -30,9 +32,11 @@ struct MainView: View {
       Task { await notifier.observe(status: status) }
     }
     .onChange(of: controller.launcher.progress) { _, progress in meter.update(progress) }
-    .onChange(of: controller.settings.gameDirectory) { _, _ in Task { await controller.refresh() } }
+    .onChange(of: controller.settings.gameDirectory) { _, _ in
+      if !drivenByAutoLaunch { Task { await controller.refresh() } }
+    }
     .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
-      Task { await controller.refreshWhenIdle() }
+      if !drivenByAutoLaunch { Task { await controller.refreshWhenIdle() } }
     }
   }
 }

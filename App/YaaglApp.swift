@@ -13,6 +13,7 @@ struct YaaglApp: App {
   private let client: GenshinCNClient
   private let notifier: EventNotifier
   private let dataDirectory = DataDirectory.defaultRoot
+  private let autoLaunch = AutoLaunchOptions.current
 
   // Sparkle refuses to start without an EdDSA public key, so builds made before
   // the key exists (SUPublicEDKey empty) leave the updater stopped. Debug builds
@@ -39,7 +40,9 @@ struct YaaglApp: App {
     let client = GenshinCNClient()
     let settings = SettingsModel()
     let onboarding = OnboardingModel(hosts: GenshinCN.hostsBlocklist(), settings: settings)
-    let launcher = LauncherModel(client: client, gameDirectory: settings.gameDirectory)
+    // A diagnostic run names its own game folder; it must not touch the one saved in the real preferences.
+    let launcher = LauncherModel(
+      client: client, gameDirectory: AutoLaunchOptions.current.enabled ? AutoLaunchOptions.current.gameDirectory : settings.gameDirectory)
     let controller = MainController(launcher: launcher, settings: settings, onboarding: onboarding)
     self.client = client
     _controller = State(initialValue: controller)
@@ -47,11 +50,24 @@ struct YaaglApp: App {
     AppDelegate.launcher = launcher
   }
 
+  /// `--autolaunch` (APP-020): drive one session without clicks, log to `<data>/logs/launcher.log`, quit.
+  private func runAutoLaunch() async {
+    guard autoLaunch.enabled else { return }
+    controller.onboarding.refresh()
+    let root = autoLaunch.dataRoot ?? DataDirectory.defaultRoot
+    await AutoLaunch.runIfRequested(
+      autoLaunch, model: controller.launcher, log: DiagLog(logsDirectory: DataDirectory(root: root).logs)
+    ) { NSApp.terminate(nil) }
+  }
+
   var body: some Scene {
     Window("Yaagl", id: "main") {
-      MainView(notifier: notifier, backgroundProvider: { await client.backgroundImage() })
+      MainView(
+        notifier: notifier, drivenByAutoLaunch: autoLaunch.enabled,
+        backgroundProvider: { await client.backgroundImage() })
         .environment(controller)
         .environment(meter)
+        .task { await runAutoLaunch() }
     }
     .windowStyle(.hiddenTitleBar)
     .windowResizability(.contentMinSize)

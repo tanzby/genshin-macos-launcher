@@ -89,7 +89,7 @@ protocol GameClient: Sendable {
 
 - **通知**：`JobCoordinator` 除了更新 `@Observable` 状态，还发出离散的 `JobEvent` 流（更新发布、可预下载、失败）。`@Observable` 会合并中间状态，不适合触发通知。通知代码只在 `YaaglApp`。
 - **ReShade**：删除（旧仓库 #28 A7）。不下载、不注入、不复制 DLL，`LaunchRecipe` 里没有对应项；「高级」设置页放什么由设置 UI 票决定，不再有解锁手势。
-- **yaagl-diag 与自动启动（TS 的 `YAAGL_AUTOLAUNCH`）**：本票只保证架构上有位置（`Launcher` 暴露可由命令行参数驱动的入口，日志写数据目录 `logs/`），具体方案留给 diag 适配票。
+- **yaagl-diag 与自动启动（TS 的 `YAAGL_AUTOLAUNCH`）**：本票只保证架构上有位置（`Launcher` 暴露可由命令行参数驱动的入口，日志写数据目录 `logs/`），具体方案见 `docs/genshin-macos.md` 的 Verification：`--autolaunch`、`--data-dir`、`--game-dir`（或对应环境变量），由 `Launcher` 的 `AutoLaunch` 驱动，日志是 `logs/launcher.log`。
 - **HTTP 重试与退避**：`Sophon` 与 `Platform` 各有一份，是十几行的值类型。为保持 `Sophon` 不依赖 `Platform`，接受这点重复。
 - **Wine 孤儿进程**：启动器被强杀后 Wine 会残留。`recover()` 在重放 journal 之前先 `wineserver -k` 并清理，避免游戏还在跑时还原游戏文件。
 
