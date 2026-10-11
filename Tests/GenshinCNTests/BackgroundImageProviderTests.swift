@@ -131,7 +131,42 @@ final class BackgroundStub: URLProtocol, @unchecked Sendable {
     _ = await provider(cache, session).backgroundImage()
     current.value = Self.otherURL
     _ = await provider(cache, session).backgroundImage()
-    #expect(try FileManager.default.contentsOfDirectory(atPath: cache.path).count == 1)
+    #expect(try FileManager.default.contentsOfDirectory(atPath: cache.path).count == 2)
+    current.value = Self.imageURL + "?v=3"
+    _ = await provider(cache, session).backgroundImage()
+    #expect(try FileManager.default.contentsOfDirectory(atPath: cache.path).count == 2)
+  }
+
+  @Test func APP_021_concurrentUpdatesNeverReturnADeletedFile() async throws {
+    let cache = makeCache()
+    defer { try? FileManager.default.removeItem(at: cache) }
+    let calls = LockedBox(0)
+    let (session, _) = BackgroundStub.session { url in
+      guard url.path.hasSuffix("getAllGameBasicInfo") else { return (200, Self.png) }
+      calls.value += 1  // old and new URL interleave, as when upstream rotates the image mid-launch
+      return (200, Self.info([(calls.value.isMultiple(of: 2) ? Self.imageURL : Self.otherURL, false)]))
+    }
+    let results = await withTaskGroup(of: BackgroundImage.self) { group in
+      for _ in 0..<8 { group.addTask { await provider(cache, session).backgroundImage() } }
+      return await group.reduce(into: []) { $0.append($1) }
+    }
+    for case .remote(let file) in results {
+      #expect(FileManager.default.fileExists(atPath: file.path))
+    }
+    #expect(results.count == 8)
+  }
+
+  @Test func APP_021_truncatedImageWithValidHeaderIsNotCached() async throws {
+    let cache = makeCache()
+    defer { try? FileManager.default.removeItem(at: cache) }
+    // PNG signature + IHDR intact, pixel data cut off.
+    let truncated = Self.png.prefix(40)
+    let (session, _) = BackgroundStub.session { url in
+      url.path.hasSuffix("getAllGameBasicInfo")
+        ? (200, Self.info([(Self.imageURL, false)])) : (200, Data(truncated))
+    }
+    #expect(await provider(cache, session).backgroundImage() == .bundledDefault)
+    #expect(((try? FileManager.default.contentsOfDirectory(atPath: cache.path)) ?? []).isEmpty)
   }
 
   @Test func APP_021_apiFailureWithoutCacheFallsBackToBundledDefault() async {

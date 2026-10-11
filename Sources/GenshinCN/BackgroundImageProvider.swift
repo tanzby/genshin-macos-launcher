@@ -30,7 +30,7 @@ public struct BackgroundImageProvider: Sendable {
       if fileManager.fileExists(atPath: cached.path) { return .remote(cached) }
       if let downloaded = try? await download(remote, to: cached) { return .remote(downloaded) }
     }
-    return cachedFiles().first.map { .remote(cacheDirectory.appending(path: $0.lastPathComponent)) }
+    return sortedNewestFirst(cachedFiles()).first.map { .remote(cacheDirectory.appending(path: $0.lastPathComponent)) }
       ?? .bundledDefault
   }
 
@@ -84,26 +84,48 @@ public struct BackgroundImageProvider: Sendable {
     return cacheDirectory.appending(path: ext.isEmpty ? name : "\(name).\(ext)")
   }
 
-  /// Writes only after the bytes decode as an image, then drops every older entry.
+  /// Writes only after a frame really decodes (a valid header over truncated pixels must not be cached).
   private func download(_ remote: URL, to destination: URL) async throws -> URL {
     var request = URLRequest(url: remote)
     request.timeoutInterval = Self.requestTimeout
     let (body, response) = try await session.data(for: request)
     guard (response as? HTTPURLResponse)?.statusCode == 200,
       let source = CGImageSourceCreateWithData(body as CFData, nil),
-      CGImageSourceGetCount(source) > 0
+      CGImageSourceGetCount(source) > 0,
+      CGImageSourceCreateImageAtIndex(source, 0, nil) != nil
     else { throw URLError(.cannotDecodeContentData) }
-    try fileManager.createDirectory(at: cacheDirectory, withIntermediateDirectories: true)
-    try body.write(to: destination, options: .atomic)
-    for stale in cachedFiles() where stale.lastPathComponent != destination.lastPathComponent {
-      try? fileManager.removeItem(at: stale)
+    Self.cacheLock.withLock {
+      try? fileManager.createDirectory(at: cacheDirectory, withIntermediateDirectories: true)
+      try? body.write(to: destination, options: .atomic)
+      prune(keeping: destination)
     }
+    guard fileManager.fileExists(atPath: destination.path) else { throw CocoaError(.fileWriteUnknown) }
     return destination
   }
 
-  /// The directory holds at most one image, so any entry is the newest.
+  /// Serializes the write-and-prune step across providers in this process.
+  private static let cacheLock = NSLock()
+
+  /// Keeps `current` and the one entry before it. A concurrent caller that just returned the previous
+  /// image still finds its file; only entries older than that go.
+  private func prune(keeping current: URL) {
+    let others = cachedFiles().filter { $0.lastPathComponent != current.lastPathComponent }
+    for stale in sortedNewestFirst(others).dropFirst() {
+      try? fileManager.removeItem(at: stale)
+    }
+  }
+
   private func cachedFiles() -> [URL] {
     (try? fileManager.contentsOfDirectory(
-      at: cacheDirectory, includingPropertiesForKeys: nil, options: .skipsHiddenFiles)) ?? []
+      at: cacheDirectory, includingPropertiesForKeys: [.contentModificationDateKey],
+      options: .skipsHiddenFiles)) ?? []
+  }
+
+  private func sortedNewestFirst(_ files: [URL]) -> [URL] {
+    func modified(_ url: URL) -> Date {
+      (try? url.resourceValues(forKeys: [.contentModificationDateKey]))?.contentModificationDate
+        ?? .distantPast
+    }
+    return files.sorted { modified($0) > modified($1) }
   }
 }
