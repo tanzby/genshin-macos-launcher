@@ -18,8 +18,7 @@ settings:
 packages:
   YaaglKit:
     path: .
-  # Exact, because Package.resolved only pins SwiftPM's dependencies (scripts/dev/keep-package-resolved, #87).
-  # Bump it together with sparkle_version in scripts/dev/sparkle-local-check.
+  # Exact, not in Package.resolved (#87). Bump it together with sparkle_version in scripts/dev/sparkle-local-check.
   Sparkle:
     url: https://github.com/sparkle-project/Sparkle
     exactVersion: 2.10.0

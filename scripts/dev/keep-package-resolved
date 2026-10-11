@@ -1,16 +1,12 @@
 #!/bin/sh
-# Runs a command (xcodebuild) and puts Package.resolved back as it was, even when the command fails.
-#
-# Package.resolved belongs to SwiftPM: it pins what Package.swift needs (swift-protobuf), and `swift test` rewrites it
-# to exactly that. Xcode resolves the generated project, which also depends on Sparkle (project.yml), and writes its
-# pin into the same file, so every build would leave the checkout dirty (#87). Sparkle is pinned with exactVersion in
-# project.yml instead, so dropping Xcode's copy of the pin changes nothing.
+# Runs a command (xcodebuild) and restores Package.resolved afterwards, even when it fails. Xcode adds a Sparkle pin
+# to the file that `swift test` would drop again; Sparkle is pinned by exactVersion in project.yml instead (#87).
 set -eu
-cd "$(dirname "$0")/../.."
+resolved=$(dirname "$0")/../../Package.resolved
 backup=$(mktemp)
-cp Package.resolved "$backup"
+cp "$resolved" "$backup"
 status=0
 "$@" || status=$?
-cp "$backup" Package.resolved
+cp "$backup" "$resolved"
 rm -f "$backup"
 exit "$status"

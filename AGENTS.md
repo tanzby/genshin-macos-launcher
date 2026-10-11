@@ -25,7 +25,7 @@ git fetch origin && git worktree add .claude/worktrees/<name> -b <branch> origin
 
 - `scripts/dev/macos-check` runs `swift test`, then `xcodegen generate` and `xcodebuild`. It is the CI `swift` job and the lefthook pre-push hook (`brew install xcodegen lefthook && lefthook install`).
 - `swift test` on its own for the library targets.
-- `Package.resolved` holds SwiftPM's pins only (swift-protobuf); Sparkle is pinned by `exactVersion` in `project.yml`. Run `xcodebuild` through `scripts/dev/keep-package-resolved`, which undoes Xcode's rewrite of the file (#87).
+- `Package.resolved` holds SwiftPM's pins only (swift-protobuf); Sparkle is pinned by `exactVersion` in `project.yml`. Run `xcodebuild` through `scripts/dev/keep-package-resolved`, which undoes Xcode's rewrite of the file (#87); a build in the Xcode GUI still rewrites it, so `git restore Package.resolved` before committing.
 - `Helpers/build.sh [--dev]` builds the x86_64 helpers by hand; normally XcodeGen builds them.
 - `scripts/build-dxmt` builds DXMT (submodule `third_party/dxmt`) into `build/dxmt`, which XcodeGen puts into the app (ADR 0003). Needs `brew install meson cmake ninja mingw-w64`; the first run builds LLVM (about 2 min locally). CI: `.github/workflows/dxmt.yaml`. Without it the app builds but cannot install Wine. After the first run delete the built `Yaagl.app` once, so Xcode signs it with DXMT inside.
 
