@@ -127,6 +127,10 @@ public struct WineLayout: Sendable, Equatable {
   public var wineBootLog: URL { root.appending(path: "wineboot.log", directoryHint: .notDirectory) }
   public var wineCfgLog: URL { root.appending(path: "winecfg.log", directoryHint: .notDirectory) }
 
+  static let wineDebug = "fixme-all,err-unwind,+timestamp"
+  /// What every Wine process gets: the prefix and the debug channels (WIN-016).
+  var wineEnvironment: [String: String] { ["WINEPREFIX": prefixDirectory.path, "WINEDEBUG": Self.wineDebug] }
+
   /// `bin/wine64` when present, else `bin/wine` (WIN-016).
   public var loader: URL {
     let wine64 = runtimeDirectory.appending(path: "bin/wine64", directoryHint: .notDirectory)

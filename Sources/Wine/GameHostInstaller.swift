@@ -62,7 +62,6 @@ struct GameHostInstaller {
     let wine = layout.unixWine
     let host = layout.unixWineHost
     let wineIsShim = fileManager.fileExists(atPath: wine.path) && fileManager.contentsEqual(atPath: wine.path, andPath: helpers.shim.path)
-    let needsShim = !wineIsShim || !fileManager.fileExists(atPath: wine.path)
     if !fileManager.fileExists(atPath: host.path) {
       guard fileManager.fileExists(atPath: wine.path), !wineIsShim else { throw GameHostError.hostMissing }
       // Stage the shim before the real loader is touched: a failed copy then leaves Wine fully intact.
@@ -75,7 +74,7 @@ struct GameHostInstaller {
         try? fileManager.removeItem(at: staged)
         throw error
       }
-    } else if needsShim {
+    } else if !wineIsShim {
       try replace(helpers.shim, with: wine)
     }
 

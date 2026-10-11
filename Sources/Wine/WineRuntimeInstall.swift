@@ -38,15 +38,12 @@ extension WineRuntime {
 
   func performInstall(progress: @escaping @Sendable (WineInstallProgress) -> Void) async throws {
     let fileManager = FileManager.default
-    // Scratch directories of installs that were killed mid-way.
+    // Scratch directories that older builds created and could leave behind when killed mid-way.
     if let stale = try? fileManager.contentsOfDirectory(atPath: layout.root.path) {
       for name in stale where name.hasPrefix(".install-") {
         try? fileManager.removeItem(at: layout.root.appending(path: name))
       }
     }
-    let scratch = layout.root.appending(path: ".install-\(UUID().uuidString)", directoryHint: .isDirectory)
-    try fileManager.createDirectory(at: scratch, withIntermediateDirectories: true)
-    defer { try? fileManager.removeItem(at: scratch) }
 
     // The archive sits at a stable path with a name derived from the checksum: an interrupted download resumes
     // there on the next attempt (WIN-007).
@@ -132,14 +129,16 @@ extension WineRuntime {
   }
 
   /// The files to install, checked up front so a broken app fails before anything is deleted.
-  private func bundledDXMTFiles() throws -> DXMTFiles {
+  private func bundledDXMTFiles() throws -> DXMTBundle {
     guard let dxmt else { throw WineInstallError.dxmtBundleInvalid }
     let fileManager = FileManager.default
-    let files = DXMTFiles(windows: dxmt.windowsDirectory, unix: dxmt.unixDirectory)
-    guard WineLayout.dxmtWindowsFiles.allSatisfy({ fileManager.fileExists(atPath: files.windows.appending(path: $0).path) }),
-      fileManager.fileExists(atPath: files.unix.appending(path: "winemetal.so").path)
+    guard
+      WineLayout.dxmtWindowsFiles.allSatisfy({
+        fileManager.fileExists(atPath: dxmt.windowsDirectory.appending(path: $0).path)
+      }),
+      fileManager.fileExists(atPath: dxmt.unixDirectory.appending(path: "winemetal.so").path)
     else { throw WineInstallError.dxmtBundleInvalid }
-    return files
+    return dxmt
   }
 
   /// A newer DXMT arrived with an app update: replace its files and the stamp, keep Wine and the prefix.
@@ -160,31 +159,30 @@ extension WineRuntime {
   }
 
   private func initializePrefix() async throws {
-    let environment = ["WINEPREFIX": layout.prefixDirectory.path, "WINEDEBUG": "fixme-all,err-unwind,+timestamp"]
     let steps: [(arguments: [String], log: URL)] = [
       (["wineboot", "-u"], layout.wineBootLog),
       (["winecfg", "-v", "win10"], layout.wineCfgLog),
     ]
     for step in steps {
       let result = try await runner.run(
-        layout.loader, arguments: step.arguments, environment: environment, workingDirectory: layout.root)
+        layout.loader, arguments: step.arguments, environment: layout.wineEnvironment, workingDirectory: layout.root)
       try? result.output.write(to: step.log, atomically: true, encoding: .utf8)
       // TS reported wineboot.log for either failure (WIN-012 edge case); each step reports its own log here.
       guard result.exitCode == 0 else { throw WineInstallError.prefixInitializationFailed(logURL: step.log) }
     }
   }
 
-  private func installDXMT(from files: DXMTFiles) throws {
+  private func installDXMT(from files: DXMTBundle) throws {
     let fileManager = FileManager.default
     try fileManager.createDirectory(at: layout.windowsLibraryDirectory, withIntermediateDirectories: true)
     try fileManager.createDirectory(at: layout.unixLibraryDirectory, withIntermediateDirectories: true)
     try fileManager.createDirectory(at: layout.prefixSystem32, withIntermediateDirectories: true)
     for name in WineLayout.dxmtWindowsFiles {
-      try replace(files.windows.appending(path: name), with: layout.windowsLibraryDirectory.appending(path: name))
+      try replace(files.windowsDirectory.appending(path: name), with: layout.windowsLibraryDirectory.appending(path: name))
     }
-    try replace(files.unix.appending(path: "winemetal.so"), with: layout.unixLibraryDirectory.appending(path: "winemetal.so"))
+    try replace(files.unixDirectory.appending(path: "winemetal.so"), with: layout.unixLibraryDirectory.appending(path: "winemetal.so"))
     try replace(
-      files.windows.appending(path: "winemetal.dll"), with: layout.prefixSystem32.appending(path: "winemetal.dll"))
+      files.windowsDirectory.appending(path: "winemetal.dll"), with: layout.prefixSystem32.appending(path: "winemetal.dll"))
   }
 
   private func replace(_ source: URL, with destination: URL) throws {
@@ -211,9 +209,4 @@ extension WineRuntime {
       try FileManager.default.removeItem(at: url)
     }
   }
-}
-
-struct DXMTFiles {
-  var windows: URL
-  var unix: URL
 }
