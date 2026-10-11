@@ -1,0 +1,520 @@
+#!/usr/bin/env python3
+"""Black-box real-machine diagnostics for the native Yaagl app. Text output only.
+
+`run` drives one built Yaagl.app with `--autolaunch` against an isolated data
+directory (never ~/Library/Application Support/Yaagl), watches Wine processes,
+windows, logs/launcher.log and logs/gamehost.log, and prints one line per
+check: `CHECK <rule> <PASS|FAIL|SKIP> <name> <detail>`, then
+`DIAG verdict=PASS|FAIL`. Rule IDs are those of docs/parity/hk4e-cn.md.
+
+Steps only the maintainer can do print `WAITING maintainer: <what>` (the
+caller turns that into a notification): hosts-password, game-login,
+notification-permission. The script itself never types a password or account.
+
+See docs/genshin-macos.md (Verification).
+"""
+
+import argparse
+import os
+import re
+import shutil
+import signal
+import subprocess
+import sys
+import time
+from pathlib import Path
+
+HERE = Path(__file__).resolve().parent
+REPO = HERE.parents[1]
+CACHE = Path.home() / "Library/Caches/yaagl-diag"
+DEFAULT_DATA = CACHE / "data"
+GAME_EXES = ("YuanShen.exe", "GenshinImpact.exe")
+BUNDLE_ID = "io.github.tanzby.yaagl"
+GAME_HOST_ID = "io.github.tanzby.yaagl.game"
+HOSTS = Path("/etc/hosts")
+T0 = time.monotonic()
+
+# Entries the first launch must delete (ADR 0001) and must keep.
+SEED_RESIDUE = [".storage/state", "aria2.session", "resources.neu", "YuanShen_d3d11.log"]
+SEED_KEPT = ["wine-gptk4/keep", "logs/keep.txt"]
+
+RESULTS = []
+
+
+def say(msg):
+    print(f"[{time.monotonic() - T0:6.1f}s] {msg}", flush=True)
+
+
+def run(args, **kw):
+    return subprocess.run(args, capture_output=True, text=True, **kw)
+
+
+def check(rule, ok, name, detail=""):
+    """ok: True / False / None (skipped)."""
+    state = "SKIP" if ok is None else "PASS" if ok else "FAIL"
+    RESULTS.append((rule, state, name))
+    print(f"CHECK {rule} {state} {name} {detail}".rstrip(), flush=True)
+
+
+def kv(line):
+    return dict(re.findall(r"(\w+)=(\S+)", line))
+
+
+class Data:
+    def __init__(self, root):
+        self.root = Path(root)
+        self.prefix = self.root / "wineprefix"
+        self.wine = self.root / "wine"
+        self.logs = self.root / "logs"
+        self.launcher_log = self.logs / "launcher.log"
+        self.gamehost_log = self.logs / "gamehost.log"
+
+    def read(self, path):
+        try:
+            return Path(path).read_text(errors="replace")
+        except OSError:
+            return ""
+
+
+# --- Wine processes -------------------------------------------------------
+
+def server_dir_name(prefix):
+    st = os.stat(prefix)
+    return f"server-{st.st_dev:x}-{st.st_ino:x}"
+
+
+def cwd_prefixes(pids, prefix):
+    """WINEPREFIX of each process, from its cwd (Wine rewrites its env block)."""
+    if not pids:
+        return {}
+    out = run(["lsof", "-a", "-d", "cwd", "-Fpn", "-p", ",".join(map(str, pids))]).stdout
+    cwds, pid = {}, None
+    for line in out.splitlines():
+        if line[:1] == "p":
+            pid = int(line[1:])
+        elif line[:1] == "n" and pid is not None:
+            cwds[pid] = line[1:]
+    server = None
+    try:
+        server = server_dir_name(prefix)
+    except OSError:
+        pass
+    result = {}
+    for pid, cwd in cwds.items():
+        if "/drive_c" in cwd:
+            result[pid] = cwd.split("/drive_c")[0]
+        elif server and os.path.basename(cwd) == server:
+            result[pid] = str(prefix)
+        else:
+            result[pid] = "?"
+    return result
+
+
+def wine_procs(prefix):
+    """Wine-related processes: [{pid, ppid, comm, cmd, prefix}]."""
+    comms = {}
+    for line in run(["ps", "-axo", "pid=,comm="]).stdout.splitlines():
+        pid, _, comm = line.strip().partition(" ")
+        comms[int(pid)] = comm
+    procs = []
+    for line in run(["ps", "-axww", "-o", "pid=,ppid=,command="]).stdout.splitlines():
+        m = re.match(r"\s*(\d+)\s+(\d+)\s+(.*)", line)
+        if not m:
+            continue
+        pid, ppid, cmd = int(m.group(1)), int(m.group(2)), m.group(3)
+        comm = comms.get(pid, "")
+        base = os.path.basename(comm)
+        if cmd.startswith(("C:\\", "Z:\\")) or base in ("wineserver", "wine", "wine64", "wine-preloader", "wine-host"):
+            procs.append(dict(pid=pid, ppid=ppid, comm=comm, cmd=cmd))
+    prefixes = cwd_prefixes([p["pid"] for p in procs], prefix)
+    live = any(prefixes.get(p["pid"]) == str(prefix) and "wineserver" in p["comm"] for p in procs)
+    for p in procs:
+        p["prefix"] = prefixes.get(p["pid"], "?")
+        if p["prefix"] == "?" and live and p["cmd"].startswith(("C:\\", "Z:\\")):
+            p["prefix"] = str(prefix)
+    return procs
+
+
+def exe_name(p):
+    if "wineserver" in p["comm"]:
+        return "wineserver"
+    return re.split(r"[\\/]", p["cmd"].split(".exe")[0])[-1] + ".exe"
+
+
+def is_game(p):
+    return exe_name(p) in GAME_EXES
+
+
+def window_probe(pids):
+    exe = CACHE / "window-info"
+    src = HERE / "window-info.swift"
+    if not exe.exists() or exe.stat().st_mtime < src.stat().st_mtime:
+        CACHE.mkdir(parents=True, exist_ok=True)
+        r = run(["swiftc", "-O", "-o", str(exe), str(src)])
+        if r.returncode:
+            sys.exit(f"swiftc failed: {r.stderr}")
+    return run([str(exe), *map(str, pids)]).stdout.splitlines()
+
+
+def snapshot(data):
+    procs = [p for p in wine_procs(data.prefix) if p["prefix"] == str(data.prefix)]
+    lines = window_probe([p["pid"] for p in procs]) if procs else []
+    wins = [l for l in lines if l.startswith("window")]
+    front = next((l[6:] for l in lines if l.startswith("front ")), "-")
+    front_wine = any(f"pid={p['pid']} " in front + " " for p in procs)
+    spaces = [re.search(r"type=(\S+)", l).group(1) for l in lines if l.startswith("space")]
+    game = [p for p in procs if is_game(p)]
+    return {
+        "procs": procs,
+        "game": game[0] if game else None,
+        "windows": len(wins),
+        "fullscreen_space": "4" in spaces and front_wine,
+    }
+
+
+def kill_prefix(data):
+    server = data.wine / "bin/wineserver"
+    if server.exists():
+        run([str(server), "-k"], env={**os.environ, "WINEPREFIX": str(data.prefix)}, timeout=15)
+    for sig in (signal.SIGTERM, signal.SIGKILL):
+        left = [p for p in wine_procs(data.prefix) if p["prefix"] == str(data.prefix)]
+        if not left:
+            return 0
+        for p in left:
+            try:
+                os.kill(p["pid"], sig)
+            except ProcessLookupError:
+                pass
+        time.sleep(1)
+    return len([p for p in wine_procs(data.prefix) if p["prefix"] == str(data.prefix)])
+
+
+def app_pids(app):
+    return [int(x) for x in run(["pgrep", "-f", f"{app}/Contents/MacOS/"]).stdout.split()]
+
+
+def stray_wine():
+    """Any Wine process on the machine, in any prefix: another run (or worktree) owns the game."""
+    return [p for p in wine_procs(Path("/nonexistent")) if p["prefix"] != "?" or "wineserver" in p["comm"]]
+
+
+# --- registry -------------------------------------------------------------
+
+def reg_values(data, names):
+    """Raw `"name"=value` lines of user.reg for the given value names."""
+    text = data.read(data.prefix / "user.reg")
+    found = {}
+    for n in names:
+        m = re.search(rf'^"{re.escape(n)}"=(.*)$', text, re.M)
+        found[n] = m.group(1) if m else None
+    return found
+
+
+MAC_DRIVER = ["RetinaMode", "LeftCommandIsCtrl"]
+HDR = "WINDOWS_HDR_ON_h3132281285"
+RESOLUTION = ["Screenmanager Is Fullscreen mode_h3981298716", "Screenmanager Resolution Width_h182942802",
+              "Screenmanager Resolution Height_h2627697771"]
+
+
+class ScreenCheck:
+    """Follows gamehost-dev's screen mode: on each saved drawable ("shot: <dir>/<step>.png WxH ok")
+    captures the display (`screencapture -D`, needs Screen Recording for the calling terminal) and compares."""
+
+    def __init__(self, data, a):
+        exe = CACHE / "screen-compare"
+        src = HERE / "screen-compare.swift"
+        if not exe.exists() or exe.stat().st_mtime < src.stat().st_mtime:
+            CACHE.mkdir(parents=True, exist_ok=True)
+            r = run(["swiftc", "-O", "-o", str(exe), str(src)])
+            if r.returncode:
+                sys.exit(f"swiftc failed: {r.stderr}")
+        self.exe, self.seen, self.step, self.results = str(exe), 0, {}, []
+
+    def poll(self, hostlog):
+        lines = hostlog.splitlines()
+        for l in lines[self.seen:]:
+            if l.startswith("screen: step="):
+                self.step = kv(l)
+            m = re.match(r"shot: (\S+)\.png \d+x\d+ ok", l)
+            if m and self.step:
+                screen = f"{m.group(1)}-screen.png"
+                run(["screencapture", "-x", "-D", self.step["display"], screen])
+                out = run([self.exe, f"{m.group(1)}.png", screen, self.step["strip"]]).stdout.strip()
+                self.results.append((Path(m.group(1)).name, out))
+        self.seen = len(lines)
+
+
+# --- the run --------------------------------------------------------------
+
+def prepare_app(a):
+    """Copy the built app and add the development companion (screen/autoplay modes) next to the game host."""
+    work = CACHE / "app" / "Yaagl.app"
+    if work.exists():
+        shutil.rmtree(work)
+    work.parent.mkdir(parents=True, exist_ok=True)
+    run(["ditto", str(a.app), str(work)], check=True)
+    if a.screen_check or a.autoplay:
+        r = run(["sh", str(REPO / "Helpers/build.sh"), "--dev", str(work / "Contents/Helpers")])
+        if r.returncode:
+            sys.exit(f"building dev helpers failed: {r.stderr}")
+    run(["codesign", "-f", "-s", "-", "--deep", str(work)])
+    return work
+
+
+def seed(data):
+    """TS-launcher leftovers in a directory without the native marker (APP-002)."""
+    data.root.mkdir(parents=True, exist_ok=True)
+    for rel in SEED_RESIDUE + SEED_KEPT:
+        path = data.root / rel
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("seed")
+
+
+def launch(app, data, a):
+    env = ["YAAGL_AUTOLAUNCH=1", f"YAAGL_DATA_DIR={data.root}"]
+    if a.game_dir:
+        env.append(f"YAAGL_GAME_DIR={a.game_dir}")
+    shots = None
+    if a.screen_check or a.autoplay:
+        shots = CACHE / "shots" / str(int(time.time()))
+        shots.mkdir(parents=True, exist_ok=True)
+        env += [f"YAAGL_GAMEHOST_SHOT_DIR={shots}"]
+        env += ["YAAGL_GAMEHOST_DEV=screen"] if a.screen_check else ["YAAGL_GAMEHOST_DEV=autoplay", "YAAGL_GAMEHOST_TURN=3"]
+    args = ["open", "-n", *[x for e in env for x in ("--env", e)], str(app), "--args", "--autolaunch"]
+    r = run(args)
+    if r.returncode:
+        sys.exit(f"open failed: {r.stderr}")
+
+
+def cmd_run(a):
+    data = Data(a.data_dir)
+    app = Path(a.app).resolve()
+    if not (app / "Contents/MacOS").is_dir():
+        sys.exit(f"--app is not a built Yaagl.app: {app}")
+    if data.root.resolve() == (Path.home() / "Library/Application Support/Yaagl").resolve():
+        sys.exit("refusing to use the real data directory; pass an isolated --data-dir")
+    if stray_wine():
+        sys.exit("a Wine process is already running (another worktree may be playing); stop it first")
+    if app_pids(app):
+        sys.exit("this Yaagl.app is already running")
+    if a.fresh and data.root.exists():
+        shutil.rmtree(data.root)
+    first_run = not (data.root / ".yaagl-native").exists()
+    if first_run:
+        seed(data)
+    work = prepare_app(a)
+    reg_before = reg_values(data, [HDR] + RESOLUTION)
+    hosts_before = HOSTS.read_text(errors="replace") if HOSTS.exists() else ""
+    launch(work, data, a)
+    say(f"launched {work} data={data.root}")
+
+    m = {}  # milestone name -> seconds
+    waiting = set()
+    closed_at = exited_at = None
+    window_at = None
+    deadline = T0 + a.timeout
+    mid = {}  # facts sampled while the game runs
+    verdict_line = None
+    screen = ScreenCheck(data, a) if a.screen_check else None
+    screen_results = screen.results if screen else []
+    try:
+        while time.monotonic() < deadline:
+            now = time.monotonic() - T0
+            log = data.read(data.launcher_log)
+            hostlog = data.read(data.gamehost_log)
+            s = snapshot(data) if data.prefix.exists() else {"procs": [], "game": None, "windows": 0, "fullscreen_space": False}
+            if screen:
+                screen.poll(hostlog)
+            if "phase=preparingWine" in log:
+                m.setdefault("wine_prepare", now)
+            if "autolaunch: ready" in log:
+                m.setdefault("ready", now)
+            if "phase=launching" in log:
+                m.setdefault("launching", now)
+            if s["game"]:
+                m.setdefault("game_process", now)
+            if s["windows"]:
+                m.setdefault("window", now)
+                window_at = window_at or time.monotonic()
+            if s["fullscreen_space"]:
+                m.setdefault("fullscreen", now)
+            if "isIdentifiedGame=1" in hostlog and "isGameFullscreen=1" in hostlog:
+                m.setdefault("gamemode", now)
+            if "autoplay: idle phase" in hostlog or "screen: step=" in hostlog:
+                m.setdefault("main_interface", now)
+            if s["game"] and "game_sample" not in mid:
+                mid["game_sample"] = s["game"]
+                mid["procs"] = list(s["procs"])
+                mid["regs"] = reg_values(data, MAC_DRIVER)
+                mid["steam"] = (data.prefix / "drive_c/windows/system32/steam.exe").exists()
+                mid["moved"] = sorted(str(p) for p in Path(a.game_dir or "/nonexistent").glob("YuanShen_Data/**/*.bak")) if a.game_dir else []
+            # Hand-offs to the maintainer. Hosts: /etc/hosts still has no section after Wine is ready.
+            if "ready" in m and "Added by Yaagl" not in HOSTS.read_text(errors="replace") and "hosts" not in waiting:
+                if "launching" not in m and now - m["ready"] > a.hosts_grace:
+                    waiting.add("hosts")
+                    print("WAITING maintainer: hosts-password (admin password dialog for /etc/hosts)", flush=True)
+            if window_at and "main_interface" not in m and time.monotonic() - window_at > a.login_grace \
+                    and "login" not in waiting:
+                waiting.add("login")
+                print("WAITING maintainer: game-login (log in to the miHoYo account in the game window)", flush=True)
+            if a.close_after is not None and closed_at is None and "main_interface" in m \
+                    and now - m["main_interface"] >= a.close_after and s["game"]:
+                run([str(data.wine / "bin/wine"), "taskkill", "/im", s["game"]["cmd"].split("\\")[-1]],
+                    env={**os.environ, "WINEPREFIX": str(data.prefix), "WINEDEBUG": "-all"})
+                closed_at = time.monotonic()
+                say("closing the game window (taskkill, like the window's close button)")
+            if closed_at and exited_at is None and not s["game"]:
+                exited_at = time.monotonic()
+            result = next((l for l in log.splitlines() if "autolaunch: result=" in l), None)
+            if result and not app_pids(work):
+                verdict_line = result
+                break
+            time.sleep(2)
+        else:
+            say("timeout")
+    finally:
+        left = kill_prefix(data) if data.prefix.exists() else 0
+        for _ in range(60):
+            if not app_pids(work):
+                break
+            time.sleep(1)
+        evaluate(a, data, work, m, mid, verdict_line, reg_before, hosts_before, left,
+                 first_run, closed_at, exited_at, waiting, screen_results)
+
+
+def evaluate(a, data, work, m, mid, verdict_line, reg_before, hosts_before, left, first_run,
+             closed_at, exited_at, waiting, screen_results):
+    log = data.read(data.launcher_log)
+    hostlog = data.read(data.gamehost_log)
+
+    # App: auto launch contract.
+    check("APP-020", bool(verdict_line) and "result=ok" in verdict_line, "autolaunch verdict ok",
+          verdict_line or "no verdict line in launcher.log")
+    check("APP-020", "autolaunch: exit" in log and not app_pids(work), "app quit by itself after the game")
+    # Startup order: Wine ready before the game status is read and the game started.
+    order = [k for k in ("wine_prepare", "ready", "launching", "game_process") if k in m]
+    check("APP-001", order == sorted(order, key=m.get) and "ready" in m, "startup order",
+          " ".join(f"{k}@{m[k]:.0f}s" for k in order))
+    # First launch cleanup.
+    if first_run:
+        gone = all(not (data.root / p).exists() for p in SEED_RESIDUE)
+        kept = all((data.root / p).exists() for p in SEED_KEPT)
+        check("APP-002", (data.root / ".yaagl-native").exists() and gone and kept,
+              "first launch: marker written, TS leftovers removed, wine-gptk4 and logs kept")
+    else:
+        check("APP-002", (data.root / ".yaagl-native").exists(), "native marker present")
+    # Wine install.
+    stamp = data.wine / ".yaagl-wine-stamp.json"
+    check("WIN-016", stamp.exists() and (data.wine / "bin/wine").exists(), "Wine runtime installed under the data dir")
+    mounted = [p for p in mid.get("procs", []) if str(data.wine) in p["comm"] or str(data.wine) in p["cmd"]
+               or "YaaglGame.app" in p["comm"]]
+    check("WIN-016", bool(mounted) if mid else None, "game runs on the app's own Wine")
+    q = run(["xattr", "-rl", str(data.wine / "bin")]).stdout if data.wine.exists() else ""
+    check("WIN-010", data.wine.exists() and "com.apple.quarantine" not in q, "no quarantine attribute on Wine")
+    check("WIN-012", all((data.prefix / p).exists() for p in ("system.reg", "user.reg", "drive_c/windows/system32")),
+          "prefix initialised")
+    regs = data.read(data.prefix / "system.reg") + data.read(data.prefix / "user.reg")
+    check("WIN-009", "F09065E2D57F005BBD975DDCF9EB63F570764F17".lower() in regs.lower(), "root certificates in the prefix")
+    hosts = HOSTS.read_text(errors="replace") if HOSTS.exists() else ""
+    check("WIN-011", "# Added by Yaagl" in hosts and "# End of section" in hosts, "/etc/hosts blocklist section present",
+          "newly written" if "# Added by Yaagl" not in hosts_before and "# Added by Yaagl" in hosts else "")
+    # Game host / Game Mode.
+    host_app = data.root / "YaaglGame.app"
+    ident = run(["codesign", "-dv", str(host_app / "Contents/MacOS/wine")]).stderr
+    check("LCH-025", host_app.exists() and f"Identifier={GAME_HOST_ID}" in ident, "YaaglGame.app built and signed with the bundle id")
+    wine_dir = data.wine / "lib/wine/x86_64-unix"
+    check("LCH-024", (wine_dir / "wine-host").exists() and (wine_dir / "wine").exists(), "loader shim installed beside wine-host")
+    check("LCH-026", "gamehost: installed in pid" in hostlog, "game host dylib loaded in the game", "")
+    check("LCH-022", "isIdentifiedGame=1" in hostlog, "Game Mode: game identified by gamepolicyd")
+    game = mid.get("game_sample")
+    split = [p for p in mid.get("procs", []) if "YaaglGame.app" in p["comm"]]
+    others = [p for p in mid.get("procs", []) if "YaaglGame.app" not in p["comm"] and "wineserver" not in p["comm"]]
+    check("LCH-027", (bool(split) and all(is_game(p) for p in split)) if game else None,
+          "only the game process runs from YaaglGame.app", f"host_procs={len(split)} other={len(others)}")
+    check("LCH-028", ("fullscreen" in m and "toggled native full screen" in hostlog) if game else None,
+          "game window in a native full-screen Space")
+    # Registry and files.
+    check("LCH-005", all(v is not None for v in mid.get("regs", {"x": None}).values()) if game else None,
+          "Mac Driver registry values written", str(mid.get("regs", "")))
+    after = reg_values(data, [HDR] + RESOLUTION)
+    check("LCH-006", after[HDR] is None, "HDR value absent after exit")
+    check("LCH-007", all(after[k] == reg_before[k] for k in RESOLUTION) if reg_before else None,
+          "resolution values restored after exit")
+    check("LCH-018", mid.get("steam") if game else None, "steam.exe deployed in the prefix while the game runs")
+    restored = a.game_dir and not any(Path(a.game_dir).glob("YuanShen_Data/**/*.bak"))
+    check("LCH-014", (bool(mid.get("moved")) and bool(restored)) if a.game_dir and game else None,
+          "game files moved aside while running, restored after exit", f"moved={len(mid.get('moved', []))}")
+    check("APP-019", not (data.root / "launch-journal.json").exists(), "launch journal removed after a clean exit")
+    # Exit.
+    check("WIN-018", left == 0 and not [p for p in wine_procs(data.prefix) if p["prefix"] == str(data.prefix)],
+          "no Wine process left after exit", f"killed_by_script={left}")
+    if closed_at and exited_at:
+        took = exited_at - closed_at
+        check("LCH-030", "game window closed" in hostlog and took <= 25, "game exits after its window closed",
+              f"{took:.0f}s")
+        check("LCH-036", took <= 30, "Wine stops within 15 s of the game exiting", f"{took:.0f}s")
+    else:
+        check("LCH-030", None, "game exits after its window closed", "needs --close-after")
+        check("LCH-036", None, "Wine stops within 15 s of the game exiting", "needs --close-after")
+    # Notch / screen check.
+    if a.screen_check:
+        verdicts = {step: out for step, out in screen_results}
+        ok = bool(verdicts) and all("verdict=ok" in o for st, o in verdicts.items() if st not in ("control", "other-window"))
+        check("LCH-029", ok, "screen shows the whole game picture (notch strip not covered)",
+              " ".join(f"{st}:{verdict_of(o)}" for st, o in verdicts.items()))
+        check("LCH-029", "verdict=covered" in verdicts.get("control", ""), "the check can fail: the control step reports covered")
+    else:
+        check("LCH-029", None, "full-screen picture covers the notch strip", "run with --screen-check")
+
+    check("MAIN", "main_interface" in m, "reached the game's main interface (autoplay idle phase)",
+          f"@{m['main_interface']:.0f}s" if "main_interface" in m else
+          f"maintainer waits={sorted(waiting)}")
+    failed = [r for r in RESULTS if r[1] == "FAIL"]
+    print(f"DIAG verdict={'FAIL' if failed else 'PASS'} pass={sum(r[1] == 'PASS' for r in RESULTS)} "
+          f"fail={len(failed)} skip={sum(r[1] == 'SKIP' for r in RESULTS)} data={data.root}", flush=True)
+    sys.exit(1 if failed else 0)
+
+
+def verdict_of(out):
+    m = re.search(r"verdict=(\w+)", out)
+    return m.group(1) if m else out
+
+
+def cmd_ps(a):
+    data = Data(a.data_dir)
+    for p in wine_procs(data.prefix):
+        print(f"{p['pid']:>6} ppid={p['ppid']:<6} prefix={p['prefix']} {p['cmd'][:80]}")
+
+
+def cmd_kill(a):
+    data = Data(a.data_dir)
+    print(f"remaining={kill_prefix(data)}")
+
+
+def main():
+    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    sub = ap.add_subparsers(dest="cmd", required=True)
+    r = sub.add_parser("run", help="full end-to-end diag against a built app")
+    r.add_argument("--app", required=True, help="path to the built Yaagl.app")
+    r.add_argument("--data-dir", default=str(DEFAULT_DATA), help="isolated data directory (default: %(default)s)")
+    r.add_argument("--game-dir", help="existing game directory to take over (otherwise the app installs one)")
+    r.add_argument("--fresh", action="store_true", help="delete the isolated data directory first")
+    r.add_argument("--timeout", type=float, default=7200, help="stop after N seconds")
+    r.add_argument("--close-after", type=float, help="close the game window N seconds after the main interface")
+    r.add_argument("--hosts-grace", type=float, default=30)
+    r.add_argument("--login-grace", type=float, default=90)
+    r.add_argument("--autoplay", action="store_true", help="enter the world with the dev companion (main-interface verdict)")
+    r.add_argument("--screen-check", action="store_true", help="compare the screen with the game picture (needs Screen Recording)")
+    r.set_defaults(fn=cmd_run)
+    for name, fn in (("ps", cmd_ps), ("kill", cmd_kill)):
+        p = sub.add_parser(name)
+        p.add_argument("--data-dir", default=str(DEFAULT_DATA))
+        p.set_defaults(fn=fn)
+    a = ap.parse_args()
+    if getattr(a, "screen_check", False) and getattr(a, "autoplay", False):
+        ap.error("--screen-check and --autoplay cannot be combined")
+    a.fn(a)
+
+
+if __name__ == "__main__":
+    main()
