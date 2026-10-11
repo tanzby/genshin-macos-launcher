@@ -19,7 +19,7 @@ struct MainView: View {
     }
     .frame(minWidth: 880, minHeight: 495)
     .ignoresSafeArea()
-    .sheet(isPresented: .constant(!controller.onboarding.isComplete)) {
+    .sheet(isPresented: .constant(controller.onboarding.showsSheet(drivenByAutoLaunch: drivenByAutoLaunch))) {
       OnboardingView()
         .interactiveDismissDisabled()
     }
