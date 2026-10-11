@@ -2,35 +2,35 @@ import Foundation
 import SwiftProtobuf
 
 /// One zstd-compressed piece of a file, as listed in a chunk manifest.
-public struct SophonChunk: Sendable, Equatable {
+package struct SophonChunk: Sendable, Equatable {
   /// Chunk file name; also the URL suffix after `chunk_download.url_prefix`.
-  public let id: String
+  package let id: String
   /// MD5 of the decompressed chunk.
-  public let md5: String
+  package let md5: String
   /// Where the decompressed bytes go in the target file.
-  public let offset: UInt64
-  public let compressedSize: UInt32
-  public let uncompressedSize: UInt32
-  public let xxhash: UInt64
+  package let offset: UInt64
+  package let compressedSize: UInt32
+  package let uncompressedSize: UInt32
+  package let xxhash: UInt64
   /// MD5 of the compressed bytes.
-  public let compressedMD5: String
+  package let compressedMD5: String
 }
 
-public struct SophonFile: Sendable, Equatable {
+package struct SophonFile: Sendable, Equatable {
   /// Path relative to the game directory, `/` separated.
-  public let path: String
-  public let isDirectory: Bool
-  public let size: Int64
-  public let md5: String
-  public let chunks: [SophonChunk]
+  package let path: String
+  package let isDirectory: Bool
+  package let size: Int64
+  package let md5: String
+  package let chunks: [SophonChunk]
 }
 
 /// A decoded chunk manifest.
-public struct SophonManifest: Sendable, Equatable {
-  public let files: [SophonFile]
+package struct SophonManifest: Sendable, Equatable {
+  package let files: [SophonFile]
 
   /// Total download size: the sum of every chunk's compressed size.
-  public var totalCompressedSize: Int64 {
+  package var totalCompressedSize: Int64 {
     files.reduce(Int64(0)) { sum, file in
       file.chunks.reduce(sum) { $0 + Int64($1.compressedSize) }
     }
@@ -38,7 +38,7 @@ public struct SophonManifest: Sendable, Equatable {
 
   init(files: [SophonFile]) { self.files = files }
 
-  public init(zstdCompressed data: Data) throws {
+  package init(zstdCompressed data: Data) throws {
     let raw = try Zstd.decompress(data)
     do {
       try self.init(raw: PbManifest(serializedBytes: raw))
@@ -73,47 +73,47 @@ public struct SophonManifest: Sendable, Equatable {
 }
 
 /// One ldiff section that turns an old file into the new one.
-public struct SophonPatch: Sendable, Equatable {
+package struct SophonPatch: Sendable, Equatable {
   /// ldiff file name; also the URL suffix after `diff_download.url_prefix`.
-  public let patchID: String
+  package let patchID: String
   /// Size of the whole ldiff file (many patches are concatenated in it).
-  public let patchSize: Int64
+  package let patchSize: Int64
   /// This file's section inside the ldiff file.
-  public let offset: Int64
-  public let length: Int64
-  public let originalPath: String
-  public let originalSize: Int64
-  public let originalMD5: String
-  public let buildID: String
+  package let offset: Int64
+  package let length: Int64
+  package let originalPath: String
+  package let originalSize: Int64
+  package let originalMD5: String
+  package let buildID: String
 }
 
-public struct SophonDiffFile: Sendable, Equatable {
-  public let path: String
-  public let size: Int64
+package struct SophonDiffFile: Sendable, Equatable {
+  package let path: String
+  package let size: Int64
   /// MD5 of the file after patching.
-  public let md5: String
+  package let md5: String
   /// Patches keyed by the old version they upgrade from. Empty means a new file.
-  public let patches: [String: SophonPatch]
+  package let patches: [String: SophonPatch]
 }
 
-public struct SophonDeletedFile: Sendable, Equatable {
-  public let path: String
-  public let size: Int64
-  public let md5: String
+package struct SophonDeletedFile: Sendable, Equatable {
+  package let path: String
+  package let size: Int64
+  package let md5: String
 }
 
 /// A decoded ldiff manifest.
-public struct SophonDiffManifest: Sendable, Equatable {
-  public let files: [SophonDiffFile]
+package struct SophonDiffManifest: Sendable, Equatable {
+  package let files: [SophonDiffFile]
   /// Files to delete, keyed by the old version being upgraded from.
-  public let deletions: [String: [SophonDeletedFile]]
+  package let deletions: [String: [SophonDeletedFile]]
 
   init(files: [SophonDiffFile], deletions: [String: [SophonDeletedFile]]) {
     self.files = files
     self.deletions = deletions
   }
 
-  public init(zstdCompressed data: Data) throws {
+  package init(zstdCompressed data: Data) throws {
     let raw = try Zstd.decompress(data)
     do {
       try self.init(raw: PbDiffManifest(serializedBytes: raw))

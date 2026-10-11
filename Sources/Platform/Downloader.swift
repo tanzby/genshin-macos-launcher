@@ -31,14 +31,14 @@ public protocol Downloading: Sendable {
 
 /// URLSession implementation. Bytes stream into `<destination>.part`, which survives errors and
 /// cancellation; with a `sha256` the next call resumes it with a `Range` request (WIN-007).
-public struct Downloader: Downloading {
+package struct Downloader: Downloading {
   private let configuration: URLSessionConfiguration
 
-  public init(configuration: URLSessionConfiguration = .default) {
+  package init(configuration: URLSessionConfiguration = .default) {
     self.configuration = configuration
   }
 
-  public func download(
+  package func download(
     from url: URL,
     to destination: URL,
     sha256: String?,
@@ -117,12 +117,12 @@ public struct Downloader: Downloading {
     return delegate.total
   }
 
-  public static func fileSize(_ url: URL) -> Int64 {
+  package static func fileSize(_ url: URL) -> Int64 {
     (try? FileManager.default.attributesOfItem(atPath: url.path))?[.size] as? Int64 ?? 0
   }
 
   /// Streaming SHA-256 so a 450 MB archive is never held in memory.
-  public static func sha256Hex(of file: URL) throws -> String {
+  package static func sha256Hex(of file: URL) throws -> String {
     let handle = try FileHandle(forReadingFrom: file)
     defer { try? handle.close() }
     var hasher = SHA256()

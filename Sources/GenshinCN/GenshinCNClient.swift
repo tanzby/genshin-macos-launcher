@@ -18,7 +18,7 @@ enum GenshinCNClientError: Error, Sendable, Equatable {
 }
 
 /// What `GenshinCNClient` needs from the Wine side to start the game. `GameSession` is the production implementation.
-public protocol GameLaunching: Sendable {
+package protocol GameLaunching: Sendable {
   func launch(_ recipe: LaunchRecipe, onStarted: @escaping @Sendable () -> Void) async -> LaunchResult
   func recover() async
   func openCommandPrompt(_ recipe: LaunchRecipe, gameDirectory: URL?) async -> Int32?
@@ -44,7 +44,7 @@ public final class GenshinCNClient: GameClient {
   private let location = Mutex<URL?>(nil)
   let serializer = JobSerializer()
 
-  public init(
+  package init(
     dataDirectory: URL,
     protonExtras: URL,
     launcher: any GameLaunching,
@@ -65,7 +65,7 @@ public final class GenshinCNClient: GameClient {
   }
 
   /// The production composition: the game runs in `wine`'s prefix through a `GameSession`.
-  public static func live(
+  static func live(
     wine: WineRuntime, dataDirectory: DataDirectory, helpers: GameHostHelpers?, protonExtras: URL
   ) -> GenshinCNClient {
     let session = GameSession(

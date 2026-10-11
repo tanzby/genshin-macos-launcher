@@ -7,7 +7,7 @@ enum ProcessRunnerError: Error, Equatable {
 /// Production `ProcessRunning`. Only the system tools `codesign`, `tar`, `ditto` and executables
 /// inside `allowedRoots` (the Wine runtime) may run (ADR 0002).
 package struct SystemProcessRunner: ProcessRunning {
-  package static let systemTools: Set<String> = ["/usr/bin/codesign", "/usr/bin/tar", "/usr/bin/ditto"]
+  private static let systemTools: Set<String> = ["/usr/bin/codesign", "/usr/bin/tar", "/usr/bin/ditto"]
 
   private let allowedRoots: [URL]
   /// How long a cancelled process gets after SIGTERM before it is killed.

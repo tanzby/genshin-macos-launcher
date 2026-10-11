@@ -2,20 +2,20 @@ import Foundation
 import Platform
 
 /// A downloadable Wine build. ADR 0001 pins exactly one; there is no version picker.
-public struct WineDistribution: Sendable, Equatable {
-  public var id: String
-  public var url: URL
-  public var sha256: String
+package struct WineDistribution: Sendable, Equatable {
+  package var id: String
+  package var url: URL
+  package var sha256: String
   /// Directory inside the archive that holds the Wine tree, stripped on extraction. `nil` = whole archive.
-  public var winePath: String?
+  package var winePath: String?
   /// Size of the download in bytes, for the free-space preflight.
-  public var archiveSize: Int64
+  package var archiveSize: Int64
   /// Size of the unpacked runtime in bytes.
-  public var installedSize: Int64
+  package var installedSize: Int64
   /// Size of a fresh prefix after `wineboot`, created after the old runtime is gone.
-  public var prefixSize: Int64
+  package var prefixSize: Int64
 
-  public init(
+  package init(
     id: String, url: URL, sha256: String, winePath: String? = nil, archiveSize: Int64 = 0, installedSize: Int64 = 0,
     prefixSize: Int64 = 0
   ) {
@@ -28,7 +28,7 @@ public struct WineDistribution: Sendable, Equatable {
     self.prefixSize = prefixSize
   }
 
-  public static let pinned = WineDistribution(
+  package static let pinned = WineDistribution(
     id: WineRuntime.pinnedVersion,
     url: URL(
       string:

@@ -19,8 +19,8 @@ package enum SophonVersion {
 /// What is on disk in a Genshin CN game directory: the installed version, `config.ini` and the temp folders.
 /// Sophon owns `config.ini` because it writes the version only after the files are in place (ADR 0002).
 package enum SophonInstallation {
-  package static let configFileName = "config.ini"
-  package static let tempDirectoryName = ".yaagl-tmp"
+  static let configFileName = "config.ini"
+  static let tempDirectoryName = ".yaagl-tmp"
   static let dataFolder = "YuanShen_Data"
   static let executableName = "YuanShen.exe"
   static let emptyVersion = "0.0.0"

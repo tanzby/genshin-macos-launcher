@@ -2,13 +2,13 @@ import Foundation
 
 /// A game branch from `getGameBranches`. The password is a server-issued download credential:
 /// it stays internal and is left out of every description.
-public struct SophonGameBranch: Sendable, Equatable, Decodable {
-  public let branch: String
-  public let packageID: String
-  public let tag: String
+package struct SophonGameBranch: Sendable, Equatable, Decodable {
+  package let branch: String
+  package let packageID: String
+  package let tag: String
   /// Older versions that can be upgraded to `tag` with ldiff patches.
-  public let diffTags: [String]
-  public let categories: [SophonCategory]
+  package let diffTags: [String]
+  package let categories: [SophonCategory]
   let password: String
 
   enum CodingKeys: String, CodingKey {
@@ -17,7 +17,7 @@ public struct SophonGameBranch: Sendable, Equatable, Decodable {
     case diffTags = "diff_tags"
   }
 
-  public init(from decoder: any Decoder) throws {
+  package init(from decoder: any Decoder) throws {
     let c = try decoder.container(keyedBy: CodingKeys.self)
     branch = try c.decode(String.self, forKey: .branch)
     password = try c.decode(String.self, forKey: .password)
@@ -29,13 +29,13 @@ public struct SophonGameBranch: Sendable, Equatable, Decodable {
 }
 
 extension SophonGameBranch: CustomStringConvertible, CustomDebugStringConvertible {
-  public var description: String { "SophonGameBranch(\(branch) \(tag), package \(packageID))" }
-  public var debugDescription: String { description }
+  package var description: String { "SophonGameBranch(\(branch) \(tag), package \(packageID))" }
+  package var debugDescription: String { description }
 }
 
-public struct SophonCategory: Sendable, Equatable, Decodable {
-  public let categoryID: String
-  public let matchingField: String
+package struct SophonCategory: Sendable, Equatable, Decodable {
+  package let categoryID: String
+  package let matchingField: String
 
   enum CodingKeys: String, CodingKey {
     case categoryID = "category_id"
@@ -44,9 +44,9 @@ public struct SophonCategory: Sendable, Equatable, Decodable {
 }
 
 /// `main` is the current release; `preDownload` is `nil` when the server has no pre-download.
-public struct SophonGameBranches: Sendable, Equatable {
-  public let main: SophonGameBranch?
-  public let preDownload: SophonGameBranch?
+package struct SophonGameBranches: Sendable, Equatable {
+  package let main: SophonGameBranch?
+  package let preDownload: SophonGameBranch?
 
   static func decode(_ data: Data) throws -> SophonGameBranches {
     struct Payload: Decodable {
@@ -68,11 +68,11 @@ public struct SophonGameBranches: Sendable, Equatable {
 }
 
 /// Download size figures. The server sends numbers as strings.
-public struct SophonStats: Sendable, Equatable, Decodable {
-  public let compressedSize: Int64
-  public let uncompressedSize: Int64
-  public let fileCount: Int64
-  public let chunkCount: Int64
+package struct SophonStats: Sendable, Equatable, Decodable {
+  package let compressedSize: Int64
+  package let uncompressedSize: Int64
+  package let fileCount: Int64
+  package let chunkCount: Int64
 
   enum CodingKeys: String, CodingKey {
     case compressedSize = "compressed_size"
@@ -81,7 +81,7 @@ public struct SophonStats: Sendable, Equatable, Decodable {
     case chunkCount = "chunk_count"
   }
 
-  public init(from decoder: any Decoder) throws {
+  package init(from decoder: any Decoder) throws {
     let c = try decoder.container(keyedBy: CodingKeys.self)
     compressedSize = try c.decodeFlexibleInt64(forKey: .compressedSize)
     uncompressedSize = try c.decodeFlexibleInt64(forKey: .uncompressedSize)
@@ -103,26 +103,26 @@ extension KeyedDecodingContainer {
 }
 
 /// One downloadable category (the game itself or a voice pack) inside a build.
-public struct SophonManifestRef: Sendable, Equatable, Decodable {
-  public let categoryID: String
-  public let matchingField: String
-  public let manifestID: String
-  public let manifestURLPrefix: String
-  public let manifestURLSuffix: String
+package struct SophonManifestRef: Sendable, Equatable, Decodable {
+  package let categoryID: String
+  package let matchingField: String
+  package let manifestID: String
+  package let manifestURLPrefix: String
+  package let manifestURLSuffix: String
   /// Where chunks are downloaded from (`getBuild` only).
-  public let chunkURLPrefix: String?
+  package let chunkURLPrefix: String?
   /// Appended after the chunk id (empty today).
-  public let chunkURLSuffix: String
+  package let chunkURLSuffix: String
   /// Where ldiff files are downloaded from (`getPatchBuild` only).
-  public let diffURLPrefix: String?
+  package let diffURLPrefix: String?
   /// Appended after the ldiff id (empty today).
-  public let diffURLSuffix: String
+  package let diffURLSuffix: String
   /// Totals for a full install (`getBuild`); `nil` for patch builds.
-  public let stats: SophonStats?
+  package let stats: SophonStats?
   /// Totals per old version (`getPatchBuild`); empty for plain builds.
-  public let patchStats: [String: SophonStats]
+  package let patchStats: [String: SophonStats]
 
-  public init(
+  package init(
     categoryID: String, matchingField: String, manifestID: String, manifestURLPrefix: String,
     manifestURLSuffix: String = "", chunkURLPrefix: String? = nil, chunkURLSuffix: String = "",
     diffURLPrefix: String? = nil, diffURLSuffix: String = "",
@@ -160,7 +160,7 @@ public struct SophonManifestRef: Sendable, Equatable, Decodable {
     case diffDownload = "diff_download"
   }
 
-  public init(from decoder: any Decoder) throws {
+  package init(from decoder: any Decoder) throws {
     let c = try decoder.container(keyedBy: CodingKeys.self)
     categoryID = try c.decode(String.self, forKey: .categoryID)
     matchingField = try c.decode(String.self, forKey: .matchingField)
@@ -202,12 +202,12 @@ public struct SophonManifestRef: Sendable, Equatable, Decodable {
 }
 
 /// `getBuild`: chunk download locations for a full install or repair.
-public struct SophonBuild: Sendable, Equatable {
-  public let buildID: String
-  public let tag: String
-  public let manifests: [SophonManifestRef]
+package struct SophonBuild: Sendable, Equatable {
+  package let buildID: String
+  package let tag: String
+  package let manifests: [SophonManifestRef]
 
-  public func manifest(matching field: String) throws -> SophonManifestRef {
+  package func manifest(matching field: String) throws -> SophonManifestRef {
     try SophonManifestRef.select(manifests, matching: field)
   }
 
@@ -227,13 +227,13 @@ public struct SophonBuild: Sendable, Equatable {
 }
 
 /// `getPatchBuild`: ldiff download locations for an incremental update or pre-download.
-public struct SophonPatchBuild: Sendable, Equatable {
-  public let buildID: String
-  public let patchID: String
-  public let tag: String
-  public let manifests: [SophonManifestRef]
+package struct SophonPatchBuild: Sendable, Equatable {
+  package let buildID: String
+  package let patchID: String
+  package let tag: String
+  package let manifests: [SophonManifestRef]
 
-  public func manifest(matching field: String) throws -> SophonManifestRef {
+  package func manifest(matching field: String) throws -> SophonManifestRef {
     try SophonManifestRef.select(manifests, matching: field)
   }
 

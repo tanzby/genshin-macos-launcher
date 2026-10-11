@@ -14,9 +14,14 @@ public actor WineRuntime {
   let availableSpace: @Sendable (URL) -> Int64?
   private var installation: Task<Void, any Error>?
 
-  public init(
+  /// Production: the pinned Wine build.
+  public init(dataDirectory: DataDirectory, dxmt: DXMTBundle? = nil) {
+    self.init(dataDirectory: dataDirectory, distribution: .pinned, dxmt: dxmt)
+  }
+
+  package init(
     dataDirectory: DataDirectory,
-    distribution: WineDistribution = .pinned,
+    distribution: WineDistribution,
     dxmt: DXMTBundle? = nil,
     downloader: any Downloading = Downloader(),
     runner: (any ProcessRunning)? = nil,

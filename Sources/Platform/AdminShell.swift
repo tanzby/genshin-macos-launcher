@@ -1,6 +1,6 @@
 import Foundation
 
-enum AdminPrivilegeError: Error, Equatable {
+package enum AdminPrivilegeError: Error, Equatable {
   /// The user dismissed the password dialog.
   case cancelled
   case failed(String)

@@ -2,7 +2,7 @@ import Foundation
 
 /// The only entry to external processes: Wine and the allowlisted system tools
 /// (`codesign`, `tar`, `ditto`). Tests substitute a recording implementation.
-public protocol ProcessRunning: Sendable {
+package protocol ProcessRunning: Sendable {
   func run(
     _ executable: URL,
     arguments: [String],
@@ -23,7 +23,7 @@ public protocol ProcessRunning: Sendable {
 
 extension ProcessRunning {
   /// For test doubles: buffers through `run` and writes the log at the end.
-  public func runLogging(
+  package func runLogging(
     _ executable: URL,
     arguments: [String],
     environment: [String: String],
@@ -37,11 +37,11 @@ extension ProcessRunning {
   }
 }
 
-public struct ProcessResult: Sendable, Equatable {
-  public var exitCode: Int32
-  public var output: String
+package struct ProcessResult: Sendable, Equatable {
+  package var exitCode: Int32
+  package var output: String
 
-  public init(exitCode: Int32, output: String) {
+  package init(exitCode: Int32, output: String) {
     self.exitCode = exitCode
     self.output = output
   }

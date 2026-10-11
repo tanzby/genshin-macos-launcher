@@ -4,7 +4,7 @@ import Foundation
 /// Removes `com.apple.quarantine` from files the user owns. `removexattr(2)` needs no
 /// administrator rights, unlike the TS launcher's `sudo xattr`.
 package enum Quarantine {
-  package static let attribute = "com.apple.quarantine"
+  private static let attribute = "com.apple.quarantine"
 
   package struct RemovalError: Error, Equatable {
     package var path: String

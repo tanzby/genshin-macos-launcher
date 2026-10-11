@@ -1,9 +1,9 @@
 import Foundation
 
 /// A whole ldiff file: many patches are concatenated in it.
-public struct SophonLdiffFile: Sendable, Equatable {
-  public let id: String
-  public let size: Int64
+package struct SophonLdiffFile: Sendable, Equatable {
+  package let id: String
+  package let size: Int64
 }
 
 extension SophonDownloader {
