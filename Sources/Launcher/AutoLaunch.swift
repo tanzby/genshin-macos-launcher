@@ -201,7 +201,7 @@ public struct AutoLaunch {
     await model.shutdown()
     log.say("autolaunch: exit")
     terminate()
-    // `terminate()` can be refused (a sheet or alert is up, e.g. first-run onboarding); the run is over and its
+    // `terminate()` can still be refused (a modal alert is up); the run is over and its
     // state is restored, so a diag script must not wait on a window nobody closes.
     try? await Task.sleep(for: .seconds(3))
     forceExit()
