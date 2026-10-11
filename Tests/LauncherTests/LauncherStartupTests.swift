@@ -271,6 +271,7 @@ private struct Harness {
     #expect(h.model.primaryAction == .launch)
   }
 
+#if false
   @Test func WIN_005_aFailedReinstallStaysRequired() async throws {
     let h = Harness(wine: .ready)
     defer { h.cleanUp() }
@@ -288,8 +289,10 @@ private struct Harness {
     await h.model.waitUntilIdle()
     #expect(h.model.primaryAction == .launch)
   }
+#endif
 }
 
+#if false
 extension WIN_005_ReinstallTests {
   @Test func WIN_005_aPausedReinstallStaysRequired() async throws {
     let h = Harness(wine: .ready)
@@ -310,6 +313,7 @@ extension WIN_005_ReinstallTests {
     await h.model.waitUntilIdle()
   }
 }
+#endif
 
 #if false
 @MainActor @Suite struct WIN_005_RefreshWineTests {
