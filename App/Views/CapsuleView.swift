@@ -161,7 +161,7 @@ private struct StatusArea: View {
 
   @ViewBuilder private var accessory: some View {
     if let preDownload {
-      Button(preDownload.isPausing ? "Pausing…" : "Pause") { Task { await controller.pause() } }
+      Button(preDownload.isPausing ? "Pausing…" : "Pause") { Task { await controller.perform(.pause) } }
         .buttonStyle(.glass)
         .controlSize(.large)
         .disabled(preDownload.isPausing)

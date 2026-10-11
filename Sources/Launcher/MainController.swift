@@ -78,11 +78,6 @@ public final class MainController {
     }
   }
 
-  /// Pauses the running pre-download (or whatever pausable work runs); `perform(.pause)` without the button.
-  public func pause() async {
-    await perform(.pause)
-  }
-
   public func preDownload() async {
     await run { try await self.launcher.start(.preDownload) }
   }

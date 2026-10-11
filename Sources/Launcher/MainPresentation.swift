@@ -85,6 +85,10 @@ public struct MainPresentation: Sendable, Equatable {
     let noBlockingJob = s.pendingJob.map { $0.kind == .preDownload } ?? true
     let repairable = installed && idleLike && noBlockingJob && !s.wineNotReady && s.status?.canUpdate != true
 
+    let offline = s.hasLoaded && !s.isOnline
+    // Download jobs and Wine preparation are paused by the same button.
+    let pauseButton: (PrimaryButton, Bool) = (s.isPausing ? .pausing : .pause, !s.isPausing)
+
     func make(_ button: PrimaryButton, _ enabled: Bool, _ status: StatusLine) -> MainPresentation {
       MainPresentation(
         button: button, buttonEnabled: enabled, status: status, canRepair: repairable,
@@ -96,12 +100,12 @@ public struct MainPresentation: Sendable, Equatable {
     switch s.phase {
     case .preparingWine:
       // The download resumes from its .part files, so Wine preparation can be paused like a game job.
-      return make(s.isPausing ? .pausing : .pause, !s.isPausing, .wine(s.progress))
+      return make(pauseButton.0, pauseButton.1, .wine(s.progress))
     case .running: return make(.running, false, .running)
     case .launching: return make(.launching, false, .launching)
     case .installing, .updating:
       let job: GameJob = s.phase == .installing ? .install : .update
-      return make(s.isPausing ? .pausing : .pause, !s.isPausing, .job(job, s.progress, paused: false))
+      return make(pauseButton.0, pauseButton.1, .job(job, s.progress, paused: false))
     case .repairing:
       return make(.repairing, false, .job(.repair, s.progress, paused: false))
     case .idle, .preDownloading:
@@ -115,7 +119,7 @@ public struct MainPresentation: Sendable, Equatable {
     if let pending = s.pendingJob, pending.kind != .preDownload {
       // Continuing needs the network, like every other download.
       if let error = s.lastError { return make(.retry, s.isOnline, .error(error)) }
-      if s.hasLoaded && !s.isOnline { return make(.resume, false, .offline) }
+      if offline { return make(.resume, false, .offline) }
       return make(.resume, s.isOnline, .job(pending.kind, nil, paused: true))
     }
 
@@ -133,7 +137,7 @@ public struct MainPresentation: Sendable, Equatable {
       status = .error(error)
     } else if base == .launch && !s.hostsAllowLaunch {
       status = .hostsRequired
-    } else if s.hasLoaded && !s.isOnline {
+    } else if offline {
       status = .offline
     } else if s.isPreDownloading {
       status = .job(.preDownload, s.progress, paused: false)
