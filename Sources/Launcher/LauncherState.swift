@@ -4,7 +4,7 @@ import Wine
 
 /// What the launcher is doing right now. Pre-download is only reported while nothing exclusive runs;
 /// `LauncherModel.isPreDownloading` tells whether it overlaps with launching or running.
-public enum LauncherPhase: Sendable, Equatable {
+package enum LauncherPhase: Sendable, Equatable {
   case idle, preparingWine, installing, updating, preDownloading, repairing, launching, running
 }
 

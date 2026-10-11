@@ -1,19 +1,19 @@
 import Foundation
 
 /// The facts the main window's bottom capsule is derived from.
-public struct MainSnapshot: Sendable, Equatable {
+package struct MainSnapshot: Sendable, Equatable {
   public var phase: LauncherPhase
-  public var isPreDownloading: Bool
+  package var isPreDownloading: Bool
   public var isPausing: Bool
   public var progress: JobProgress?
   public var pendingJob: PendingJob?
   public var lastError: LauncherError?
   public var status: GameStatus?
-  public var isOnline: Bool
+  package var isOnline: Bool
   /// The hosts blocklist is in place; without it the game must not start.
-  public var hostsAllowLaunch: Bool
+  package var hostsAllowLaunch: Bool
   /// The first status query has finished (successfully or not). Before that "offline" is not yet known.
-  public var hasLoaded: Bool
+  package var hasLoaded: Bool
   /// Wine is known to need (re)installing; nothing else can run until it is prepared.
   public var wineNotReady: Bool
 
@@ -78,7 +78,7 @@ public struct MainPresentation: Sendable, Equatable {
   public var canPreDownload: Bool
   public var activePreDownload: ActivePreDownload?
 
-  public static func derive(_ s: MainSnapshot) -> MainPresentation {
+  package static func derive(_ s: MainSnapshot) -> MainPresentation {
     let installed = s.status?.localVersion != nil
     let idleLike = s.phase == .idle || s.phase == .preDownloading
     // Pre-download may overlap with launching and running (APP-015), but not with install/update/repair.

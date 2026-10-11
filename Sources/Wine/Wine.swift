@@ -46,7 +46,7 @@ public actor WineRuntime {
   public nonisolated var prefixDirectory: URL { layout.prefixDirectory }
 
   /// The DXMT build in the app, if it has one.
-  public nonisolated var bundledDXMT: DXMTBundle? { dxmt }
+  package nonisolated var bundledDXMT: DXMTBundle? { dxmt }
 
   /// Whether the pinned Wine and the app's DXMT are installed and intact. Looks at the disk, not just the stamp.
   public func status() -> WineStatus {

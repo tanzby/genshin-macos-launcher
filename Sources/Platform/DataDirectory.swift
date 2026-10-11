@@ -4,7 +4,7 @@ import Foundation
 /// it runs the first-launch cleanup of TS-launcher leftovers (ADR 0001) before returning.
 public struct DataDirectory: Sendable, Equatable {
   public static let name = "Yaagl"
-  public static let nativeMarkerName = ".yaagl-native"
+  package static let nativeMarkerName = ".yaagl-native"
 
   public let root: URL
 
@@ -25,10 +25,10 @@ public struct DataDirectory: Sendable, Equatable {
     ]
   }
 
-  public var nativeMarker: URL { entry(Self.nativeMarkerName) }
+  package var nativeMarker: URL { entry(Self.nativeMarkerName) }
   /// Wine and DXMT are installed together; its version stamp lives inside.
   public var wine: URL { entry("wine", directory: true) }
-  public var winePrefix: URL { entry("wineprefix", directory: true) }
+  package var winePrefix: URL { entry("wineprefix", directory: true) }
   public var logs: URL { entry("logs", directory: true) }
   /// The official launcher background (one file), see `BackgroundImageProvider`.
   public var background: URL { entry("background", directory: true) }
@@ -41,7 +41,7 @@ public struct DataDirectory: Sendable, Equatable {
 extension DataDirectory {
   /// Content of `.yaagl-native`. Kept in its own file so that damage to other state is never
   /// mistaken for "no marker", which would trigger a wipe.
-  public struct Marker: Codable, Sendable, Equatable {
+  package struct Marker: Codable, Sendable, Equatable {
     public static let currentSchemaVersion = 1
     public var schemaVersion: Int
 

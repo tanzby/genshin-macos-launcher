@@ -11,9 +11,9 @@ public final class MainController {
   public let onboarding: OnboardingModel
 
   /// A start the launcher refused (no space, busy, offline…). Job failures live in `launcher.lastError`.
-  public private(set) var actionError: LauncherError?
+  package private(set) var actionError: LauncherError?
   /// Set once the first status query has returned, so "offline" is only claimed after a real attempt.
-  public private(set) var hasLoaded = false
+  package private(set) var hasLoaded = false
 
   public init(launcher: LauncherModel, settings: SettingsModel, onboarding: OnboardingModel) {
     self.launcher = launcher
