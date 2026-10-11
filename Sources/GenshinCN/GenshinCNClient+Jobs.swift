@@ -10,7 +10,7 @@ extension GenshinCNClient {
 
   public func run(_ job: GameJob) -> AsyncThrowingStream<JobProgress, Error> {
     let (stream, continuation) = AsyncThrowingStream<JobProgress, Error>.makeStream()
-    // Fixed now: a job queued behind another must not follow a later `setGameDirectory`.
+    // Fixed at call time: a job queued behind another must not follow a later `setGameDirectory`.
     let directory = gameDirectory
     let task = serializer.enqueue { [self] in
       // Paused before it began: do not touch the disk at all.
