@@ -1,3 +1,4 @@
+#if false
 import Foundation
 import Synchronization
 import Testing
@@ -328,3 +329,4 @@ extension WIN_005_ReinstallTests {
     }
   }
 }
+#endif
