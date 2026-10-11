@@ -1,10 +1,6 @@
 import Foundation
 import Launcher
 import Sophon
-import os
-
-private let log = Logger(subsystem: "io.github.tanzby.yaagl", category: "genshin")
-
 extension GenshinCNClient {
   // MARK: - Running jobs
 
@@ -35,13 +31,15 @@ extension GenshinCNClient {
     guard let directory else { throw GenshinCNClientError.noGameDirectory }
     // An install is only known to target a game directory once `prepareForInstall` accepted it.
     if job != .install { SophonInstallation.removeLegacyTemporaryFolders(in: directory) }
-    let sophonReport: @Sendable (SophonProgress) -> Void = { report(Self.jobProgress($0)) }
+    let progress: @Sendable (SophonProgress) -> Void = { report(Self.jobProgress($0)) }
+    report(.preparing)
     switch job {
-    case .install: try await install(in: directory, report: report, progress: sophonReport)
-    case .repair: try await repair(in: directory, report: report, progress: sophonReport)
-    case .update: try await update(in: directory, report: report, progress: sophonReport)
-    case .preDownload: try await preDownload(in: directory, report: report, progress: sophonReport)
+    case .install: try await install(in: directory, progress: progress)
+    case .repair: try await repair(in: directory, progress: progress)
+    case .update: try await update(in: directory, progress: progress)
+    case .preDownload: try await preDownload(in: directory, progress: progress)
     }
+    report(.finalizing)
   }
 
   static func jobProgress(_ progress: SophonProgress) -> JobProgress {
@@ -56,9 +54,8 @@ extension GenshinCNClient {
   // MARK: - Install
 
   private func install(
-    in directory: URL, report: @Sendable (JobProgress) -> Void, progress: @escaping @Sendable (SophonProgress) -> Void
+    in directory: URL, progress: @escaping @Sendable (SophonProgress) -> Void
   ) async throws {
-    report(.preparing)
     try SophonInstallation.prepareForInstall(in: directory)  // INS-005: refuses before any request
     SophonInstallation.removeLegacyTemporaryFolders(in: directory)
     let (main, ref, manifest) = try await mainReleaseWithManifest()
@@ -68,15 +65,13 @@ extension GenshinCNClient {
     try SophonInstallation.verifySizes(of: manifest.files, in: directory)
     // INS-006: the version is written last, so an interrupted install is never taken for a finished one.
     try SophonInstallation.writeVersion(main.tag, in: directory)
-    report(.finalizing)
   }
 
   // MARK: - Repair
 
   private func repair(
-    in directory: URL, report: @Sendable (JobProgress) -> Void, progress: @escaping @Sendable (SophonProgress) -> Void
+    in directory: URL, progress: @escaping @Sendable (SophonProgress) -> Void
   ) async throws {
-    report(.preparing)
     let installed = try installedVersion(in: directory)
     GenshinGameFiles.healBackups(in: directory)
     let (main, ref, manifest) = try await mainReleaseWithManifest()
@@ -87,15 +82,13 @@ extension GenshinCNClient {
         damaged, using: ref, into: directory, tempDirectory: SophonInstallation.tempDirectory(in: directory),
         progress: progress)
     }
-    report(.finalizing)
   }
 
   // MARK: - Update
 
   private func update(
-    in directory: URL, report: @Sendable (JobProgress) -> Void, progress: @escaping @Sendable (SophonProgress) -> Void
+    in directory: URL, progress: @escaping @Sendable (SophonProgress) -> Void
   ) async throws {
-    report(.preparing)
     let installed = try installedVersion(in: directory)
     GenshinGameFiles.healBackups(in: directory)
     let (main, ref, manifest) = try await mainReleaseWithManifest()
@@ -119,15 +112,13 @@ extension GenshinCNClient {
       // UPG-011: not exactly one `game_version=` line; the version still reads from globalgamemanagers.
       log.warning("config.ini has no single game_version line; left as it is")
     }
-    report(.finalizing)
   }
 
   // MARK: - Pre-download
 
   private func preDownload(
-    in directory: URL, report: @Sendable (JobProgress) -> Void, progress: @escaping @Sendable (SophonProgress) -> Void
+    in directory: URL, progress: @escaping @Sendable (SophonProgress) -> Void
   ) async throws {
-    report(.preparing)
     let installed = try installedVersion(in: directory)
     // No `.bak` healing here: pre-download may overlap a running game, whose files are legitimately aside.
     guard let pre = try await sophon.gameBranches().preDownload, SophonVersion.isOlder(installed, than: pre.tag) else {
@@ -143,7 +134,6 @@ extension GenshinCNClient {
     try await updater.predownload(
       plan, targetVersion: pre.tag, diff: diffRef, chunks: ref, gameDirectory: directory,
       tempDirectory: SophonInstallation.tempDirectory(in: directory), progress: progress)
-    report(.finalizing)
   }
 
   // MARK: - Disk space
