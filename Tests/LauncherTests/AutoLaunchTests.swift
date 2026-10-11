@@ -46,6 +46,14 @@ private final class Harness {
 }
 
 @MainActor @Suite struct APP_020_AutoLaunchTests {
+  @Test func APP_020_aDataDirectoryThatCannotBePreparedLeavesAFailedVerdictAndAnExitLine() {
+    let harness = Harness()
+    AutoLaunch.reportPrepareFailure(DataDirectory.PrepareError.unsupportedSchemaVersion(9), to: harness.log)
+    #expect(harness.lines.count == 2)
+    #expect(harness.lines.first?.hasPrefix("autolaunch: result=failed reason=data-dir") == true)
+    #expect(harness.lines.last == "autolaunch: exit")
+  }
+
   @Test func APP_020_parsesFlagsAndEnvironment() {
     let flags = AutoLaunchOptions.parse(
       arguments: ["App", "--autolaunch", "--data-dir", "/tmp/data", "--game-dir", "/tmp/game"], environment: [:])
