@@ -112,7 +112,8 @@ final class FakeCDN: @unchecked Sendable {
 
   /// One session for every consumer, so the stub sees all traffic.
   private(set) lazy var session: URLSession = {
-    StubURLProtocol.session(reply: { [unowned self] request in handle(request) }).session
+    // Weak: a request that outlives the CDN (a cancelled job's last chunk) must not trap on a dead object.
+    StubURLProtocol.session(reply: { [weak self] request in self?.handle(request) ?? .failure(.cancelled) }).session
   }()
 
   var api: SophonAPI { SophonAPI(endpoints: Self.endpoints, session: session) }
