@@ -127,10 +127,11 @@ def wine_procs(prefix):
         if cmd.startswith(("C:\\", "Z:\\")) or base in ("wineserver", "wine", "wine64", "wine-preloader", "wine-host"):
             procs.append(dict(pid=pid, ppid=ppid, comm=comm, cmd=cmd))
     prefixes = cwd_prefixes([p["pid"] for p in procs], prefix)
-    live = any(prefixes.get(p["pid"]) == str(prefix) and "wineserver" in p["comm"] for p in procs)
     for p in procs:
         p["prefix"] = prefixes.get(p["pid"], "?")
-        if p["prefix"] == "?" and live and p["cmd"].startswith(("C:\\", "Z:\\")):
+        # A Windows process outside drive_c (the game in its install dir) or one whose wineserver is gone has no
+        # derivable prefix. `run` refuses to start while any other Wine process exists, so these are ours.
+        if p["prefix"] == "?" and p["cmd"].startswith(("C:\\", "Z:\\")):
             p["prefix"] = str(prefix)
     return procs
 
@@ -509,9 +510,12 @@ def evaluate(a, data, work, m, mid, verdict_line, reg_before, hosts_before, left
     if a.screen_check:
         verdicts = {step: out for step, out in screen_results}
         control = next((o for st, o in verdicts.items() if st.startswith("control")), "")
-        ok = bool(verdicts) and all("verdict=ok" in o for st, o in verdicts.items() if not st.startswith("control"))
+        expected = {"world", "after-hide", "after-walk", "after-attack", "control-below-menu-bar", "restored", "other-window"}
+        complete = expected <= set(verdicts) and "screen: done" in hostlog
+        ok = complete and all("verdict=ok" in o for st, o in verdicts.items() if not st.startswith("control"))
         check("LCH-029", ok, "screen shows the whole game picture (notch strip not covered)",
-              " ".join(f"{st}:{verdict_of(o)}" for st, o in verdicts.items()))
+              " ".join(f"{st}:{verdict_of(o)}" for st, o in verdicts.items())
+              + ("" if complete else f" MISSING={sorted(expected - set(verdicts))}"))
         check("LCH-029", "verdict=covered" in control, "the check can fail: the control step reports covered")
     else:
         check("LCH-029", None, "full-screen picture covers the notch strip", "run with --screen-check")
