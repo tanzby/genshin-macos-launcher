@@ -7,17 +7,18 @@ Push a semver tag from `main` (`1.0.0-rc.1`, ..., `1.0.0`). `.github/workflows/r
 - Before publishing, `scripts/release/verify-ed-signature.swift` checks the appcast signature against the `SUPublicEDKey` built into the app, so a secret holding the wrong private key fails the run instead of shipping an update every client rejects.
 - Debug builds never start the updater.
 - The app ships `SUEnableAutomaticChecks=true` and `SUScheduledCheckInterval=86400` (checked by `scripts/dev/check-bundle`), so it checks daily without Sparkle's permission prompt. The Settings toggle writes the user default, which wins over the plist. The "Check for Updates…" menu item is disabled while `SPUUpdater.canCheckForUpdates` is false.
-- Before `1.0.0`, check that a real `rc.N` to `rc.N+1` update works through the live feed (checklist below, maintainer only).
+- Only the final version is published. The update path is verified locally, before tagging, with `scripts/dev/sparkle-local-check` (below); release candidates are not cut for it.
 
-## rc to rc update check (before 1.0.0)
+## Local update check (before tagging 1.0.0)
 
-Needs two published rc tags and a real Mac, so it is a human step. Do it once the other 1.0.0 gates are green.
+`scripts/dev/sparkle-local-check` builds two copies of the current commit (`1.0.0-test.1` build 9001, `1.0.0-test.2` build 9002) and signs the second one with a throwaway key kept in a file (never the release key, never the Keychain). Both copies get the test public key and a feed on `http://127.0.0.1:18765/appcast.xml` (plain http for the test copies only, `project.yml` is untouched). It serves the feed, installs test.1 under `~/Library/Caches/yaagl-sparkle-test/` with its data directory there too, and starts it.
 
-1. Push `1.0.0-rc.1`; wait for the release workflow to publish. Download `Yaagl-1.0.0-rc.1.zip`, move the app to `/Applications` and launch it. Settings shows "Automatically check for updates" on.
-2. Push `1.0.0-rc.2`; wait for the publish. Confirm `releases/latest/download/appcast.xml` lists `1.0.0-rc.2` and carries a `sparkle:edSignature`.
-3. In rc.1 choose Yaagl > Check for Updates…. Sparkle must offer rc.2, install it and relaunch; About shows rc.2.
-4. Turn the Settings toggle off, quit, relaunch: it stays off and no background check happens.
-5. If any step fails, fix and cut `rc.3` before tagging `1.0.0`.
+1. Run `scripts/dev/sparkle-local-check`. It stops at "waiting for a click".
+2. In test.1 choose Yaagl > Check for Updates…. Sparkle must offer 1.0.0-test.2, install it and relaunch; About shows test.2. This must work with the first-launch onboarding sheet open.
+3. Settings shows "Automatically check for updates" on. Turn it off, quit, relaunch: it stays off.
+4. Run `scripts/dev/sparkle-local-check stop`: it stops the server and the app, unsets `YAAGL_DATA_DIR` and restores the Sparkle keys of the preference domain.
+
+The data directory reaches the relaunched app through `launchctl setenv YAAGL_DATA_DIR`, because Sparkle relaunches without command-line arguments. The test copies share the bundle id, and so the preference domain, with the real app; the script saves the Sparkle (`SU*`) keys before the test and `stop` puts them back. The real app in `/Applications` and `~/Library/Application Support/Yaagl` are never touched.
 
 ## EdDSA key (maintainer only, agents never touch it)
 

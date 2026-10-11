@@ -1,0 +1,164 @@
+#!/bin/bash
+# Local Sparkle update check: builds two copies of the current commit (1.0.0-test.1 build 9001 and
+# 1.0.0-test.2 build 9002), points both at a throwaway key and a feed on 127.0.0.1, installs test.1 and starts it.
+# Choosing "Check for Updates…" in test.1 must then offer test.2, install it and relaunch. No release is published.
+#
+#   scripts/dev/sparkle-local-check          build, serve, install test.1 and start it (waits for your click)
+#   scripts/dev/sparkle-local-check stop     stop the server and the app, restore the user defaults, unset the env
+#
+# Isolation: everything lives in $SPARKLE_CHECK_DIR (default ~/Library/Caches/yaagl-sparkle-test). The throwaway
+# key is a file in there, never the Keychain, and never the real release key. /Applications and the real data
+# directory are not touched: the data directory comes from YAAGL_DATA_DIR, set with launchctl so that the
+# instance Sparkle relaunches after the update inherits it. The test copies share the bundle id (so the
+# preference domain) with the real app; `run` saves the Sparkle keys of that domain and `stop` puts them back.
+set -euo pipefail
+cd "$(dirname "$0")/../.."
+repo=$PWD
+
+work=${SPARKLE_CHECK_DIR:-$HOME/Library/Caches/yaagl-sparkle-test}
+port=${SPARKLE_CHECK_PORT:-18765}
+domain=io.github.tanzby.yaagl
+sparkle_version=2.10.0
+sparkle_sha256=c2bf58aa8387266ac179357b1415d6f2635f044da8be41042af32425dae6da0c
+app=$work/app/Yaagl.app
+data=$work/data
+
+# Keeps or restores the Sparkle keys (SU*) of the preference domain. `save` writes the backup once per run;
+# `restore` puts the saved keys back and removes the ones the test created.
+defaults_keys() {
+  python3 -I - "$1" "$work/defaults-backup.plist" "$domain" <<'EOF'
+import os, plistlib, subprocess, sys
+mode, backup, domain = sys.argv[1:4]
+
+def export():
+    out = subprocess.run(["defaults", "export", domain, "-"], capture_output=True)
+    return plistlib.loads(out.stdout) if out.returncode == 0 and out.stdout.strip() else {}
+
+def write(values):
+    subprocess.run(["defaults", "import", domain, "-"], input=plistlib.dumps(values), check=True)
+
+current = export()
+if mode == "save":
+    if not os.path.exists(backup):
+        with open(backup, "wb") as f:
+            plistlib.dump({k: v for k, v in current.items() if k.startswith("SU")}, f)
+    write({k: v for k, v in current.items() if not k.startswith("SU")})
+else:
+    saved = plistlib.load(open(backup, "rb")) if os.path.exists(backup) else {}
+    write({**{k: v for k, v in current.items() if not k.startswith("SU")}, **saved})
+    if os.path.exists(backup):
+        os.remove(backup)
+EOF
+}
+
+stop() {
+  if [ -f "$work/server.pid" ]; then
+    kill "$(cat "$work/server.pid")" 2>/dev/null || true
+    rm -f "$work/server.pid"
+  fi
+  # Only the test copy: the real app and the diag app live elsewhere.
+  pkill -f "$app/Contents/MacOS/Yaagl" 2>/dev/null || true
+  launchctl unsetenv YAAGL_DATA_DIR
+  if [ -f "$work/defaults-backup.plist" ]; then
+    defaults_keys restore
+    echo "Sparkle defaults of $domain restored."
+  fi
+  echo "Stopped. Delete $work to remove the test copies."
+}
+
+if [ "${1:-run}" = stop ]; then
+  stop
+  exit 0
+fi
+[ "${1:-run}" = run ] || { echo "usage: $0 [run|stop]" >&2; exit 2; }
+
+if curl -fs -o /dev/null "http://127.0.0.1:$port/"; then
+  echo "port $port is in use; run '$0 stop' or set SPARKLE_CHECK_PORT" >&2
+  exit 1
+fi
+mkdir -p "$work"/{tools,keys,derived,stage,serve}
+
+echo "== Sparkle tools"
+if [ ! -x "$work/tools/bin/generate_appcast" ]; then
+  curl -fsSL -o "$work/tools/sparkle.tar.xz" \
+    "https://github.com/sparkle-project/Sparkle/releases/download/$sparkle_version/Sparkle-$sparkle_version.tar.xz"
+  echo "$sparkle_sha256  $work/tools/sparkle.tar.xz" | shasum -a 256 -c -
+  tar -xJf "$work/tools/sparkle.tar.xz" -C "$work/tools" ./bin
+fi
+
+echo "== Throwaway EdDSA key (a file, not the Keychain)"
+cat >"$work/keys/gen.swift" <<'EOF'
+import CryptoKit
+import Foundation
+let key = Curve25519.Signing.PrivateKey()
+try key.rawRepresentation.base64EncodedString().write(toFile: CommandLine.arguments[1], atomically: true, encoding: .utf8)
+try key.publicKey.rawRepresentation.base64EncodedString().write(toFile: CommandLine.arguments[2], atomically: true, encoding: .utf8)
+EOF
+swift "$work/keys/gen.swift" "$work/keys/ed.key" "$work/keys/ed.pub"
+chmod 600 "$work/keys/ed.key"
+pub=$(cat "$work/keys/ed.pub")
+
+echo "== Build the two copies"
+xcodegen generate >/dev/null
+rm -rf "$work/stage" "$work/serve"
+mkdir -p "$work/stage" "$work/serve"
+for n in 1 2; do
+  version=1.0.0-test.$n
+  xcodebuild -project Yaagl.xcodeproj -scheme Yaagl -configuration Release \
+    -destination 'platform=macOS,arch=arm64' -derivedDataPath "$work/derived" \
+    MARKETING_VERSION="$version" CURRENT_PROJECT_VERSION="900$n" build >"$work/build-$n.log" 2>&1 \
+    || { tail -20 "$work/build-$n.log"; exit 1; }
+  mkdir -p "$work/stage/$n"
+  ditto "$work/derived/Build/Products/Release/Yaagl.app" "$work/stage/$n/Yaagl.app"
+  plist=$work/stage/$n/Yaagl.app/Contents/Info.plist
+  /usr/libexec/PlistBuddy -c "Set :SUPublicEDKey $pub" "$plist"
+  /usr/libexec/PlistBuddy -c "Set :SUFeedURL http://127.0.0.1:$port/appcast.xml" "$plist"
+  # Plain http to 127.0.0.1, in the test copies only. project.yml stays as it is.
+  /usr/libexec/PlistBuddy -c "Add :NSAppTransportSecurity dict" "$plist"
+  /usr/libexec/PlistBuddy -c "Add :NSAppTransportSecurity:NSAllowsLocalNetworking bool true" "$plist"
+  codesign --force --deep --sign - "$work/stage/$n/Yaagl.app"
+  codesign --verify --deep --strict "$work/stage/$n/Yaagl.app"
+done
+
+echo "== Sign test.2 and write the appcast"
+ditto -c -k --sequesterRsrc --keepParent "$work/stage/2/Yaagl.app" "$work/serve/Yaagl-1.0.0-test.2.zip"
+printf '%s' "$(cat "$work/keys/ed.key")" | "$work/tools/bin/generate_appcast" --ed-key-file - \
+  --download-url-prefix "http://127.0.0.1:$port/" -o "$work/serve/appcast.xml" "$work/serve"
+grep -q 'sparkle:edSignature' "$work/serve/appcast.xml"
+grep -q '<sparkle:shortVersionString>1.0.0-test.2<' "$work/serve/appcast.xml"
+sig=$(grep -o 'sparkle:edSignature="[^"]*"' "$work/serve/appcast.xml" | head -1 | cut -d'"' -f2)
+swift scripts/release/verify-ed-signature.swift "$pub" "$sig" "$work/serve/Yaagl-1.0.0-test.2.zip"
+
+echo "== Serve the feed on 127.0.0.1:$port"
+(cd "$work/serve" && nohup python3 -I -m http.server "$port" --bind 127.0.0.1 --directory "$work/serve" \
+  >"$work/server.log" 2>&1 & echo $! >"$work/server.pid")
+for _ in 1 2 3 4 5 6 7 8 9 10; do
+  curl -fs -o /dev/null "http://127.0.0.1:$port/appcast.xml" && break
+  sleep 0.5
+done
+curl -fs -o /dev/null "http://127.0.0.1:$port/appcast.xml" || { echo "feed is not served" >&2; exit 1; }
+
+echo "== Install and start test.1"
+pkill -f "$app/Contents/MacOS/Yaagl" 2>/dev/null || true
+rm -rf "$work/app" "$data"
+mkdir -p "$work/app" "$data"
+ditto "$work/stage/1/Yaagl.app" "$app"
+# Fresh-install conditions for Sparkle: no saved choices, and a check time of now so the daily check does not
+# fire by itself and the click below is the only trigger.
+defaults_keys save
+defaults write "$domain" SULastCheckTime -date "$(date -u '+%Y-%m-%d %H:%M:%S +0000')"
+launchctl setenv YAAGL_DATA_DIR "$data"
+open -n "$app"
+
+cat <<EOF
+
+test.1 (1.0.0-test.1, build 9001) is running from $app
+feed:  http://127.0.0.1:$port/appcast.xml  (lists 1.0.0-test.2, build 9002, EdDSA-signed with a throwaway key)
+data:  $data  (YAAGL_DATA_DIR is set with launchctl, so the relaunched app uses it too)
+
+Waiting for a click. Expected:
+  1. Yaagl > Check for Updates… offers 1.0.0-test.2; Install and Relaunch installs it.
+  2. The app relaunches as 1.0.0-test.2 (About / $app/Contents/Info.plist).
+  3. Settings > "Automatically check for updates" is on at first; switched off, it stays off after a restart.
+Then: $0 stop
+EOF
