@@ -32,9 +32,8 @@ private func isError(_ error: (any Error)?, _ expected: SophonError) -> Bool {
     rig.cdn.chunkDelay = .milliseconds(400)
 
     let task = Task { await rig.run(.install) }
-    try await Task.sleep(for: .milliseconds(150))
     // Mid-install: the template is there, the real version is not, and the game does not count as installed.
-    #expect(rig.configText?.contains("game_version=0.0.0") == true)
+    #expect(await rig.waitForConfig(version: "0.0.0"))
     #expect(try await rig.client.status().localVersion == nil)
     task.cancel()
     _ = await task.value
