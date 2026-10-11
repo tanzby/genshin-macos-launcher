@@ -18,6 +18,8 @@ Push a semver tag from `main` (`1.0.0-rc.1`, ..., `1.0.0`). `.github/workflows/r
 3. Settings shows "Automatically check for updates" on. Turn it off, quit, relaunch: it stays off.
 4. Run `scripts/dev/sparkle-local-check stop`: it stops the server and the app, unsets `YAAGL_DATA_DIR` and restores the Sparkle keys of the preference domain.
 
+The test copies have no DXMT unless `scripts/build-dxmt` ran in the checkout, so "Set up Wine" fails in them ("无法完成 Wine 的设置"); the update check does not need Wine, and a release build always carries DXMT (`release.yaml` builds it and runs `check-bundle` with `REQUIRE_DXMT=1`).
+
 The data directory reaches the relaunched app through `launchctl setenv YAAGL_DATA_DIR`, because Sparkle relaunches without command-line arguments. The test copies share the bundle id, and so the preference domain, with the real app; the script saves the Sparkle (`SU*`) keys before the test and `stop` puts them back. The real app in `/Applications` and `~/Library/Application Support/Yaagl` are never touched.
 
 ## EdDSA key (maintainer only, agents never touch it)

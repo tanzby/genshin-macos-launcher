@@ -99,6 +99,9 @@ chmod 600 "$work/keys/ed.key"
 pub=$(cat "$work/keys/ed.pub")
 
 echo "== Build the two copies"
+# project.yml bundles build/dxmt (scripts/build-dxmt) when it exists. Without it the test copies cannot set up Wine
+# ("无法完成 Wine 的设置"); the update check does not need Wine, a release build always has DXMT (release.yaml).
+[ -d build/dxmt ] || echo "note: no build/dxmt, so Wine setup inside the test copies will fail; the update check is not affected"
 xcodegen generate >/dev/null
 rm -rf "$work/stage" "$work/serve"
 mkdir -p "$work/stage" "$work/serve"
