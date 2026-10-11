@@ -114,4 +114,38 @@ private func waitForLaunch(_ fake: FakeGameClient) async {
     #expect(fake.recoveries == 1)
     #expect(fake.statusCalls == 1)
   }
+
+  @MainActor
+  @Test func PRG_006_pauseWaitsForTheClientToQuiesceAfterTheJobStream() async throws {
+    let fake = FakeGameClient(status: GameStatus(localVersion: "4.9.0", remoteVersion: "5.0.0", canUpdate: true))
+    let directory = FileManager.default.temporaryDirectory.appending(path: "handoff-\(UUID().uuidString)")
+    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: directory) }
+    let model = LauncherModel(client: fake, gameDirectory: directory)
+    await model.refresh()
+    try await model.start(.update)
+    _ = try await fake.nextRun()
+
+    await model.pause()
+
+    #expect(fake.quiesces >= 1)
+  }
+
+  @MainActor
+  @Test func INS_015_aPreDownloadRecordsThePreDownloadVersionAsItsTarget() async throws {
+    let fake = FakeGameClient(
+      status: GameStatus(
+        localVersion: "5.0.0", remoteVersion: "5.0.0", canPreDownload: true, preDownloadVersion: "5.1.0"))
+    let directory = FileManager.default.temporaryDirectory.appending(path: "handoff-\(UUID().uuidString)")
+    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: directory) }
+    let model = LauncherModel(client: fake, gameDirectory: directory)
+    await model.refresh()
+    try await model.start(.preDownload)
+    let run = try await fake.nextRun()
+
+    #expect(PendingJobStore(gameDirectory: directory).load()?.targetVersion == "5.1.0")
+    fake.finish(run: run)
+    await model.waitUntilIdle()
+  }
 }

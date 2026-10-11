@@ -88,6 +88,8 @@ public final class GenshinCNClient: GameClient {
 
   public func recover() async { await launcher.recover() }
 
+  public func quiesce() async { await serializer.waitUntilIdle() }
+
   public func setGameDirectory(_ url: URL?) {
     location.withLock { $0 = url }
   }

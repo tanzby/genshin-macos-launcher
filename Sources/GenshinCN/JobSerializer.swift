@@ -9,6 +9,12 @@ import Synchronization
 final class JobSerializer: Sendable {
   private let tail = Mutex<Task<Void, Never>?>(nil)
 
+  /// Returns once everything queued so far has returned.
+  func waitUntilIdle() async {
+    let last = tail.withLock { $0 }
+    await last?.value
+  }
+
   @discardableResult
   func enqueue(_ work: @escaping @Sendable () async -> Void) -> Task<Void, Never> {
     tail.withLock { tail in

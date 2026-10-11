@@ -281,7 +281,8 @@ public final class LauncherModel {
 
   private func begin(_ job: GameJob, store: PendingJobStore) throws -> AsyncThrowingStream<JobProgress, Error> {
     client.setGameDirectory(store.gameDirectory)
-    let pending = PendingJob(kind: job, targetVersion: status?.remoteVersion)
+    let target = job == .preDownload ? status?.preDownloadVersion : status?.remoteVersion
+    let pending = PendingJob(kind: job, targetVersion: target ?? status?.remoteVersion)
     // A pre-download must not replace the marker of an unfinished install/update/repair: that one blocks launch.
     if job == .preDownload, let existing = store.load(), existing.kind != .preDownload {
       progress = .preparing
@@ -346,6 +347,8 @@ public final class LauncherModel {
     if preDownload { tasks += [preDownloadTask].compactMap { $0 } }
     for task in tasks { task.cancel() }
     for task in tasks { await task.value }
+    // The streams are over, but the work behind them may still be finishing a file.
+    await client.quiesce()
   }
 
   private func stopPreDownload() async {

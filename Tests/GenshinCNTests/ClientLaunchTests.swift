@@ -220,6 +220,24 @@ final class Counter: @unchecked Sendable {
 
     #expect(await log.entries == ["first:start", "first:stopped", "second:start"])
   }
+
+  @Test func ADR0002_waitUntilIdleReturnsOnlyAfterQueuedWorkHasFinished() async {
+    let serializer = JobSerializer()
+    let log = Log()
+    serializer.enqueue {
+      try? await Task.sleep(for: .milliseconds(80))
+      await log.add("work:done")
+    }
+
+    await serializer.waitUntilIdle()
+    await log.add("idle")
+
+    #expect(await log.entries == ["work:done", "idle"])
+  }
+
+  @Test func ADR0002_waitUntilIdleWithNothingQueuedReturnsAtOnce() async {
+    await JobSerializer().waitUntilIdle()
+  }
 }
 
 actor Log {

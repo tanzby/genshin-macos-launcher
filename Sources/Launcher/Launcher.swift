@@ -116,11 +116,15 @@ public protocol GameClient: Sendable {
   /// Kills what a crashed launcher left of the game session and restores the files it had changed (ADR 0002).
   /// Called once at startup, after Wine is ready and before the game status is read; never while a game runs.
   func recover() async
+  /// Returns once nothing the client started is still running. A job's stream ends as soon as its consumer is
+  /// cancelled; this is how the launcher learns the work behind it has really stopped (pause, shutdown).
+  func quiesce() async
 }
 
 extension GameClient {
   public func setGameDirectory(_ url: URL?) {}
   public func recover() async {}
+  public func quiesce() async {}
 }
 
 /// The seam between the launcher and the Wine runtime. `WineRuntime` is the production implementation;

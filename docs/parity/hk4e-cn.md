@@ -72,7 +72,7 @@
 | APP-016 | 是否需要更新 | 照搬 | TS 行为不变，但依 ADR 0002 在 Sophon/Launcher 重做 | 组件 |  |
 | APP-017 | 主按钮的文案与动作 | 改写 | [#21](https://github.com/tanzby/yet-another-anime-game-launcher/issues/21) SwiftUI 主界面 / 设置窗口重新设计 | 组件 |  |
 | APP-018 | 设置按钮的可见性 | 改写 | [#21](https://github.com/tanzby/yet-another-anime-game-launcher/issues/21) SwiftUI 主界面 / 设置窗口重新设计 | 组件 |  |
-| APP-019 | 启动器启动时还原残留补丁（init） | 改写 | [#28](https://github.com/tanzby/yet-another-anime-game-launcher/issues/28) B12：启动时 GameSession.recover() 自愈 | 组件 |  |
+| APP-019 | 启动器启动时还原残留补丁（init） | 改写 | [#28](https://github.com/tanzby/yet-another-anime-game-launcher/issues/28) B12：启动时 GameSession.recover() 自愈 | 组件 | `APP_019_*`（ClientLaunchTests、LauncherClientHandoffTests；GameSession 侧见 LCH_038） |
 | APP-020 | YAAGL_AUTOLAUNCH 自动启动 | 改写 | ADR 0002 命令行入口，diag 适配票 | 组件 |  |
 | APP-021 | 启动器背景资源 | 改写 | [#21](https://github.com/tanzby/yet-another-anime-game-launcher/issues/21) SwiftUI 主界面 / 设置窗口重新设计 | 组件 |  |
 | APP-022 | 窗口关闭与终止钩子 | 改写 | [#28](https://github.com/tanzby/yet-another-anime-game-launcher/issues/28) C 负面用例 | 组件 |  |
