@@ -57,6 +57,7 @@ public final class OnboardingModel {
   }
 
   private func checkGameDirectory() {
+    // No folder chosen yet is not a problem to report here.
     gameDirectoryUsable = settings.gameDirectory.map(GameDirectoryValidator.isUsable) ?? true
   }
 

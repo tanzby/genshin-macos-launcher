@@ -253,7 +253,7 @@ public final class LauncherModel {
         try Task.checkCancellation()
         stream = try begin(job, store: store)
       } catch {
-        releaseSlot(preDownload: job == .preDownload)
+        releaseSlot(preDownload: false)
         readySink.finish(throwing: error)
         return
       }
@@ -299,7 +299,7 @@ public final class LauncherModel {
     client.setGameDirectory(store.gameDirectory)
     let pending = PendingJob(kind: job, targetVersion: job == .preDownload ? status?.preDownloadTarget : status?.remoteVersion)
     // A pre-download must not replace the marker of an unfinished install/update/repair: that one blocks launch.
-    if !(job == .preDownload && store.load()?.blocksLaunch == true) {
+    if !Self.leavesMarkerAlone(job, store: store) {
       // Without a marker an interrupted job could neither be continued nor block launching: refuse to start.
       do { try store.save(pending) } catch { throw LauncherError.unexpected("job.json could not be written") }
       pendingJob = pending
@@ -329,7 +329,7 @@ public final class LauncherModel {
       eventSink.yield(.failed(job, error))
     } else {
       // A finished pre-download leaves an unfinished install/update/repair marker alone.
-      let foreign = job == .preDownload && store.load()?.blocksLaunch == true
+      let foreign = Self.leavesMarkerAlone(job, store: store)
       let cleared = foreign || store.clear()
       if !foreign { pendingJob = nil }
       await refresh()
@@ -345,6 +345,11 @@ public final class LauncherModel {
     ProcessInfo.processInfo.endActivity(activity)
     progress = nil
     releaseSlot(preDownload: job == .preDownload)
+  }
+
+  /// A pre-download running beside an unfinished install/update/repair neither writes nor clears its marker.
+  private static func leavesMarkerAlone(_ job: GameJob, store: PendingJobStore) -> Bool {
+    job == .preDownload && store.load()?.blocksLaunch == true
   }
 
   /// Frees the pre-download slot, or the exclusive one that install/update/repair, Wine and launch share.
