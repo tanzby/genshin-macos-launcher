@@ -1259,6 +1259,23 @@
         }
       }
     },
+    "Rosetta 2 is not installed. Install it, then reopen Yaagl.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rosetta 2 is not installed. Install it, then reopen Yaagl."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "尚未安装 Rosetta 2。请先安装，再重新打开 Yaagl。"
+          }
+        }
+      }
+    },
     "Running": {
       "extractionState": "manual",
       "localizations": {
@@ -1531,6 +1548,57 @@
         }
       }
     },
+    "The data folder could not be prepared: %@": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The data folder could not be prepared: %@"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "无法准备数据文件夹：%@"
+          }
+        }
+      }
+    },
+    "The data folder was written by a newer version of Yaagl (format %lld). Update Yaagl, then reopen it.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The data folder was written by a newer version of Yaagl (format %lld). Update Yaagl, then reopen it."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "该数据文件夹由更新版本的 Yaagl 写入（格式 %lld）。请更新 Yaagl 后重新打开。"
+          }
+        }
+      }
+    },
+    "The data folder's marker file is damaged. Nothing was deleted. Remove the file .yaagl-native or the whole folder, then reopen Yaagl.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The data folder's marker file is damaged. Nothing was deleted. Remove the file .yaagl-native or the whole folder, then reopen Yaagl."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "数据文件夹的标记文件已损坏，未删除任何内容。请删除 .yaagl-native 文件或整个文件夹，然后重新打开 Yaagl。"
+          }
+        }
+      }
+    },
     "The folder cannot be read.": {
       "extractionState": "manual",
       "localizations": {
@@ -1663,6 +1731,23 @@
           "stringUnit": {
             "state": "translated",
             "value": "游戏已退出，退出码 %lld。"
+          }
+        }
+      }
+    },
+    "The game folder is damaged or is not the China release.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The game folder is damaged or is not the China release."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "游戏目录已损坏，或不是国服正式版。"
           }
         }
       }
@@ -2177,23 +2262,6 @@
         }
       }
     },
-    "The game folder is damaged or is not the China release.": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "The game folder is damaged or is not the China release."
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "游戏目录已损坏，或不是国服正式版。"
-          }
-        }
-      }
-    },
     "Wine has to be reinstalled.": {
       "extractionState": "manual",
       "localizations": {
@@ -2207,23 +2275,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "需要重新安装 Wine。"
-          }
-        }
-      }
-    },
-    "Rosetta 2 is not installed. Install it, then reopen Yaagl.": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Rosetta 2 is not installed. Install it, then reopen Yaagl."
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "尚未安装 Rosetta 2。请先安装，再重新打开 Yaagl。"
           }
         }
       }
@@ -2292,6 +2343,40 @@
           "stringUnit": {
             "state": "translated",
             "value": "Yaagl 会在 /etc/hosts 中加入一段带标记的内容，把游戏的遥测域名指向 0.0.0.0。没有它游戏无法启动。macOS 会要求输入管理员密码。"
+          }
+        }
+      }
+    },
+    "Yaagl can't start": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Yaagl can't start"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Yaagl 无法启动"
+          }
+        }
+      }
+    },
+    "Yaagl could not remove %@: %@. Remove it yourself, then reopen Yaagl.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Yaagl could not remove %@: %@. Remove it yourself, then reopen Yaagl."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Yaagl 无法删除 %@：%@。请手动删除后重新打开 Yaagl。"
           }
         }
       }
