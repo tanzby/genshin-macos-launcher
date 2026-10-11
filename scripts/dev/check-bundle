@@ -1,6 +1,6 @@
 #!/bin/sh
 # Asserts what a built Yaagl.app must contain: x86_64 helpers in Contents/Helpers/ and the
-# protonextras Windows files in Contents/Resources/protonextras/, plus the Sparkle defaults in Info.plist. Usage: check-bundle [Yaagl.app]
+# protonextras Windows files in Contents/Resources/protonextras/, DXMT in Contents/Resources/dxmt/ (if built), plus the Sparkle defaults in Info.plist. Usage: check-bundle [Yaagl.app]
 set -eu
 cd "$(dirname "$0")/../.."
 app="${1:-build/DerivedData/Build/Products/Debug/Yaagl.app}"
@@ -14,6 +14,14 @@ done
 for extra in steam32.exe steam64.exe lsteamclient32.dll lsteamclient64.dll; do
   [ -f "$app/Contents/Resources/protonextras/$extra" ] || { echo "missing: protonextras/$extra"; fail=1; }
 done
+# DXMT (scripts/build-dxmt) is checked when it was built into the bundle or REQUIRE_DXMT=1 (the release build).
+dxmt="$app/Contents/Resources/dxmt"
+if [ -d "$dxmt" ] || [ "${REQUIRE_DXMT:-0}" = 1 ]; then
+  for f in x86_64-windows/d3d10core.dll x86_64-windows/d3d11.dll x86_64-windows/dxgi.dll x86_64-windows/winemetal.dll \
+           x86_64-unix/winemetal.so VERSION COPYING.LIB LICENSE.LLVM; do
+    [ -s "$dxmt/$f" ] || { echo "missing: dxmt/$f"; fail=1; }
+  done
+fi
 # Sparkle defaults: check on its own without the first-launch permission prompt, once a day.
 plist="$app/Contents/Info.plist"
 [ "$(/usr/libexec/PlistBuddy -c 'Print :SUEnableAutomaticChecks' "$plist" 2>/dev/null)" = "true" ] \

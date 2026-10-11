@@ -7,23 +7,21 @@ import Testing
 private let thumbprint = "F09065E2D57F005BBD975DDCF9EB63F570764F17"
 
 @Suite("WIN-006/007 download, replace and cleanup") struct WineInstallDownloadTests {
-  @Test("WIN-007 downloads wine from distribution.url and DXMT from zipURL, once each")
-  func downloadsBoth() async throws {
+  @Test("WIN-007 downloads wine from distribution.url, once")
+  func downloadsWine() async throws {
     try await withWineTempDirectory { dir in
       let h = try await makeInstalledWineHarness(in: dir)
       #expect(h.downloader.count(of: h.fixtures.distribution.url) == 1)
-      #expect(h.downloader.count(of: h.fixtures.dxmt.zipURL) == 1)
-      #expect(h.downloader.requests.count == 2)
+      #expect(h.downloader.requests.count == 1)
     }
   }
 
-  @Test("WIN-007 requests pass the pinned sha256 for both archives")
+  @Test("WIN-007 the request passes the pinned sha256")
   func passesChecksums() async throws {
     try await withWineTempDirectory { dir in
       let h = try await makeInstalledWineHarness(in: dir)
       let bySHA = Dictionary(uniqueKeysWithValues: h.downloader.requests.map { ($0.url, $0.sha256) })
       #expect(bySHA[h.fixtures.distribution.url] == h.fixtures.distribution.sha256)
-      #expect(bySHA[h.fixtures.dxmt.zipURL] == h.fixtures.dxmt.sha256)
     }
   }
 
@@ -51,8 +49,8 @@ private let thumbprint = "F09065E2D57F005BBD975DDCF9EB63F570764F17"
       #expect(!wineExists(h.layout.prefixDirectory))
       #expect(await h.runtime.status() == .needsInstall(.notInstalled))
       #expect(h.runner.wineCalls.isEmpty)
-      // Only the finished DXMT archive stays, in downloads/, for the next attempt.
-      #expect(try FileManager.default.contentsOfDirectory(atPath: h.root.path) == ["downloads"])
+      // The corrupt archive is removed and nothing else was written.
+      #expect(try FileManager.default.contentsOfDirectory(atPath: h.root.path).isEmpty)
     }
   }
 
@@ -66,7 +64,7 @@ private let thumbprint = "F09065E2D57F005BBD975DDCF9EB63F570764F17"
       #expect(!wineExists(h.root.appending(path: "wine/old-sentinel.txt")))
       #expect(!wineExists(h.root.appending(path: "wineprefix/old-sentinel.txt")))
       #expect(await h.runtime.status() == .ready)
-      #expect(h.downloader.requests.count == 4)
+      #expect(h.downloader.requests.count == 2)  // the Wine archive, once per install
     }
   }
 
@@ -97,21 +95,6 @@ private let thumbprint = "F09065E2D57F005BBD975DDCF9EB63F570764F17"
     }
   }
 
-  @Test("WIN-006 a failing DXMT download also leaves existing wine and wineprefix untouched")
-  func dxmtDownloadFailureKeepsOld() async throws {
-    try await withWineTempDirectory { dir in
-      var options = WineHarnessOptions()
-      options.failingURLs = { [$0.dxmt.zipURL] }
-      let h = try makeWineHarness(in: dir, options: options)
-      try h.writeFile("wine/sentinel.txt")
-      try h.writeFile("wineprefix/sentinel.txt")
-      await #expect(throws: WineStubDownloadFailure()) { try await h.install() }
-      #expect(wineExists(h.root.appending(path: "wine/sentinel.txt")))
-      #expect(wineExists(h.root.appending(path: "wineprefix/sentinel.txt")))
-      #expect(h.runner.wineCalls.isEmpty)
-    }
-  }
-
   @Test("WIN-006 ensureInstalled when already ready does nothing")
   func ensureInstalledNoop() async throws {
     try await withWineTempDirectory { dir in
@@ -138,7 +121,6 @@ private let thumbprint = "F09065E2D57F005BBD975DDCF9EB63F570764F17"
       try await a.value
       try await b.value
       #expect(h.downloader.count(of: h.fixtures.distribution.url) == 1)
-      #expect(h.downloader.count(of: h.fixtures.dxmt.zipURL) == 1)
       #expect(h.runner.wineCalls.filter { $0.arguments.first == "wineboot" }.count == 1)
       #expect(await h.runtime.status() == .ready)
     }
@@ -376,15 +358,67 @@ private let thumbprint = "F09065E2D57F005BBD975DDCF9EB63F570764F17"
     }
   }
 
-  @Test("WIN-020 an invalid DXMT archive (no x86_64-windows) throws dxmtArchiveInvalid and leaves no stamp")
+  @Test("WIN-020 a DXMT bundle without x86_64-windows throws dxmtBundleInvalid before anything is downloaded or deleted")
   func invalidDXMT() async throws {
     try await withWineTempDirectory { dir in
       var options = WineHarnessOptions()
       options.fixture.dxmtHasX64 = false
       let h = try makeWineHarness(in: dir, options: options)
-      await #expect(throws: WineInstallError.dxmtArchiveInvalid) { try await h.install() }
+      try h.writeFile("wine/sentinel.txt")
+      await #expect(throws: WineInstallError.dxmtBundleInvalid) { try await h.install() }
+      #expect(h.downloader.requests.isEmpty)
+      #expect(wineExists(h.root.appending(path: "wine/sentinel.txt")))
       #expect(!wineExists(h.layout.stampFile))
-      #expect(await h.runtime.status() == .needsInstall(.notInstalled))
+    }
+  }
+
+  @Test("WIN-020 an app without DXMT cannot install Wine")
+  func noBundle() async throws {
+    try await withWineTempDirectory { dir in
+      let h = try makeWineHarness(in: dir)
+      let bare = WineRuntime(
+        dataDirectory: DataDirectory(root: h.root), distribution: h.fixtures.distribution, dxmt: nil,
+        downloader: h.downloader, runner: h.runner)
+      await #expect(throws: WineInstallError.dxmtBundleInvalid) { try await bare.ensureInstalled() }
+      #expect(h.downloader.requests.isEmpty)
+    }
+  }
+
+  @Test("WIN-019 a newer DXMT in the app is copied over the old one; Wine, the prefix and the network stay out of it")
+  func refreshOnlyDXMT() async throws {
+    try await withWineTempDirectory { dir in
+      let h = try await makeInstalledWineHarness(in: dir)
+      try h.writeFile("wineprefix/user.reg", "player data")
+      try h.writeFile("wine/bin/sentinel.txt")
+      let downloads = h.downloader.requests.count
+      let calls = h.runner.calls.count
+
+      // The next app release ships another DXMT build.
+      let newer = dir.appending(path: "dxmt-newer", directoryHint: .isDirectory)
+      try FileManager.default.copyItem(at: h.fixtures.dxmt.directory, to: newer)
+      for name in WineFixtureContent.dxmtWindowsFiles {
+        try Data("NEWER-\(name)".utf8).write(to: newer.appending(path: "x86_64-windows/\(name)"))
+      }
+      try Data("NEWER-winemetal.so".utf8).write(to: newer.appending(path: "x86_64-unix/winemetal.so"))
+      let bundle = DXMTBundle(directory: newer, version: "newer123")
+      let updated = WineRuntime(
+        dataDirectory: DataDirectory(root: h.root), distribution: h.fixtures.distribution, dxmt: bundle,
+        downloader: h.downloader, runner: h.runner)
+      #expect(await updated.status() == .needsInstall(.dxmtOutdated))
+
+      let collector = WineProgressCollector()
+      try await updated.ensureInstalled(progress: collector.callback)
+
+      #expect(collector.collapsed == ["installingDXMT", "finalizing"])
+      #expect(await updated.status() == .ready)
+      #expect(try h.readStamp() == WineStamp(wineVersion: "test-wine-1", dxmtVersion: "newer123"))
+      #expect(try Data(contentsOf: h.layout.windowsLibraryDirectory.appending(path: "d3d11.dll")) == Data("NEWER-d3d11.dll".utf8))
+      #expect(try Data(contentsOf: h.layout.unixLibraryDirectory.appending(path: "winemetal.so")) == Data("NEWER-winemetal.so".utf8))
+      #expect(try Data(contentsOf: h.layout.prefixSystem32.appending(path: "winemetal.dll")) == Data("NEWER-winemetal.dll".utf8))
+      #expect(h.downloader.requests.count == downloads)
+      #expect(h.runner.calls.count == calls)
+      #expect(wineExists(h.root.appending(path: "wineprefix/user.reg")))
+      #expect(wineExists(h.root.appending(path: "wine/bin/sentinel.txt")))
     }
   }
 }
@@ -395,7 +429,7 @@ private let thumbprint = "F09065E2D57F005BBD975DDCF9EB63F570764F17"
     try await withWineTempDirectory { dir in
       let h = try await makeInstalledWineHarness(in: dir)
       #expect(h.layout.stampFile.path.hasSuffix("wine/.yaagl-wine-stamp.json"))
-      #expect(try h.readStamp() == WineStamp(schemaVersion: 1, wineVersion: "test-wine-1", dxmtVersion: "abc1234"))
+      #expect(try h.readStamp() == WineStamp(schemaVersion: 1, wineVersion: "test-wine-1", dxmtVersion: wineFixtureCommit))
     }
   }
 
@@ -446,19 +480,15 @@ private let thumbprint = "F09065E2D57F005BBD975DDCF9EB63F570764F17"
     }
   }
 
-  @Test("WIN-014 progress arrives as downloads (in parallel), extracting, configuring, initializingPrefix, installingDXMT, finalizing")
+  @Test("WIN-014 progress arrives as the download, extracting, configuring, initializingPrefix, installingDXMT, finalizing")
   func progressOrder() async throws {
     try await withWineTempDirectory { dir in
       let h = try makeWineHarness(in: dir)
       let collector = WineProgressCollector()
       try await h.runtime.ensureInstalled(progress: collector.callback)
-      // The two downloads run at the same time, so their reports may interleave; both come first.
-      let stages = collector.collapsed
-      let downloads = stages.prefix { $0.hasPrefix("downloading") }
-      #expect(Set(downloads) == ["downloadingWine", "downloadingDXMT"])
       #expect(
-        Array(stages.dropFirst(downloads.count)) == [
-          "extracting", "configuring", "initializingPrefix", "installingDXMT", "finalizing",
+        collector.collapsed == [
+          "downloadingWine", "extracting", "configuring", "initializingPrefix", "installingDXMT", "finalizing",
         ])
     }
   }

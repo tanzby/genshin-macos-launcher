@@ -8,7 +8,7 @@ public actor WineRuntime {
 
   public nonisolated let layout: WineLayout
   let distribution: WineDistribution
-  let dxmt: DXMTRelease
+  let dxmt: DXMTBundle?
   let downloader: any Downloading
   let runner: any ProcessRunning
   let availableSpace: @Sendable (URL) -> Int64?
@@ -17,7 +17,7 @@ public actor WineRuntime {
   public init(
     dataDirectory: DataDirectory,
     distribution: WineDistribution = .pinned,
-    dxmt: DXMTRelease = .pinned,
+    dxmt: DXMTBundle? = nil,
     downloader: any Downloading = Downloader(),
     runner: (any ProcessRunning)? = nil,
     availableSpace: @escaping @Sendable (URL) -> Int64? = WineRuntime.volumeAvailableSpace
@@ -40,14 +40,24 @@ public actor WineRuntime {
   public nonisolated var runtimeDirectory: URL { layout.runtimeDirectory }
   public nonisolated var prefixDirectory: URL { layout.prefixDirectory }
 
-  /// Whether the pinned Wine and DXMT are installed and intact. Looks at the disk, not just the stamp.
+  /// The DXMT build in the app, if it has one.
+  public nonisolated var bundledDXMT: DXMTBundle? { dxmt }
+
+  /// Whether the pinned Wine and the app's DXMT are installed and intact. Looks at the disk, not just the stamp.
   public func status() -> WineStatus {
     currentStatus()
   }
 
-  /// Installs Wine + DXMT + prefix when `status()` is not `.ready`. Concurrent callers share one install.
+  /// Installs Wine + DXMT + prefix when `status()` is not `.ready`; when only DXMT is outdated (an app update
+  /// brought a newer one) it just copies the new files. Concurrent callers share one install.
   public func ensureInstalled(progress: @escaping @Sendable (WineInstallProgress) -> Void = { _ in }) async throws {
-    if installation == nil, currentStatus() == .ready { return }
+    if installation == nil {
+      switch currentStatus() {
+      case .ready: return
+      case .needsInstall(.dxmtOutdated): return try await runRefresh(progress: progress)
+      case .needsInstall: break
+      }
+    }
     try await runInstall(progress: progress)
   }
 
@@ -57,11 +67,19 @@ public actor WineRuntime {
   }
 
   private func runInstall(progress: @escaping @Sendable (WineInstallProgress) -> Void) async throws {
+    try await share { try await self.performInstall(progress: progress) }
+  }
+
+  private func runRefresh(progress: @escaping @Sendable (WineInstallProgress) -> Void) async throws {
+    try await share { try await self.refreshDXMT(progress: progress) }
+  }
+
+  private func share(_ work: @escaping @Sendable () async throws -> Void) async throws {
     if let running = installation {
       try await running.value
       return
     }
-    let task = Task { try await performInstall(progress: progress) }
+    let task = Task { try await work() }
     installation = task
     defer { installation = nil }
     // The install is its own Task so concurrent callers can share it; forward cancellation to it.

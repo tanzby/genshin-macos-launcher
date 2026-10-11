@@ -214,7 +214,7 @@ private struct Harness {
     let h = Harness(wine: missing)
     defer { h.cleanUp() }
     let (task, install) = try await h.bootstrapUntilPreparing()
-    h.wine.fail(install: install, throwing: WineInstallError.dxmtArchiveInvalid)
+    h.wine.fail(install: install, throwing: WineInstallError.dxmtBundleInvalid)
     await task.value
     #expect(h.probe.recoveries.isEmpty)
   }

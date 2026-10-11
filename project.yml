@@ -31,6 +31,11 @@ targets:
       - path: Resources/protonextras
         type: folder
         buildPhase: resources
+      # DXMT built by scripts/build-dxmt (docs/adr/0003); absent in builds that did not run it.
+      - path: build/dxmt
+        type: folder
+        optional: true
+        buildPhase: resources
     info:
       path: build/Info.plist
       properties:

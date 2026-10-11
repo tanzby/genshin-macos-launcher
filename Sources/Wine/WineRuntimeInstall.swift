@@ -15,8 +15,7 @@ extension WineRuntime {
     guard let data = try? Data(contentsOf: layout.stampFile),
       let stamp = try? JSONDecoder().decode(WineStamp.self, from: data),
       stamp.schemaVersion == WineStamp.currentSchemaVersion,
-      stamp.wineVersion == distribution.id,
-      stamp.dxmtVersion == dxmt.version
+      stamp.wineVersion == distribution.id
     else {
       return .needsInstall(.versionMismatch)
     }
@@ -32,6 +31,8 @@ extension WineRuntime {
     for (name, url) in required where !fileManager.fileExists(atPath: url.path) {
       return .needsInstall(.corrupt(missing: name))
     }
+    // An app without DXMT (a development build) cannot judge it and keeps what is installed.
+    if let dxmt, stamp.dxmtVersion != dxmt.version { return .needsInstall(.dxmtOutdated) }
     return .ready
   }
 
@@ -47,51 +48,37 @@ extension WineRuntime {
     try fileManager.createDirectory(at: scratch, withIntermediateDirectories: true)
     defer { try? fileManager.removeItem(at: scratch) }
 
-    // Archives sit at a stable path with a name derived from the checksum: an interrupted download resumes there
-    // on the next attempt (WIN-007).
+    // The archive sits at a stable path with a name derived from the checksum: an interrupted download resumes
+    // there on the next attempt (WIN-007).
     let wineArchive = layout.downloadsDirectory.appending(
       path: "wine-\(distribution.sha256.prefix(16)).archive", directoryHint: .notDirectory)
-    let dxmtArchive = layout.downloadsDirectory.appending(
-      path: "dxmt-\(dxmt.sha256.prefix(16)).zip", directoryHint: .notDirectory)
 
-    // 0. Free space, before anything is downloaded or deleted (WIN-006). An unreadable volume does not block.
-    //    On the data volume at the same time: the two archives, the unpacked runtime, the DXMT tar.gz and
-    //    unpacked files (taken as 3 x the zip) and the new prefix `wineboot` fills. Bytes of an archive that
-    //    is already there (finished or partial) are on the volume and no longer needed.
+    // 0. DXMT comes with the app. Without it nothing is downloaded or deleted.
+    let dxmtFiles = try bundledDXMTFiles()
+
+    // 1. Free space, before anything is downloaded or deleted (WIN-006). An unreadable volume does not block.
+    //    On the data volume at the same time: the archive, the unpacked runtime and the new prefix `wineboot`
+    //    fills. Bytes of an archive that is already there (finished or partial) are on the volume and no
+    //    longer needed.
     let required =
       max(0, distribution.archiveSize - Self.bytesOnDisk(of: wineArchive))
-      + max(0, dxmt.archiveSize - Self.bytesOnDisk(of: dxmtArchive)) + 3 * dxmt.archiveSize
       + distribution.installedSize + distribution.prefixSize
     if let available = availableSpace(layout.root), available < required {
       throw WineInstallError.insufficientDiskSpace(required: required, available: available)
     }
 
-    // 1. Download and verify both archives before touching the working install, so a network failure leaves
-    //    the existing runtime and prefix alone. The two run in parallel.
+    // 2. Download and verify the archive before touching the working install, so a network failure leaves
+    //    the existing runtime and prefix alone.
     try fileManager.createDirectory(at: layout.downloadsDirectory, withIntermediateDirectories: true)
-    let downloader = downloader, distribution = distribution, dxmt = dxmt
     do {
-      try await withThrowingTaskGroup(of: Void.self) { group in
-        group.addTask {
-          try await downloader.download(from: distribution.url, to: wineArchive, sha256: distribution.sha256) {
-            progress(.downloadingWine($0))
-          }
-        }
-        group.addTask {
-          try await downloader.download(from: dxmt.zipURL, to: dxmtArchive, sha256: dxmt.sha256) {
-            progress(.downloadingDXMT($0))
-          }
-        }
-        try await group.waitForAll()
+      try await downloader.download(from: distribution.url, to: wineArchive, sha256: distribution.sha256) {
+        progress(.downloadingWine($0))
       }
     } catch {
-      // Partial files stay for the next attempt; an empty directory does not.
+      // A partial file stays for the next attempt; an empty directory does not.
       removeIfEmpty(layout.downloadsDirectory)
       throw error
     }
-
-    // 2. Unpack DXMT into scratch while nothing is destroyed yet; an invalid archive fails early.
-    let dxmtFiles = try await unpackDXMT(zip: dxmtArchive, in: scratch)
 
     // 3. Replace the runtime and prefix (WIN-006). The stamp is gone with `wine/`, so an interruption
     //    from here on reads as `.interrupted`.
@@ -128,12 +115,9 @@ extension WineRuntime {
 
     // 7. Stamp last.
     progress(.finalizing)
-    let stamp = WineStamp(wineVersion: distribution.id, dxmtVersion: dxmt.version)
-    let encoder = JSONEncoder()
-    encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
-    try encoder.encode(stamp).write(to: layout.stampFile, options: .atomic)
+    try writeStamp()
 
-    // Done: the verified archives are no longer needed. After a failure they stay, so a retry does not download again.
+    // Done: the verified archive is no longer needed. After a failure it stays, so a retry does not download again.
     try? fileManager.removeItem(at: layout.downloadsDirectory)
   }
 
@@ -147,23 +131,32 @@ extension WineRuntime {
     }
   }
 
-  private func unpackDXMT(zip: URL, in scratch: URL) async throws -> DXMTFiles {
-    let unzipped = scratch.appending(path: "dxmt-zip", directoryHint: .isDirectory)
-    let unpacked = scratch.appending(path: "dxmt", directoryHint: .isDirectory)
-    try FileManager.default.createDirectory(at: unzipped, withIntermediateDirectories: true)
-    try FileManager.default.createDirectory(at: unpacked, withIntermediateDirectories: true)
-    try await runTool("/usr/bin/ditto", ["-x", "-k", zip.path, unzipped.path])
-    let inner = unzipped.appending(path: "dxmt-\(dxmt.commit).tar.gz")
-    guard FileManager.default.fileExists(atPath: inner.path) else { throw WineInstallError.dxmtArchiveInvalid }
-    try await runTool("/usr/bin/tar", ["-xf", inner.path, "-C", unpacked.path])
-    let root = unpacked.appending(path: dxmt.commit, directoryHint: .isDirectory)
-    let windows = root.appending(path: "x86_64-windows", directoryHint: .isDirectory)
-    let unix = root.appending(path: "x86_64-unix", directoryHint: .isDirectory)
+  /// The files to install, checked up front so a broken app fails before anything is deleted.
+  private func bundledDXMTFiles() throws -> DXMTFiles {
+    guard let dxmt else { throw WineInstallError.dxmtBundleInvalid }
     let fileManager = FileManager.default
-    guard WineLayout.dxmtWindowsFiles.allSatisfy({ fileManager.fileExists(atPath: windows.appending(path: $0).path) }),
-      fileManager.fileExists(atPath: unix.appending(path: "winemetal.so").path)
-    else { throw WineInstallError.dxmtArchiveInvalid }
-    return DXMTFiles(windows: windows, unix: unix)
+    let files = DXMTFiles(windows: dxmt.windowsDirectory, unix: dxmt.unixDirectory)
+    guard WineLayout.dxmtWindowsFiles.allSatisfy({ fileManager.fileExists(atPath: files.windows.appending(path: $0).path) }),
+      fileManager.fileExists(atPath: files.unix.appending(path: "winemetal.so").path)
+    else { throw WineInstallError.dxmtBundleInvalid }
+    return files
+  }
+
+  /// A newer DXMT arrived with an app update: replace its files and the stamp, keep Wine and the prefix.
+  func refreshDXMT(progress: @escaping @Sendable (WineInstallProgress) -> Void) async throws {
+    let files = try bundledDXMTFiles()
+    // A running game holds the old winemetal.so; the launcher only refreshes while nothing runs.
+    progress(.installingDXMT)
+    try installDXMT(from: files)
+    progress(.finalizing)
+    try writeStamp()
+  }
+
+  private func writeStamp() throws {
+    let stamp = WineStamp(wineVersion: distribution.id, dxmtVersion: dxmt?.version ?? "")
+    let encoder = JSONEncoder()
+    encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+    try encoder.encode(stamp).write(to: layout.stampFile, options: .atomic)
   }
 
   private func initializePrefix() async throws {
@@ -197,6 +190,8 @@ extension WineRuntime {
   private func replace(_ source: URL, with destination: URL) throws {
     try removeIfPresent(destination)
     try FileManager.default.copyItem(at: source, to: destination)
+    // An app that came from a quarantined download passes the flag on to what we copy out of it.
+    try Quarantine.remove(from: destination)
   }
 
   static let toolOutputLimit = 2000

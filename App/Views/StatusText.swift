@@ -102,7 +102,6 @@ extension WineInstallProgress {
   var label: LocalizedStringResource? {
     switch self {
     case .downloadingWine: "Downloading Wine"
-    case .downloadingDXMT: "Downloading DXMT"
     case .extracting: "Extracting"
     case .configuring, .initializingPrefix: "Setting up the Wine environment"
     case .installingDXMT: "Installing DXMT"

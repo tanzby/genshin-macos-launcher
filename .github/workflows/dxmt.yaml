@@ -1,0 +1,67 @@
+name: DXMT
+
+# Builds DXMT from the pinned third_party/dxmt submodule (docs/adr/0003) and uploads it as the artifact "dxmt"
+# (the folder that ships in Yaagl.app/Contents/Resources/dxmt). release.yaml calls this workflow; it also runs on
+# pull requests and main when the pin or the recipe changes, and weekly so the cached LLVM does not expire
+# (Actions evicts caches unused for 7 days; a cold LLVM build takes about 20 minutes, a warm run about 4).
+
+on:
+  push:
+    branches: [main]
+    paths: [third_party/dxmt, scripts/build-dxmt, .github/workflows/dxmt.yaml]
+  pull_request:
+    paths: [third_party/dxmt, scripts/build-dxmt, .github/workflows/dxmt.yaml]
+  schedule:
+    - cron: "17 3 * * 1"
+  workflow_call:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: macos-15
+    timeout-minutes: 60
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # The toolchain upstream uses for the binaries we ship (3Shain/dxmt ci.yml). macos-26 would also put
+      # LLVM 15 against a newer libc++ and may need the Metal toolchain as a separate download.
+      - name: Select Xcode 16.1
+        run: sudo xcode-select -s /Applications/Xcode_16.1.app
+
+      - name: Cache LLVM 15 (x86_64)
+        id: llvm
+        uses: actions/cache@v4
+        with:
+          path: build/dxmt-toolchains/llvm-darwin
+          key: dxmt-llvm-llvmorg-15.0.7-x86_64-xcode16.1-v1
+
+      - name: Install build tools
+        run: |
+          brew install mingw-w64
+          pip3 install meson==1.10.0 --break-system-packages
+
+      - name: Build DXMT
+        run: scripts/build-dxmt
+
+      - name: Check the output
+        run: |
+          set -eu
+          out=build/dxmt
+          for f in x86_64-windows/d3d10core.dll x86_64-windows/d3d11.dll x86_64-windows/dxgi.dll \
+                   x86_64-windows/winemetal.dll x86_64-unix/winemetal.so VERSION COPYING.LIB LICENSE.LLVM; do
+            test -s "$out/$f" || { echo "::error::missing $out/$f"; exit 1; }
+          done
+          test "$(lipo -archs "$out/x86_64-unix/winemetal.so")" = x86_64
+          test "$(cat "$out/VERSION")" = "$(git rev-parse HEAD:third_party/dxmt)"
+          ls -lR "$out"
+
+      - name: Upload
+        uses: actions/upload-artifact@v4
+        with:
+          name: dxmt
+          path: build/dxmt
+          retention-days: 7

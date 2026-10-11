@@ -1,0 +1,88 @@
+#!/bin/sh
+# Builds DXMT (the third_party/dxmt submodule, pinned to a commit) into build/dxmt/, the folder that goes into
+# Yaagl.app/Contents/Resources/dxmt. Used by CI (.github/workflows/dxmt.yaml) and by hand; see docs/adr/0003.
+#
+#   build/dxmt/x86_64-windows/{d3d10core,d3d11,dxgi,winemetal}.dll
+#   build/dxmt/x86_64-unix/winemetal.so       (statically links LLVM 15 for the shader converter)
+#   build/dxmt/VERSION                        (the DXMT commit)
+#   build/dxmt/{COPYING.LIB,LICENSE.LLVM}     (licence texts that ship with the binaries)
+#
+# Needs Xcode (with the Metal toolchain), meson >= 1.3, cmake, ninja and mingw-w64:
+#   brew install meson cmake ninja mingw-w64
+# The first run also builds LLVM 15.0.7 for x86_64 (about 2 min on a fast Mac, about 20 min on a CI runner); it is
+# kept in build/dxmt-toolchains/ (DXMT_TOOLCHAINS) and reused.
+set -eu
+cd "$(dirname "$0")/.."
+root=$PWD
+
+# Upstream's own CI recipe (3Shain/dxmt .github/workflows/ci.yml, job build-gcc-release-x86_64-windows-cross).
+LLVM_TAG=llvmorg-15.0.7
+WINE_URL=https://github.com/3Shain/wine/releases/download/v8.16-3shain/wine.tar.gz
+WINE_SHA256=289c7f19e270a3d3d0a6fdb07691b176c70a0795f6811e5255cba82425de4f10
+
+toolchains=${DXMT_TOOLCHAINS:-$root/build/dxmt-toolchains}
+output=${DXMT_OUTPUT:-$root/build/dxmt}
+work=$root/build/dxmt-work
+
+for tool in meson cmake ninja x86_64-w64-mingw32-gcc xxd git; do
+  command -v "$tool" >/dev/null || { echo "missing tool: $tool (brew install meson cmake ninja mingw-w64)" >&2; exit 1; }
+done
+xcrun -sdk macosx metal --version >/dev/null 2>&1 \
+  || { echo "the Metal toolchain is missing (xcodebuild -downloadComponent MetalToolchain)" >&2; exit 1; }
+
+git submodule update --init third_party/dxmt
+git -C third_party/dxmt submodule update --init include/native/directx
+src=$root/third_party/dxmt
+commit=$(git -C "$src" rev-parse HEAD)
+
+mkdir -p "$toolchains"
+
+# 1. LLVM 15 for x86_64 macOS: winemetal.so links it statically.
+if [ ! -f "$toolchains/llvm-darwin/lib/cmake/llvm/LLVMConfig.cmake" ]; then
+  [ -d "$toolchains/llvm-project" ] \
+    || git clone --quiet --depth 1 --branch "$LLVM_TAG" https://github.com/llvm/llvm-project.git "$toolchains/llvm-project"
+  cmake -B "$toolchains/llvm-darwin-build" -S "$toolchains/llvm-project/llvm" \
+    -DCMAKE_INSTALL_PREFIX="$toolchains/llvm-darwin" \
+    -DCMAKE_OSX_ARCHITECTURES=x86_64 -DLLVM_HOST_TRIPLE=x86_64-apple-darwin \
+    -DLLVM_ENABLE_ASSERTIONS=On -DLLVM_ENABLE_ZSTD=Off -DCMAKE_BUILD_TYPE=Release \
+    -DCMAKE_CXX_FLAGS="-D_LIBCPP_KEEP_TRANSITIVE_INCLUDES_LLVM23" \
+    -DLLVM_TARGETS_TO_BUILD="" -DLLVM_BUILD_TOOLS=Off -DLLVM_INCLUDE_BENCHMARKS=Off \
+    -DLLVM_VERSION_PRINTER_SHOW_HOST_TARGET_INFO=Off -G Ninja
+  cmake --build "$toolchains/llvm-darwin-build"
+  cmake --install "$toolchains/llvm-darwin-build"
+  cp "$toolchains/llvm-project/llvm/LICENSE.TXT" "$toolchains/llvm-darwin/LICENSE.TXT"
+  rm -rf "$toolchains/llvm-darwin-build"
+fi
+
+# 2. Wine headers and import libraries for the cross build (a prebuilt tree; pinned by checksum).
+if [ ! -d "$toolchains/wine/include" ]; then
+  curl -fsSL -o "$toolchains/wine.tar.gz" "$WINE_URL"
+  echo "$WINE_SHA256  $toolchains/wine.tar.gz" | shasum -a 256 -c -
+  mkdir -p "$toolchains/wine"
+  tar -xzf "$toolchains/wine.tar.gz" -C "$toolchains/wine"
+  rm "$toolchains/wine.tar.gz"
+fi
+
+# 3. DXMT itself.
+rm -rf "$work"
+(
+  cd "$src"
+  meson setup --cross-file build-win64.txt \
+    -Dnative_llvm_path="$toolchains/llvm-darwin" -Dwine_install_path="$toolchains/wine" \
+    "$work/build" --buildtype release --prefix "$work/install" --strip
+  meson compile -C "$work/build"
+  meson install -C "$work/build"
+)
+
+# 4. Only what the launcher installs, plus the licences.
+rm -rf "$output"
+mkdir -p "$output/x86_64-windows" "$output/x86_64-unix"
+for dll in d3d10core d3d11 dxgi winemetal; do
+  cp "$work/install/x86_64-windows/$dll.dll" "$output/x86_64-windows/"
+done
+cp "$work/install/x86_64-unix/winemetal.so" "$output/x86_64-unix/"
+printf '%s\n' "$commit" > "$output/VERSION"
+cp "$src/COPYING.LIB" "$output/COPYING.LIB"
+cp "$toolchains/llvm-darwin/LICENSE.TXT" "$output/LICENSE.LLVM"
+rm -rf "$work"
+echo "DXMT $commit built into $output"

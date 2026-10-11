@@ -19,7 +19,7 @@ struct AppRuntime {
   init(autoLaunch: AutoLaunchOptions) throws {
     let data = try autoLaunch.prepareDataDirectory()
     // One `WineRuntime` for the client (launches the game with it) and the model (prepares it).
-    let wine = WineRuntime(dataDirectory: data)
+    let wine = WineRuntime(dataDirectory: data, dxmt: .inApp)
     let client = GenshinCNClient.bundled(wine: wine, dataDirectory: data)
     let settings = SettingsModel()
     let onboarding = OnboardingModel(hosts: GenshinCN.hostsBlocklist(), settings: settings)

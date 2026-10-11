@@ -21,14 +21,24 @@ import Testing
     #expect(pinned.winePath == "wine")
   }
 
-  @Test("WIN-002 pinned DXMT is 654f547 and its zip URL names the commit")
-  func pinnedDXMT() {
-    let dxmt = DXMTRelease.pinned
-    #expect(dxmt.version == "654f547")
-    #expect(dxmt.commit.hasPrefix(dxmt.version))
-    #expect(dxmt.zipURL.absoluteString.contains(dxmt.commit))
-    #expect(dxmt.zipURL.scheme == "https")
-    #expect(dxmt.sha256.count == 64)
+  @Test("WIN-002 the DXMT of the app is the commit in its VERSION file")
+  func bundledDXMTVersion() async throws {
+    try await withWineTempDirectory { dir in
+      let h = try makeWineHarness(in: dir)
+      let loaded = try #require(DXMTBundle.load(from: h.fixtures.dxmt.directory))
+      #expect(loaded.version == wineFixtureCommit)
+      #expect(loaded.shortVersion == String(wineFixtureCommit.prefix(7)))
+      #expect(loaded == h.fixtures.dxmt)
+    }
+  }
+
+  @Test("WIN-002 a folder without a VERSION file is no DXMT bundle")
+  func noVersionNoBundle() async throws {
+    try await withWineTempDirectory { dir in
+      #expect(DXMTBundle.load(from: dir) == nil)
+      try Data("\n".utf8).write(to: dir.appending(path: "VERSION"))
+      #expect(DXMTBundle.load(from: dir) == nil)
+    }
   }
 
   @Test("WIN-003 empty data directory needs install: notInstalled")
@@ -66,13 +76,24 @@ import Testing
     }
   }
 
-  @Test("WIN-019 WIN-003 stamp for another dxmtVersion is versionMismatch")
+  @Test("WIN-019 WIN-003 stamp for another dxmtVersion is dxmtOutdated, not a Wine reinstall")
   func otherDXMTVersion() async throws {
     try await withWineTempDirectory { dir in
       let h = try await makeInstalledWineHarness(in: dir)
       try JSONEncoder().encode(WineStamp(wineVersion: h.fixtures.distribution.id, dxmtVersion: "0000000"))
         .write(to: h.layout.stampFile)
-      #expect(await h.runtime.status() == .needsInstall(.versionMismatch))
+      #expect(await h.runtime.status() == .needsInstall(.dxmtOutdated))
+    }
+  }
+
+  @Test("WIN-003 an app without DXMT keeps what is installed")
+  func appWithoutDXMTKeepsInstalled() async throws {
+    try await withWineTempDirectory { dir in
+      let h = try await makeInstalledWineHarness(in: dir)
+      let bare = WineRuntime(
+        dataDirectory: DataDirectory(root: h.root), distribution: h.fixtures.distribution, dxmt: nil,
+        downloader: h.downloader, runner: h.runner)
+      #expect(await bare.status() == .ready)
     }
   }
 

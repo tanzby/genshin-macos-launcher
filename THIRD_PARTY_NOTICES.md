@@ -11,7 +11,8 @@ This project builds on, bundles or links the following. Notices are added as eac
 | [HDiffPatch](https://github.com/sisong/HDiffPatch) v4.5.2 (`Sources/CHDiffPatch/hpatch`, patcher only, commit f62556a) | Applying Sophon ldiff patches | MIT |
 | protonextras (`Resources/protonextras/`) | Four Windows files copied into the Wine prefix for the Steam patch; see below | steam_helper: BSD-3-Clause (Valve); lsteamclient: Steamworks SDK licence, redistribution open; Wine-derived parts: LGPL-2.1-or-later |
 | Wine (CrossOver 11.0-1 build, yaagl/anime-game-wine) | Downloaded at install time into the data directory, not bundled | LGPL-2.1-or-later (CrossOver sources: see upstream) |
-| [DXMT](https://github.com/3Shain/dxmt) (build 654f547 from yaagl/anime-game-wine) | Downloaded at install time and copied into the Wine runtime, not bundled | See upstream repository |
+| [DXMT](https://github.com/3Shain/dxmt) (submodule `third_party/dxmt`, commit `e94c312f5c054263acf261cfa109edf13e757587`) | Built from source in CI (`scripts/build-dxmt`), shipped in `Yaagl.app/Contents/Resources/dxmt` and copied into the Wine runtime; see below | LGPL-2.1-or-later |
+| [LLVM](https://github.com/llvm/llvm-project) 15.0.7 | Statically linked into DXMT's `winemetal.so` (shader converter) | Apache-2.0 WITH LLVM-exception |
 
 ## protonextras
 
@@ -50,3 +51,19 @@ the unsigned originals are listed for matching against GE-Proton10-10.
   open question on #28. Both "BSD-3-Clause" for lsteamclient in the previous version of this file and in
   `App/Credits.swift` were therefore too generous.
 - Corresponding source for the Wine-derived parts: the GE-Proton10-10 tree linked above (Wine and Proton submodules).
+
+## DXMT
+
+DXMT (Direct3D 10/11 on Metal, by Feifan He for CodeWeavers and contributors) is built from the pinned
+`third_party/dxmt` submodule, <https://github.com/3Shain/dxmt/tree/e94c312f5c054263acf261cfa109edf13e757587>,
+which is also its complete corresponding source. The build recipe is `scripts/build-dxmt`; the exact toolchain
+(LLVM 15.0.7, Wine v8.16-3shain headers, mingw-w64, meson 1.10.0, Xcode 16.1) is in
+`.github/workflows/dxmt.yaml`. The binaries are `d3d10core.dll`, `d3d11.dll`, `dxgi.dll`, `winemetal.dll` and
+`winemetal.so`.
+
+- DXMT is licensed under the GNU Lesser General Public License version 2.1 or (at your option) any later version.
+  The text ships next to the binaries as `Resources/dxmt/COPYING.LIB`. The launcher copies the DLLs into the Wine
+  runtime; replacing them with a build of your own from the linked source is possible by building
+  `third_party/dxmt` and putting the result in `Contents/Resources/dxmt`.
+- `winemetal.so` statically links LLVM 15.0.7 (Apache License 2.0 with LLVM Exceptions). The text ships as
+  `Resources/dxmt/LICENSE.LLVM`.

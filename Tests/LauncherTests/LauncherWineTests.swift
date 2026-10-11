@@ -113,7 +113,7 @@ private final class Harness {
   @Test func APP_001_failedPreparationNeverReadsGameStatus() async throws {
     let h = Harness(wine: missing)
     let (task, install) = try await h.bootstrapUntilPreparing()
-    h.wine.fail(install: install, throwing: WineInstallError.dxmtArchiveInvalid)
+    h.wine.fail(install: install, throwing: WineInstallError.dxmtBundleInvalid)
     await task.value
     #expect(h.fake.statusCalls == 0)
     #expect(h.model.status == nil)
@@ -126,7 +126,7 @@ private final class Harness {
     #expect(h.model.pendingJob == nil)
     #expect(!FileManager.default.fileExists(atPath: h.jobFile.path))
     #expect(!FileManager.default.fileExists(atPath: h.jobFile.deletingLastPathComponent().path))
-    h.wine.fail(install: install, throwing: WineInstallError.dxmtArchiveInvalid)
+    h.wine.fail(install: install, throwing: WineInstallError.dxmtBundleInvalid)
     await task.value
     #expect(h.model.pendingJob == nil)
     #expect(!FileManager.default.fileExists(atPath: h.jobFile.path))
@@ -346,9 +346,9 @@ private final class Harness {
     // the sentinel failure proves the paused preparation emitted nothing before it
     try await h.model.prepareWine()
     let retry = try await h.wine.nextInstall()
-    h.wine.fail(install: retry, throwing: WineInstallError.dxmtArchiveInvalid)
+    h.wine.fail(install: retry, throwing: WineInstallError.dxmtBundleInvalid)
     await h.model.waitUntilIdle()
-    #expect(try await h.log.next() == .wineFailed(.wineInstall(.dxmtArchiveInvalid)))
+    #expect(try await h.log.next() == .wineFailed(.wineInstall(.dxmtBundleInvalid)))
   }
 
   @Test func WIN_005_resumeAfterPauseRerunsEnsureInstalledAndReadsGameStatus() async throws {
@@ -537,7 +537,7 @@ private final class Harness {
     try await failLaunchWithReinstall(h)
     try await h.model.prepareWine()
     let first = try await h.wine.nextInstall()
-    h.wine.fail(install: first, throwing: WineInstallError.dxmtArchiveInvalid)
+    h.wine.fail(install: first, throwing: WineInstallError.dxmtBundleInvalid)
     await h.model.waitUntilIdle()
     #expect(h.model.primaryAction == .prepareWine)
 
@@ -575,7 +575,7 @@ extension WIN_005_ReinstallTests {
       if finish {
         h.wine.finish(install: install)
       } else {
-        h.wine.fail(install: install, throwing: WineInstallError.dxmtArchiveInvalid)
+        h.wine.fail(install: install, throwing: WineInstallError.dxmtBundleInvalid)
       }
       await task.value
       #expect(h.wine.statusCalls - before == 1)
