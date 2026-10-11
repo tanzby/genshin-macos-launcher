@@ -166,6 +166,13 @@ public struct AutoLaunch {
     }
   }
 
+  /// The verdict of a run that never started because the data directory could not be prepared. `yaagl-diag`
+  /// polls for the result line and the exit line, so the composition root writes them too when it stops early.
+  public static func reportPrepareFailure(_ error: any Error, to log: DiagLog) {
+    log.say("autolaunch: result=failed reason=data-dir \(error)")
+    log.say("autolaunch: exit")
+  }
+
   /// The app entry point: does nothing unless `--autolaunch` was given; otherwise runs and then asks the
   /// app to quit, also when it failed (a diag script must never wait for a window nobody closes).
   public static func runIfRequested(
@@ -176,8 +183,7 @@ public struct AutoLaunch {
     log.reset()
     // The composition root does this too; it is idempotent (the marker is written once).
     do { _ = try options.prepareDataDirectory() } catch {
-      log.say("autolaunch: result=failed reason=data-dir \(error)")
-      log.say("autolaunch: exit")
+      reportPrepareFailure(error, to: log)
       terminate()
       return
     }
