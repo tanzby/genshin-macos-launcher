@@ -1,12 +1,13 @@
 #!/bin/sh
 # Checks shared by lefthook pre-push and CI: parity coverage (strict: every rule has a test or diag check),
-# swift test, then generate the Xcode project and build the app from the command line.
+# swift test, then generate the Xcode project and build the app from the command line. The build must not change
+# Package.resolved (#87); CI checks that the checkout is still clean afterwards.
 set -eu
 cd "$(dirname "$0")/../.."
 scripts/dev/parity-coverage --strict
 swift test
 xcodegen generate
-xcodebuild -project Yaagl.xcodeproj -scheme Yaagl -configuration Debug \
+scripts/dev/keep-package-resolved xcodebuild -project Yaagl.xcodeproj -scheme Yaagl -configuration Debug \
   -destination 'platform=macOS,arch=arm64' -derivedDataPath build/DerivedData build
 
 scripts/dev/check-bundle
