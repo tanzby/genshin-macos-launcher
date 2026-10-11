@@ -206,12 +206,12 @@ public final class GenshinCNClient: GameClient {
     switch error {
     case is CancellationError:
       return error
-    case let error as URLError:
-      return error.code == .cancelled ? CancellationError() : GameClientError.network
+    case let error as URLError where error.code == .cancelled:
+      return CancellationError()
+    case _ where isOffline(error):
+      return GameClientError.network
     case let error as SophonError:
       switch error {
-      case .transport: return GameClientError.network
-      case .http(let status) where status >= 500: return GameClientError.network  // a 4xx is a contract break
       case .checksumMismatch, .verificationFailed: return GameClientError.verificationFailed
       case .brokenInstallation: return GameClientError.brokenInstallation
       case .installDirectoryNotEmpty: return GameClientError.installDirectoryNotEmpty

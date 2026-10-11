@@ -35,8 +35,8 @@ public struct BackgroundImageProvider: Sendable {
       if touch(cached) { return .remote(cached) }
       if let downloaded = try? await download(remote, to: cached) { return .remote(downloaded) }
     }
-    return sortedNewestFirst(cachedFiles()).first.map { .remote(cacheDirectory.appending(path: $0.lastPathComponent)) }
-      ?? .bundledDefault
+    let newest = cachedFiles().max { modified($0) < modified($1) }
+    return newest.map { .remote(cacheDirectory.appending(path: $0.lastPathComponent)) } ?? .bundledDefault
   }
 
   // MARK: - hyp-connect
@@ -113,7 +113,7 @@ public struct BackgroundImageProvider: Sendable {
 
   /// Marks `file` as in use so that pruning spares it. False when it is not cached.
   private func touch(_ file: URL) -> Bool {
-    try Self.cacheLock.withLock {
+    Self.cacheLock.withLock {
       guard fileManager.fileExists(atPath: file.path) else { return false }
       try? fileManager.setAttributes([.modificationDate: Date()], ofItemAtPath: file.path)
       return true
@@ -137,9 +137,5 @@ public struct BackgroundImageProvider: Sendable {
   private func modified(_ url: URL) -> Date {
     (try? url.resourceValues(forKeys: [.contentModificationDateKey]))?.contentModificationDate
       ?? .distantPast
-  }
-
-  private func sortedNewestFirst(_ files: [URL]) -> [URL] {
-    files.sorted { modified($0) > modified($1) }
   }
 }
