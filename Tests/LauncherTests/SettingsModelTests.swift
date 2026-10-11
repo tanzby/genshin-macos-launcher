@@ -134,6 +134,19 @@ private func freshDefaults() -> UserDefaults {
     }
   }
 
+  @Test func CFG_010_aFileNamedLikeTheTempFolderIsNotIgnored() throws {
+    let dir = try makeDirectory()
+    defer { try? FileManager.default.removeItem(at: dir) }
+    let tmp = dir.appending(path: PendingJobStore.directoryName)
+    try Data().write(to: tmp)
+    #expect(throws: GameDirectoryProblem.notEmpty) {
+      try GameDirectoryValidator.validate(dir, gameExecutable: "YuanShen.exe", isSupportedPath: supported)
+    }
+    try FileManager.default.removeItem(at: tmp)
+    try FileManager.default.createDirectory(at: tmp, withIntermediateDirectories: false)
+    #expect(try GameDirectoryValidator.validate(dir, gameExecutable: "YuanShen.exe", isSupportedPath: supported) == .empty)
+  }
+
   @Test func CFG_010_aFolderThatCannotBeListedIsNotTreatedAsEmpty() throws {
     let dir = try makeDirectory()
     defer {

@@ -53,10 +53,9 @@ public final class EventNotifier {
       await announce(.updateAvailable(version: version), key: Self.announcedUpdateKey, version: version)
     }
     if status.canPreDownload {
-      let target = status.preDownloadVersion ?? version
       await announce(
         .preDownloadAvailable(version: status.preDownloadVersion), key: Self.announcedPreDownloadKey,
-        version: target)
+        version: status.preDownloadTarget ?? version)
     }
   }
 

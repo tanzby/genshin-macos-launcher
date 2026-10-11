@@ -45,6 +45,9 @@ public enum GameDirectoryValidator {
     }
     if names.contains(gameExecutable) { return .existingGame }
     guard names.allSatisfy({ ignored.contains($0) }) else { throw GameDirectoryProblem.notEmpty }
+    // The app's temp folder is ignored only when it is one: a plain file of that name would break the first install.
+    let tmp = url.appending(path: PendingJobStore.directoryName)
+    if names.contains(PendingJobStore.directoryName), exists(tmp) != true { throw GameDirectoryProblem.notEmpty }
     return .empty
   }
 }
