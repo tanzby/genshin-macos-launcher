@@ -87,6 +87,21 @@ import Testing
     }
   }
 
+  // CFG-008: there is no list of Wine versions to choose from (#29). The pinned release is the only one, and an
+  // install of any other version (a former choice, a TS-era tag) is replaced rather than kept.
+  @Test("CFG-008 an install of any version but the pinned one needs a reinstall")
+  func onlyThePinnedVersionIsKept() async throws {
+    for other in ["10.0-1-crossover-signed-experimental", "11.0-dxmt-signed-with-patches", "11.0-1-crossover-signed"] {
+      try await withWineTempDirectory { dir in
+        let h = try await makeInstalledWineHarness(in: dir)
+        #expect(other != WineRuntime.pinnedVersion)
+        try JSONEncoder().encode(WineStamp(wineVersion: other, dxmtVersion: h.fixtures.dxmt.version))
+          .write(to: h.layout.stampFile)
+        #expect(await h.runtime.status() == .needsInstall(.versionMismatch))
+      }
+    }
+  }
+
   @Test("WIN-003 garbage stamp is versionMismatch")
   func garbageStamp() async throws {
     try await withWineTempDirectory { dir in

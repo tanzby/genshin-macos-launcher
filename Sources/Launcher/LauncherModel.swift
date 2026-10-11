@@ -450,6 +450,24 @@ public final class LauncherModel {
     try await start(pendingJob.kind)
   }
 
+  /// What quitting has to do first (APP-022). A pure function of the phase, so asking twice gives the same answer.
+  public enum QuitPlan: Sendable, Equatable {
+    /// Nothing is running.
+    case quitNow
+    /// A job or Wine preparation is running: `shutdown()` stops it, keeping `job.json`.
+    case shutDownFirst
+    /// The game is running: quitting closes it, so the user is asked first.
+    case confirmThenShutDown
+  }
+
+  public var quitPlan: QuitPlan {
+    switch phase {
+    case .idle: .quitNow
+    case .running: .confirmThenShutDown
+    case .preparingWine, .installing, .updating, .preDownloading, .repairing, .launching: .shutDownFirst
+    }
+  }
+
   /// App quit: cancel everything, wait for it to stop, keep `job.json`.
   public func shutdown() async {
     isShuttingDown = true  // before the first suspension, so nothing new can start while we wait

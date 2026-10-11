@@ -1003,3 +1003,63 @@ private final class Queried: Sendable {
     #expect(h.fake.launchOptions == [LaunchOptions(gameDirectory: h.directory!)])
   }
 }
+
+// MARK: - APP-022 quit plan
+
+// The TS launcher ran its close hooks in a list it reversed in place, so the order flipped on every call, and
+// exited without asking. Quitting now follows a plan that depends on the phase only.
+@MainActor
+@Suite struct QuitPlanTests {
+  @Test func APP_022_anIdleLauncherQuitsAtOnce() async {
+    let h = await Harness(status: Status.installed)
+
+    #expect(h.model.quitPlan == .quitNow)
+  }
+
+  @Test func APP_022_aRunningJobIsShutDownFirstWithoutAsking() async throws {
+    let h = await Harness(status: Status.notInstalled)
+    try await h.begin(.install)
+
+    #expect(h.model.quitPlan == .shutDownFirst)
+    await h.model.shutdown()
+    #expect(h.model.quitPlan == .quitNow)
+  }
+
+  @Test func APP_022_aPreDownloadAlsoNeedsAShutdown() async throws {
+    let h = await Harness(status: Status.preDownloadable)
+    try await h.begin(.preDownload)
+
+    #expect(h.model.quitPlan == .shutDownFirst)
+    await h.model.shutdown()
+  }
+
+  @Test func APP_022_aLaunchInProgressIsShutDownFirstWithoutAsking() async throws {
+    let h = await Harness(status: Status.installed)
+    try await h.beginLaunch()
+
+    #expect(h.model.quitPlan == .shutDownFirst)
+    await h.model.shutdown()
+  }
+
+  @Test func APP_022_aRunningGameIsConfirmedBeforeItIsClosed() async throws {
+    let h = await Harness(status: Status.installed)
+    try await h.beginLaunch()
+    h.fake.fireStarted()
+    #expect(await h.waitForPhase(.running))
+
+    #expect(h.model.quitPlan == .confirmThenShutDown)
+    h.fake.finishLaunch(.exited)
+    await h.model.waitUntilIdle()
+    #expect(h.model.quitPlan == .quitNow)
+  }
+
+  @Test func APP_022_askingTwiceGivesTheSameAnswer() async throws {
+    let h = await Harness(status: Status.notInstalled)
+    try await h.begin(.install)
+
+    let plans = (0..<4).map { _ in h.model.quitPlan }
+
+    #expect(Set(plans) == [.shutDownFirst])
+    await h.model.shutdown()
+  }
+}
