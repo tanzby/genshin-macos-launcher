@@ -27,6 +27,12 @@ final class FakeLauncher: GameLaunching {
   let recoveries = Mutex(0)
   func recover() async { recoveries.withLock { $0 += 1 } }
 
+  let prompts = Mutex<[(recipe: LaunchRecipe, gameDirectory: URL?)]>([])
+  func openCommandPrompt(_ recipe: LaunchRecipe, gameDirectory: URL?) async -> Int32? {
+    prompts.withLock { $0.append((recipe, gameDirectory)) }
+    return 0
+  }
+
   var recipes: [LaunchRecipe] { state.withLock { $0.recipes } }
   var cleanupFinished: Bool { state.withLock { $0.cleanupFinished } }
   var filesAtLaunch: [String: Bool] { state.withLock { $0.filesAtLaunch } }

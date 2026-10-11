@@ -56,6 +56,8 @@ private struct MoreMenu: View {
         if let url = controller.settings.gameDirectory { NSWorkspace.shared.open(url) }
       }
       .disabled(controller.settings.gameDirectory == nil)
+      Button("Open Wine Command Prompt") { Task { await controller.openWineCommandPrompt() } }
+        .disabled(!controller.canOpenWineCommandPrompt)
       Divider()
       Button("Settings…") { openSettings() }
     } label: {

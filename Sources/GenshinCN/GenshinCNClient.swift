@@ -21,6 +21,7 @@ public enum GenshinCNClientError: Error, Sendable, Equatable {
 public protocol GameLaunching: Sendable {
   func launch(_ recipe: LaunchRecipe, onStarted: @escaping @Sendable () -> Void) async -> LaunchResult
   func recover() async
+  func openCommandPrompt(_ recipe: LaunchRecipe, gameDirectory: URL?) async -> Int32?
 }
 
 extension GameSession: GameLaunching {}
@@ -170,6 +171,13 @@ public final class GenshinCNClient: GameClient {
     case .startupTimedOut, .failedToLaunch: return .failedToLaunch
     case .cancelled: throw CancellationError()
     }
+  }
+
+  public func openWineCommandPrompt(_ options: LaunchOptions) async {
+    let recipe = GenshinLaunchRecipe.make(
+      settings: GenshinLaunchSettings(options), gameDirectory: options.gameDirectory, dataDirectory: dataDirectory,
+      protonExtras: protonExtras)
+    _ = await launcher.openCommandPrompt(recipe, gameDirectory: options.gameDirectory)
   }
 
   /// The official launcher picture (APP-021); without a provider (tests) the bundled one.

@@ -525,6 +525,15 @@ public final class LauncherModel {
 
   // MARK: Launch
 
+  /// A Wine command prompt needs a game folder (its path goes into `WINEPATH`) and an installed Wine.
+  public var canOpenWineCommandPrompt: Bool { gameDirectory != nil && !isWineNotReady }
+
+  /// Developer convenience (CFG-032, WIN-022). Independent of the launch slot: it touches no game files.
+  public func openWineCommandPrompt() async {
+    guard canOpenWineCommandPrompt, let gameDirectory else { return }
+    await client.openWineCommandPrompt(makeLaunchOptions(gameDirectory))
+  }
+
   public func launch() async throws {
     client.setGameDirectory(gameDirectory)
     guard exclusive == .idle, !isPausing, !isShuttingDown, recovery == nil else { throw LauncherError.busy }

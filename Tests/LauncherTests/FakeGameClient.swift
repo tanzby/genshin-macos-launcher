@@ -21,6 +21,7 @@ final class FakeGameClient: GameClient, Sendable {
     var launchOptions: [LaunchOptions] = []
     var gameDirectories: [URL?] = []
     var quiesces = 0
+    var prompts: [LaunchOptions] = []
     var launchContinuation: CheckedContinuation<LaunchOutcome, Error>?
     var launchCancelled = false
     var onStarted: (@Sendable () -> Void)?
@@ -50,6 +51,9 @@ final class FakeGameClient: GameClient, Sendable {
   var launchOptions: [LaunchOptions] { state.withLock { $0.launchOptions } }
   var gameDirectories: [URL?] { state.withLock { $0.gameDirectories } }
   var quiesces: Int { state.withLock { $0.quiesces } }
+  var commandPrompts: [LaunchOptions] { state.withLock { $0.prompts } }
+
+  func openWineCommandPrompt(_ options: LaunchOptions) async { state.withLock { $0.prompts.append(options) } }
   func isTerminated(run index: Int) -> Bool { state.withLock { $0.runs[index].terminated } }
 
   /// Suspends until the next `run(_:)` call that the test has not yet consumed; returns its index.

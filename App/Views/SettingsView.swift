@@ -169,6 +169,7 @@ private struct GamePage: View {
 }
 
 private struct WinePage: View {
+  @Environment(MainController.self) private var controller
   let dataDirectory: URL
 
   var body: some View {
@@ -181,6 +182,8 @@ private struct WinePage: View {
         Button("Show Wine Prefix in Finder") {
           reveal(WineLayout(root: dataDirectory).prefixDirectory)
         }
+        Button("Open Wine Command Prompt") { Task { await controller.openWineCommandPrompt() } }
+          .disabled(!controller.canOpenWineCommandPrompt)
       }
     }
     .formStyle(.grouped)
