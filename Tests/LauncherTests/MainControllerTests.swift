@@ -1,5 +1,6 @@
 import Foundation
 import Platform
+import Synchronization
 import Testing
 
 @testable import Launcher
@@ -7,7 +8,7 @@ import Testing
 @MainActor
 private func makeController(
   status: GameStatus = GameStatus(localVersion: "5.0.0", remoteVersion: "5.0.0"),
-  hosts: HostsBlocklist.Status = .current, gameDirectory: URL? = FileManager.default.temporaryDirectory.appending(path: "yaagl-mc-\(UUID().uuidString)")
+  hosts: HostsBlocklist.Status = .current, startup: StartupSteps? = nil, gameDirectory: URL? = FileManager.default.temporaryDirectory.appending(path: "yaagl-mc-\(UUID().uuidString)")
 ) -> (MainController, FakeGameClient, SettingsModel) {
   let suite = "yaagl-controller-\(UUID().uuidString)"
   let defaults = UserDefaults(suiteName: suite)!
@@ -15,7 +16,7 @@ private func makeController(
   let settings = SettingsModel(defaults: defaults)
   settings.gameDirectory = gameDirectory
   let client = FakeGameClient(status: status)
-  let launcher = LauncherModel(client: client, availableDiskSpace: { _ in Int64.max })
+  let launcher = LauncherModel(client: client, startup: startup, availableDiskSpace: { _ in Int64.max })
   let onboarding = OnboardingModel(hosts: FakeHosts(hosts), settings: settings)
   return (MainController(launcher: launcher, settings: settings, onboarding: onboarding), client, settings)
 }
@@ -29,6 +30,20 @@ private func makeController(
     #expect(controller.hasLoaded)
     #expect(controller.presentation.button == .launch)
     #expect(controller.presentation.buttonEnabled)
+  }
+
+  @Test func APP_001_aMissingRosettaIsRetriedOnTheNextRefreshUntilItIsInstalled() async {
+    let installed = Mutex(false)
+    let steps = StartupSteps(rosettaInstalled: { installed.withLock { $0 } }, recoverSession: {})
+    let (controller, client, _) = makeController(startup: steps)
+    await controller.refresh()
+    #expect(controller.launcher.isRosettaMissing)
+    #expect(client.statusCalls == 0, "no game status before Rosetta is there")
+    installed.withLock { $0 = true }
+    await controller.refreshWhenIdle()
+    #expect(!controller.launcher.isRosettaMissing)
+    #expect(controller.launcher.hasBootstrapped)
+    #expect(controller.presentation.button == .launch)
   }
 
   @Test func APP_010_reactivationRequeriesAfterAFailedFirstQuery() async {

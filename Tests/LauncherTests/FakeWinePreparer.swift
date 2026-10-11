@@ -9,6 +9,7 @@ import Wine
 /// really stopped (not merely been asked to) by the time `pause()` returned.
 final class FakeWinePreparer: WinePreparing, Sendable {
   private struct Install {
+    var isReinstall = false
     var progress: @Sendable (WineInstallProgress) -> Void
     var continuation: CheckedContinuation<Void, Error>?
     var cancelled = false
@@ -103,9 +104,22 @@ final class FakeWinePreparer: WinePreparing, Sendable {
   }
 
   func ensureInstalled(progress: @escaping @Sendable (WineInstallProgress) -> Void) async throws {
+    try await runInstall(progress: progress, isReinstall: false)
+  }
+
+  func reinstall(progress: @escaping @Sendable (WineInstallProgress) -> Void) async throws {
+    try await runInstall(progress: progress, isReinstall: true)
+  }
+
+  /// Whether install `index` was a `reinstall` call rather than `ensureInstalled`.
+  func isReinstall(install index: Int) -> Bool { state.withLock { $0.installs[index].isReinstall } }
+
+  private func runInstall(
+    progress: @escaping @Sendable (WineInstallProgress) -> Void, isReinstall: Bool
+  ) async throws {
     let index = state.withLock { s -> Int in
-      s.installs.append(Install(progress: progress))
-      s.log.append("install:\(s.installs.count - 1)")
+      s.installs.append(Install(isReinstall: isReinstall, progress: progress))
+      s.log.append("\(isReinstall ? "reinstall" : "install"):\(s.installs.count - 1)")
       return s.installs.count - 1
     }
     try await withTaskCancellationHandler {

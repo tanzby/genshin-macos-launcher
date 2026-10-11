@@ -495,3 +495,90 @@ private final class Harness {
     #expect(h.model.primaryAction == .prepareWine)
   }
 }
+
+// MARK: - Forced reinstall after a launch found Wine broken
+
+@MainActor @Suite struct WIN_005_ReinstallTests {
+  /// What `launch()` does when the client throws `wineReinstallRequired`: the hook is called directly.
+  private func failLaunchWithReinstall(_ h: Harness) async throws {
+    await h.model.bootstrap()
+    h.model.requireWineReinstall()
+  }
+
+  @Test func WIN_005_wineReinstallRequiredReturnsToPreparation() async throws {
+    let h = Harness(wine: .ready)
+    try await failLaunchWithReinstall(h)
+    #expect(h.model.primaryAction == .prepareWine)
+    #expect(h.model.wineStatus != .ready)
+    await #expect(throws: LauncherError.wineNotReady) { try await h.model.launch() }
+
+    // the disk still says "ready"; re-reading it must not undo the request
+    await h.model.refreshWine()
+    #expect(h.model.primaryAction == .prepareWine)
+
+    try await h.model.prepareWine()
+    let install = try await h.wine.nextInstall()
+    #expect(h.wine.isReinstall(install: install), "ensureInstalled would return at once on a ready stamp")
+    h.wine.finish(install: install)
+    await h.model.waitUntilIdle()
+    #expect(h.model.wineStatus == .ready)
+    #expect(h.model.primaryAction == .launch)
+
+    // satisfied: later refreshes follow the disk again
+    h.wine.setStatus(missing)
+    await h.model.refreshWine()
+    h.wine.setStatus(.ready)
+    await h.model.refreshWine()
+    #expect(h.model.primaryAction == .launch)
+  }
+
+  @Test func WIN_005_aFailedReinstallStaysRequired() async throws {
+    let h = Harness(wine: .ready)
+    try await failLaunchWithReinstall(h)
+    try await h.model.prepareWine()
+    let first = try await h.wine.nextInstall()
+    h.wine.fail(install: first, throwing: WineInstallError.dxmtArchiveInvalid)
+    await h.model.waitUntilIdle()
+    #expect(h.model.primaryAction == .prepareWine)
+
+    try await h.model.resume()
+    let second = try await h.wine.nextInstall()
+    #expect(h.wine.isReinstall(install: second))
+    h.wine.finish(install: second)
+    await h.model.waitUntilIdle()
+    #expect(h.model.primaryAction == .launch)
+  }
+}
+
+extension WIN_005_ReinstallTests {
+  @Test func WIN_005_aPausedReinstallStaysRequired() async throws {
+    let h = Harness(wine: .ready)
+    try await failLaunchWithReinstall(h)
+    try await h.model.prepareWine()
+    _ = try await h.wine.nextInstall()
+    await h.model.pause()
+    #expect(h.model.primaryAction == .prepareWine)
+    try await h.model.resume()
+    let second = try await h.wine.nextInstall()
+    #expect(h.wine.isReinstall(install: second))
+    h.wine.finish(install: second)
+    await h.model.waitUntilIdle()
+  }
+}
+
+@MainActor @Suite struct WIN_005_RefreshWineTests {
+  @Test func WIN_005_preparationReadsTheWineStatusOnceAfterAnyOutcome() async throws {
+    for finish in [true, false] {
+      let h = Harness(wine: missing)
+        let (task, install) = try await h.bootstrapUntilPreparing()
+      let before = h.wine.statusCalls
+      if finish {
+        h.wine.finish(install: install)
+      } else {
+        h.wine.fail(install: install, throwing: WineInstallError.dxmtArchiveInvalid)
+      }
+      await task.value
+      #expect(h.wine.statusCalls - before == 1)
+    }
+  }
+}
