@@ -17,12 +17,12 @@ public final class LauncherModel {
   public private(set) var status: GameStatus?
   public private(set) var wineStatus: WineStatus?
   /// `bootstrap()` got past the Rosetta check. The window runs it again until this is true.
-  public private(set) var hasBootstrapped = false
-  public private(set) var isRosettaMissing = false
-  public private(set) var isOnline = false
+  package private(set) var hasBootstrapped = false
+  package private(set) var isRosettaMissing = false
+  package private(set) var isOnline = false
   public private(set) var isPausing = false
   public private(set) var progress: JobProgress?
-  public private(set) var pendingJob: PendingJob?
+  package private(set) var pendingJob: PendingJob?
   public private(set) var lastError: LauncherError?
   public var gameDirectory: URL?
   /// Snapshots the settings for a launch. The composition root replaces it with one that reads `SettingsModel`.
@@ -30,10 +30,10 @@ public final class LauncherModel {
 
   private let jobs = JobCoordinator()
 
-  public var isPreDownloading: Bool { jobs.isPreDownloading }
-  public var phase: LauncherPhase { jobs.phase }
+  package var isPreDownloading: Bool { jobs.isPreDownloading }
+  package var phase: LauncherPhase { jobs.phase }
 
-  public var primaryAction: PrimaryAction {
+  package var primaryAction: PrimaryAction {
     isWineNotReady ? .prepareWine : PrimaryAction.derive(status)
   }
 
@@ -138,7 +138,7 @@ public final class LauncherModel {
   }
 
   /// Re-reads the Wine state from the disk. Without a `WinePreparing` the launcher assumes Wine is fine.
-  public func refreshWine() async {
+  package func refreshWine() async {
     guard let wine else { return }
     let status = await wine.status()
     // A launch that found Wine broken outranks the stamp: only a successful reinstall clears the request.

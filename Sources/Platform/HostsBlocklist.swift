@@ -17,7 +17,7 @@ public struct HostsBlocklist: Sendable {
   static let beginMarker = "# Added by Yaagl"
   static let endMarker = "# End of section"
   static let warning = "# Warning: managed by Yaagl. Edits inside this section are overwritten."
-  public static let systemHostsFile = URL(filePath: "/etc/hosts")
+  package static let systemHostsFile = URL(filePath: "/etc/hosts")
 
   public let domains: [String]
   let hostsFile: URL

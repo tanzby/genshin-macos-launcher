@@ -96,36 +96,36 @@ public struct WineLayout: Sendable, Equatable {
 
   public var runtimeDirectory: URL { root.appending(path: "wine", directoryHint: .isDirectory) }
   public var prefixDirectory: URL { root.appending(path: "wineprefix", directoryHint: .isDirectory) }
-  public var stampFile: URL { runtimeDirectory.appending(path: ".yaagl-wine-stamp.json", directoryHint: .notDirectory) }
+  package var stampFile: URL { runtimeDirectory.appending(path: ".yaagl-wine-stamp.json", directoryHint: .notDirectory) }
   public var wineserver: URL { runtimeDirectory.appending(path: "bin/wineserver", directoryHint: .notDirectory) }
-  public var windowsLibraryDirectory: URL {
+  package var windowsLibraryDirectory: URL {
     runtimeDirectory.appending(path: "lib/wine/x86_64-windows", directoryHint: .isDirectory)
   }
-  public var unixLibraryDirectory: URL {
+  package var unixLibraryDirectory: URL {
     runtimeDirectory.appending(path: "lib/wine/x86_64-unix", directoryHint: .isDirectory)
   }
-  public var prefixSystem32: URL {
+  package var prefixSystem32: URL {
     prefixDirectory.appending(path: "drive_c/windows/system32", directoryHint: .isDirectory)
   }
   /// DXMT files that replace the stock ones in `x86_64-windows`.
   static let dxmtWindowsFiles = ["d3d10core.dll", "d3d11.dll", "dxgi.dll", "winemetal.dll"]
 
   /// Written by `GameSession` before it mutates anything; deleted after the restore. Its presence means a crash.
-  public var launchJournal: URL { root.appending(path: "launch-journal.json", directoryHint: .notDirectory) }
+  package var launchJournal: URL { root.appending(path: "launch-journal.json", directoryHint: .notDirectory) }
   public var logsDirectory: URL { root.appending(path: "logs", directoryHint: .isDirectory) }
-  public var gameHostApp: URL { root.appending(path: "YaaglGame.app", directoryHint: .isDirectory) }
+  package var gameHostApp: URL { root.appending(path: "YaaglGame.app", directoryHint: .isDirectory) }
   /// `lib/wine/x86_64-unix/wine`: Wine execs this for every new Windows process. The Game Mode shim replaces it.
-  public var unixWine: URL { unixLibraryDirectory.appending(path: "wine", directoryHint: .notDirectory) }
+  package var unixWine: URL { unixLibraryDirectory.appending(path: "wine", directoryHint: .notDirectory) }
   /// The original `wine`, renamed by the Game Mode shim install.
-  public var unixWineHost: URL { unixLibraryDirectory.appending(path: "wine-host", directoryHint: .notDirectory) }
-  public var prefixWindows: URL {
+  package var unixWineHost: URL { unixLibraryDirectory.appending(path: "wine-host", directoryHint: .notDirectory) }
+  package var prefixWindows: URL {
     prefixDirectory.appending(path: "drive_c/windows", directoryHint: .isDirectory)
   }
 
   /// Archives being downloaded; partial files here let an interrupted install resume.
-  public var downloadsDirectory: URL { root.appending(path: "downloads", directoryHint: .isDirectory) }
-  public var wineBootLog: URL { root.appending(path: "wineboot.log", directoryHint: .notDirectory) }
-  public var wineCfgLog: URL { root.appending(path: "winecfg.log", directoryHint: .notDirectory) }
+  package var downloadsDirectory: URL { root.appending(path: "downloads", directoryHint: .isDirectory) }
+  package var wineBootLog: URL { root.appending(path: "wineboot.log", directoryHint: .notDirectory) }
+  package var wineCfgLog: URL { root.appending(path: "winecfg.log", directoryHint: .notDirectory) }
 
   static let wineDebug = "fixme-all,err-unwind,+timestamp"
   /// What every Wine process gets: the prefix and the debug channels (WIN-016).

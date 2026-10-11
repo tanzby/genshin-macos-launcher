@@ -163,7 +163,7 @@ public final class SettingsModel {
   }
 
   /// The proxy the game process should use, or nil.
-  public var effectiveProxy: String? {
+  package var effectiveProxy: String? {
     proxyEnabled && !proxyHost.isEmpty ? proxyHost : nil
   }
 }

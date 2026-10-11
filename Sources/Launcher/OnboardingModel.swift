@@ -16,12 +16,12 @@ extension HostsBlocklist: HostsBlocking {}
 public final class OnboardingModel {
   public enum Step: Sendable, Equatable { case hosts, gameDirectory, done }
 
-  public private(set) var hostsStatus: HostsBlocklist.Status?
+  package private(set) var hostsStatus: HostsBlocklist.Status?
   public private(set) var hostsError: String?
   public private(set) var isApplyingHosts = false
   /// The saved game folder still exists. A folder on an unmounted or renamed volume sends the user back to
   /// the picker instead of failing every install and launch against a dead path.
-  public private(set) var gameDirectoryUsable = true
+  package private(set) var gameDirectoryUsable = true
 
   private let hosts: any HostsBlocking
   private let settings: SettingsModel
@@ -41,7 +41,7 @@ public final class OnboardingModel {
     return hasUsableGameDirectory ? .done : .gameDirectory
   }
 
-  public var isComplete: Bool { step == .done }
+  package var isComplete: Bool { step == .done }
 
   /// Whether the first-run sheet is up. An unattended run (the diag's `--autolaunch`, APP-020) has its game folder
   /// from the command line and no one to choose one: only the hosts step, the one a person can still do, is offered;
