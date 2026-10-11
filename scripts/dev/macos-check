@@ -5,6 +5,9 @@ set -eu
 cd "$(dirname "$0")/../.."
 # SwiftPM and Xcode must agree on Package.resolved (#87): neither swift test nor the app build may rewrite it.
 resolved=$(git hash-object Package.resolved)
+scripts/dev/check-agent-instructions
+scripts/dev/test-agent-instructions
+scripts/dev/test-run-with-timeout
 scripts/dev/parity-coverage --strict
 swift test
 xcodegen generate

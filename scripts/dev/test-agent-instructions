@@ -1,0 +1,30 @@
+#!/bin/sh
+# Exercise the directory-coverage checker against a temporary Git repository.
+set -eu
+
+script_dir=$(CDPATH= cd -- "$(dirname "$0")" && pwd)
+checker="$script_dir/check-agent-instructions"
+tmp=$(mktemp -d)
+trap 'rm -rf "$tmp"' EXIT HUP INT TERM
+fixture="$tmp/repo"
+mkdir -p "$fixture/Sources/nested" "$fixture/untracked"
+git -C "$fixture" init -q
+printf 'tracked source\n' > "$fixture/Sources/source.swift"
+printf 'tracked nested source\n' > "$fixture/Sources/nested/source.swift"
+git -C "$fixture" add Sources
+
+if (cd "$fixture" && "$checker") > "$tmp/missing.log" 2>&1; then
+  echo "checker accepted tracked directories without guides" >&2
+  exit 1
+fi
+grep -q 'Sources/AGENTS.md' "$tmp/missing.log"
+grep -q 'Sources/nested/CLAUDE.md' "$tmp/missing.log"
+
+for directory in Sources Sources/nested; do
+  printf '# Local instructions\n' > "$fixture/$directory/AGENTS.md"
+  printf '@AGENTS.md\n' > "$fixture/$directory/CLAUDE.md"
+done
+
+(cd "$fixture" && "$checker") > "$tmp/passing.log"
+grep -q 'agent instruction coverage: 2 tracked directories' "$tmp/passing.log"
+echo "agent instruction checker test: passed (missing guides fail; complete guides pass)"

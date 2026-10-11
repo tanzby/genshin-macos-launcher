@@ -1,0 +1,36 @@
+#!/bin/sh
+# Every Git-tracked child directory needs an agent guide and Claude import.
+set -eu
+
+root=$(git rev-parse --show-toplevel)
+cd "$root"
+tmp=$(mktemp -d)
+trap 'rm -rf "$tmp"' EXIT HUP INT TERM
+
+git ls-files | awk -F/ 'NF > 1 {
+  path = $1
+  print path
+  for (i = 2; i < NF; i++) {
+    path = path "/" $i
+    print path
+  }
+}' | LC_ALL=C sort -u > "$tmp/directories"
+printf '@AGENTS.md\n' > "$tmp/claude-import"
+
+errors=0
+while IFS= read -r directory; do
+  if [ ! -s "$directory/AGENTS.md" ]; then
+    echo "missing or empty: $directory/AGENTS.md" >&2
+    errors=$((errors + 1))
+  fi
+  if [ ! -f "$directory/CLAUDE.md" ] || ! cmp -s "$tmp/claude-import" "$directory/CLAUDE.md"; then
+    echo "missing or invalid import: $directory/CLAUDE.md (expected exactly @AGENTS.md)" >&2
+    errors=$((errors + 1))
+  fi
+done < "$tmp/directories"
+
+if [ "$errors" -gt 0 ]; then
+  echo "agent instruction coverage: failed ($errors issue(s))" >&2
+  exit 1
+fi
+echo "agent instruction coverage: $(wc -l < "$tmp/directories" | tr -d ' ') tracked directories"
