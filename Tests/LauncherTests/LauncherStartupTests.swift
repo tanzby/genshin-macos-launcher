@@ -241,8 +241,11 @@ private struct Harness {
     await h.model.bootstrap()
     try await h.model.launch()
     try await h.fake.nextLaunch()
+    print("DBG test failing launch")
     h.fake.failLaunch(GameClientError.network)
+    print("DBG test failed launch")
     await h.model.waitUntilIdle()
+    print("DBG test idle")
     #expect(h.model.lastError == .client(.network))
   }
 }

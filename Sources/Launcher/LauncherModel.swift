@@ -531,7 +531,9 @@ public final class LauncherModel {
   private func finishLaunch(
     work: Task<LaunchOutcome, Error>, watchdog: Task<Void, Never>, gate: LaunchGate
   ) async {
+    print("DBG finishLaunch awaiting")
     let result = await work.result
+    print("DBG finishLaunch got result")
     watchdog.cancel()
     let failure: LauncherError?
     if gate.timedOut {
@@ -542,7 +544,9 @@ public final class LauncherModel {
       case .success(.failedExit(let code, let logPath)): failure = .gameExited(code: code, logPath: logPath)
       case .success(.failedToLaunch): failure = .failedToLaunch
       case .failure(let error):
+        print("DBG mapping")
         let mapped = LauncherError(error)
+        print("DBG mapped")
         failure = mapped == .client(.cancelled) ? nil : mapped
       }
     }
@@ -554,10 +558,12 @@ public final class LauncherModel {
         wineStatus = Self.reportedByLaunch  // not ready any more: the main button goes back to "prepare Wine"
       }
     }
+    print("DBG finishLaunch cleanup")
     launchGate = nil
     launchWork = nil
     exclusive = .idle
     exclusiveTask = nil
+    print("DBG finishLaunch done")
   }
 
   /// Test hook: returns once no job or launch Task is outstanding.
