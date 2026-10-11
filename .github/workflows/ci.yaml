@@ -7,7 +7,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        target: [LauncherClientHandoffTests, APP_010_OfflineTests, WIN_005_PhaseTests, APP_013_ErrorTests, APP_015_ExclusionTests, WIN_005_PauseTests, INS_004_DiskSpaceTests, WIN_005_ErrorTests, INS_015_JobFileTests, APP_020_AutoLaunchTests, PRG_006_PauseTests, WIN_005_StartupTests, UPG_013_SuccessTests, REP_002_PreconditionTests, LCH_036_LaunchTests, LauncherTests/]
+        target: [LauncherClientHandoffTests, APP_020_AutoLaunchTests, LauncherTests/, ALL]
     steps:
       - uses: actions/checkout@v4
       - name: hunt
