@@ -160,6 +160,15 @@ public final class SettingsModel {
     return true
   }
 
+  /// What the next launch of the game in `gameDirectory` needs from the settings.
+  public func launchOptions(gameDirectory: URL) -> LaunchOptions {
+    LaunchOptions(
+      gameDirectory: gameDirectory, retina: retina, leftCommandIsControl: leftCommandIsControl, metalHUD: metalHUD,
+      hdr: hdr, metalFX: metalFX,
+      customResolution: customResolution.map { LaunchOptions.Resolution(width: $0.width, height: $0.height) },
+      proxyHost: effectiveProxy)
+  }
+
   /// The proxy the game process should use, or nil.
   public var effectiveProxy: String? {
     proxyEnabled && !proxyHost.isEmpty ? proxyHost : nil

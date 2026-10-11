@@ -4,6 +4,7 @@ import Launcher
 import Platform
 import Sparkle
 import SwiftUI
+import Wine
 
 @main
 struct YaaglApp: App {
@@ -37,12 +38,26 @@ struct YaaglApp: App {
 
   init() {
     updater = UpdaterModel(updater: updaterController.updater)
-    let client = GenshinCNClient()
+    // `prepare()` migrates a TS-launcher data directory before anything reads it; if it fails the app stops
+    // rather than run on a directory it could not migrate. `--autolaunch` may point at a sandbox root.
+    let data: DataDirectory
+    do {
+      data = try AutoLaunchOptions.current.prepareDataDirectory()
+    } catch {
+      fatalError("Cannot prepare the data directory: \(error)")
+    }
+    // One `WineRuntime` for the client (launches the game with it) and the model (prepares it).
+    let wine = WineRuntime(dataDirectory: data)
+    let client = GenshinCNClient.bundled(wine: wine, dataDirectory: data)
     let settings = SettingsModel()
     let onboarding = OnboardingModel(hosts: GenshinCN.hostsBlocklist(), settings: settings)
     // A diagnostic run names its own game folder; it must not touch the one saved in the real preferences.
     let launcher = LauncherModel(
-      client: client, gameDirectory: AutoLaunchOptions.current.enabled ? AutoLaunchOptions.current.gameDirectory : settings.gameDirectory)
+      client: client, wine: wine,
+      startup: StartupSteps(
+        rosettaInstalled: { StartupSteps.isRosettaInstalled() }, recoverSession: { await client.recover() }),
+      gameDirectory: AutoLaunchOptions.current.enabled ? AutoLaunchOptions.current.gameDirectory : settings.gameDirectory)
+    launcher.makeLaunchOptions = { settings.launchOptions(gameDirectory: $0) }
     let controller = MainController(launcher: launcher, settings: settings, onboarding: onboarding)
     self.client = client
     _controller = State(initialValue: controller)

@@ -2177,6 +2177,23 @@
         }
       }
     },
+    "The game folder is damaged or is not the China release.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The game folder is damaged or is not the China release."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "游戏目录已损坏，或不是国服正式版。"
+          }
+        }
+      }
+    },
     "Wine has to be reinstalled.": {
       "extractionState": "manual",
       "localizations": {

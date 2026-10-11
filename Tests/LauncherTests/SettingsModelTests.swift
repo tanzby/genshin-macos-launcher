@@ -176,4 +176,30 @@ private func freshDefaults() -> UserDefaults {
       try GameDirectoryValidator.validate(quoted, gameExecutable: "x", isSupportedPath: supported)
     }
   }
+
+  @MainActor @Test func LCH_005_launchOptionsCarryEverySettingTheGameNeeds() {
+    let settings = SettingsModel(defaults: freshDefaults())
+    settings.retina = true
+    settings.leftCommandIsControl = true
+    settings.metalHUD = true
+    settings.hdr = true
+    settings.metalFX = true
+    settings.customResolutionEnabled = true
+    settings.setResolution(width: 2560, height: 1440)
+    settings.proxyEnabled = true
+    settings.setProxyHost("127.0.0.1:7890")
+
+    let options = settings.launchOptions(gameDirectory: URL(filePath: "/Games/GI"))
+
+    #expect(options.gameDirectory == URL(filePath: "/Games/GI"))
+    #expect(options.retina && options.leftCommandIsControl && options.metalHUD && options.hdr && options.metalFX)
+    #expect(options.customResolution == .init(width: 2560, height: 1440))
+    #expect(options.proxyHost == "127.0.0.1:7890")
+  }
+
+  @MainActor @Test func LCH_005_launchOptionsOfDefaultSettingsChangeNothing() {
+    let options = SettingsModel(defaults: freshDefaults()).launchOptions(gameDirectory: URL(filePath: "/Games/GI"))
+
+    #expect(options == LaunchOptions(gameDirectory: URL(filePath: "/Games/GI")))
+  }
 }

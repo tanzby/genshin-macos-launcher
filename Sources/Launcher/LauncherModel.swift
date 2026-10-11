@@ -70,6 +70,8 @@ public final class LauncherModel {
   public private(set) var pendingJob: PendingJob?
   public private(set) var lastError: LauncherError?
   public var gameDirectory: URL?
+  /// Snapshots the settings for a launch. The composition root replaces it with one that reads `SettingsModel`.
+  public var makeLaunchOptions: @MainActor (URL) -> LaunchOptions = { LaunchOptions(gameDirectory: $0) }
 
   /// The exclusive slot; pre-download has its own flag.
   private var exclusive: LauncherPhase = .idle
@@ -116,6 +118,8 @@ public final class LauncherModel {
   private var isShuttingDown = false
   private var launchWork: Task<LaunchOutcome, Error>?
   private var statusRead: Task<Void, Never>?
+  /// The error the last `refresh()` put into `lastError`, so a later good refresh can take it away again.
+  private var refreshFailure: LauncherError?
   /// `GameSession.recover()` has run in this process; it must not run again while a game may be running.
   private var hasRecovered = false
   private var recovery: Task<Void, Never>?
@@ -229,12 +233,21 @@ public final class LauncherModel {
 
   /// A failed query keeps the previous status: offline must not turn an installed game into "install".
   public func refresh() async {
+    client.setGameDirectory(gameDirectory)
     do {
       let fresh = try await client.status()
       status = fresh
       isOnline = !(fresh.remoteVersion ?? "").isEmpty
+      if refreshFailure != nil, lastError == refreshFailure { lastError = nil }
+      refreshFailure = nil
     } catch {
       isOnline = false
+      // Offline is a state of its own; anything else (a broken install) needs to be seen.
+      let failure = LauncherError(error)
+      if failure != .client(.network), failure != .client(.cancelled) {
+        lastError = failure
+        refreshFailure = failure
+      }
     }
     if let store = store { pendingJob = store.load() }
   }
@@ -320,6 +333,7 @@ public final class LauncherModel {
   }
 
   private func begin(_ job: GameJob, store: PendingJobStore) throws -> AsyncThrowingStream<JobProgress, Error> {
+    client.setGameDirectory(store.gameDirectory)
     let pending = PendingJob(kind: job, targetVersion: job == .preDownload ? status?.preDownloadTarget : status?.remoteVersion)
     // A pre-download must not replace the marker of an unfinished install/update/repair: that one blocks launch.
     if job == .preDownload, let existing = store.load(), existing.kind != .preDownload {
@@ -385,6 +399,8 @@ public final class LauncherModel {
     if preDownload { tasks += [preDownloadTask].compactMap { $0 } }
     for task in tasks { task.cancel() }
     for task in tasks { await task.value }
+    // The streams are over, but the work behind them may still be finishing a file.
+    await client.quiesce()
   }
 
   private func stopPreDownload() async {
@@ -394,6 +410,7 @@ public final class LauncherModel {
   private func checkDiskSpace(for job: GameJob, in directory: URL) async throws {
     let bytes: Int64
     do {
+      client.setGameDirectory(directory)
       bytes = try await client.requiredDiskSpace(for: job)
     } catch {
       if Task.isCancelled || error is CancellationError { throw CancellationError() }
@@ -509,6 +526,7 @@ public final class LauncherModel {
   // MARK: Launch
 
   public func launch() async throws {
+    client.setGameDirectory(gameDirectory)
     guard exclusive == .idle, !isPausing, !isShuttingDown, recovery == nil else { throw LauncherError.busy }
     guard !isWineNotReady else { throw LauncherError.wineNotReady }
     guard let status, status.localVersion != nil else { throw LauncherError.notInstalled }
@@ -521,7 +539,7 @@ public final class LauncherModel {
     let gate = LaunchGate()
     launchGate = gate
     let client = client
-    let options = LaunchOptions(gameDirectory: gameDirectory)
+    let options = makeLaunchOptions(gameDirectory)
     let onStarted: @Sendable () -> Void = { [weak self] in
       // Only the callback that beats the timeout may switch the phase to running.
       guard gate.markStarted() else { return }

@@ -1,4 +1,5 @@
 import Foundation
+import Launcher
 import Wine
 
 /// The launch-time preferences that reach Wine (a snapshot, never read from `UserDefaults` here).
@@ -147,5 +148,16 @@ public enum GenshinLaunchRecipe {
       #""%WINDIR%\system32\steam.exe" "\#(directory)\\#(GenshinCN.executableName)" -platform_type CLOUD_THIRD_PARTY_PC -is_cloud 1"#,
       "",
     ].joined(separator: "\n")
+  }
+}
+
+extension GenshinLaunchSettings {
+  /// The settings part of a launch snapshot.
+  public init(_ options: LaunchOptions) {
+    self.init(
+      retina: options.retina, leftCommandIsControl: options.leftCommandIsControl, metalHUD: options.metalHUD,
+      hdr: options.hdr, metalFX: options.metalFX,
+      customResolution: options.customResolution.map { Resolution(width: $0.width, height: $0.height) },
+      proxyHost: options.proxyHost)
   }
 }

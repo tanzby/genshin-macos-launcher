@@ -24,6 +24,12 @@ public enum SophonError: Error, Equatable, Sendable {
   case patchFailed(path: String)
   /// After an update a file is missing, has the wrong size, or an old file is still there (UPG-011).
   case verificationFailed(path: String)
+  /// The game directory is not a recognisable China-release install (UPG-005).
+  case brokenInstallation
+  /// A fresh install needs an empty directory, or one left by an interrupted install (INS-005).
+  case installDirectoryNotEmpty
+  /// `config.ini` is missing or its `game_version` line is not exactly one (INS-006, UPG-011).
+  case invalidConfig
 }
 
 extension SophonError: LocalizedError {
@@ -42,6 +48,9 @@ extension SophonError: LocalizedError {
     case .versionNotPatchable(let version): "Version \(version) cannot be updated with ldiff patches"
     case .patchFailed(let path): "Could not patch \(path)"
     case .verificationFailed(let path): "File is missing, has the wrong size, or should be gone after the update: \(path)"
+    case .brokenInstallation: "Broken script or corrupted game installation"
+    case .installDirectoryNotEmpty: "The specified install path is not empty"
+    case .invalidConfig: "Invalid config.ini format"
     }
   }
 }

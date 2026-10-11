@@ -44,10 +44,39 @@ public enum JobProgress: Sendable, Equatable {
 
 /// A snapshot of the settings at launch time. Domain modules never read `UserDefaults`.
 public struct LaunchOptions: Sendable, Equatable {
-  public var gameDirectory: URL
+  public struct Resolution: Sendable, Equatable {
+    public var width: Int
+    public var height: Int
 
-  public init(gameDirectory: URL) {
+    public init(width: Int, height: Int) {
+      self.width = width
+      self.height = height
+    }
+  }
+
+  public var gameDirectory: URL
+  public var retina: Bool
+  public var leftCommandIsControl: Bool
+  public var metalHUD: Bool
+  public var hdr: Bool
+  public var metalFX: Bool
+  /// `nil` leaves the game's own resolution alone.
+  public var customResolution: Resolution?
+  /// Raw `host:port`; `nil` or empty means no proxy.
+  public var proxyHost: String?
+
+  public init(
+    gameDirectory: URL, retina: Bool = false, leftCommandIsControl: Bool = false, metalHUD: Bool = false,
+    hdr: Bool = false, metalFX: Bool = false, customResolution: Resolution? = nil, proxyHost: String? = nil
+  ) {
     self.gameDirectory = gameDirectory
+    self.retina = retina
+    self.leftCommandIsControl = leftCommandIsControl
+    self.metalHUD = metalHUD
+    self.hdr = hdr
+    self.metalFX = metalFX
+    self.customResolution = customResolution
+    self.proxyHost = proxyHost
   }
 }
 
@@ -68,6 +97,8 @@ public enum GameClientError: Error, Sendable, Equatable {
   case verificationFailed
   case cancelled
   case wineReinstallRequired
+  /// The game folder is damaged or not the China release (Bilibili); neither update nor repair can start from it.
+  case brokenInstallation
 }
 
 /// The seam between the launcher state machine and a concrete game.
@@ -81,6 +112,18 @@ public protocol GameClient: Sendable {
   /// Cancellation must restore Launch Mutations and kill the prefix before returning.
   func launch(_ options: LaunchOptions, onStarted: @escaping @Sendable () -> Void) async throws -> LaunchOutcome
   func backgroundImage() async -> BackgroundImage
+  /// The launcher tells the client which folder `status()`, `run(_:)` and `requiredDiskSpace(for:)` work on
+  /// (they take no path). Called with the current folder, also `nil`, right before every client call that reads it
+  /// (refresh, the disk-space check and `run` of a job, launch), never ahead of a check that may reject the call.
+  func setGameDirectory(_ url: URL?)
+  /// Returns once nothing the client started is still running. A job's stream ends as soon as its consumer is
+  /// cancelled; this is how the launcher learns the work behind it has really stopped (pause, shutdown).
+  func quiesce() async
+}
+
+extension GameClient {
+  public func setGameDirectory(_ url: URL?) {}
+  public func quiesce() async {}
 }
 
 /// The seam between the launcher and the Wine runtime. `WineRuntime` is the production implementation;

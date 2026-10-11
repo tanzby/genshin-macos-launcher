@@ -35,10 +35,11 @@ public struct GameSession: Sendable {
   }
 
   /// Runs the game and restores everything afterwards. Never throws: the outcome is the result.
-  public func launch(_ recipe: LaunchRecipe) async -> LaunchResult {
+  /// `onStarted` is called at most once, from the startup watchdog, when the game process is first seen.
+  public func launch(_ recipe: LaunchRecipe, onStarted: @escaping @Sendable () -> Void = {}) async -> LaunchResult {
     let flags = LaunchFlags()
     let work = Task { await run(recipe) }
-    let watchdog = Task { await watchStartup(recipe, flags: flags, work: work) }
+    let watchdog = Task { await watchStartup(recipe, flags: flags, work: work, onStarted: onStarted) }
     let result = await withTaskCancellationHandler {
       await work.value
     } onCancel: {
@@ -121,12 +122,17 @@ public struct GameSession: Sendable {
 
   /// Counts poll intervals instead of reading a clock, so tests run in milliseconds. The clock starts with
   /// the launch, which also bounds preparation (`wineserver -w` has no timeout of its own, LCH-009).
-  private func watchStartup(_ recipe: LaunchRecipe, flags: LaunchFlags, work: Task<LaunchResult, Never>) async {
+  private func watchStartup(
+    _ recipe: LaunchRecipe, flags: LaunchFlags, work: Task<LaunchResult, Never>, onStarted: @Sendable () -> Void
+  ) async {
     var elapsed = Duration.zero
     while !Task.isCancelled {
       do { try await timing.sleep(timing.pollInterval) } catch { return }
       elapsed += timing.pollInterval
-      if gameIsRunning(recipe) { return }
+      if gameIsRunning(recipe) {
+        onStarted()
+        return
+      }
       if elapsed >= timing.startupTimeout {
         flags.markTimedOut()
         work.cancel()
