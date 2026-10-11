@@ -14,7 +14,9 @@ public struct TestTimeout: Error, CustomStringConvertible {
 public let testFailsafe: Duration = .seconds(10)
 
 /// Polls `condition` every `interval` until it holds; false once `timeout` has passed or the task is cancelled.
+/// Runs in the caller's isolation, so a main-actor test can poll main-actor state.
 public func pollUntil(
+  isolation: isolated (any Actor)? = #isolation,
   timeout: Duration = testFailsafe, interval: Duration = .milliseconds(5), _ condition: () async throws -> Bool
 ) async rethrows -> Bool {
   let deadline = ContinuousClock.now + timeout
