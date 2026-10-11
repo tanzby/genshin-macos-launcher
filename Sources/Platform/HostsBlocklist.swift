@@ -119,13 +119,13 @@ public struct HostsBlocklist: Sendable {
     var found: [FoundSection] = []
     var index = 0
     while index < lines.count {
-      guard lines[index].trimmingCharacters(in: .whitespacesAndNewlines) == beginMarker else {
+      guard isBeginMarker(lines[index]) else {
         index += 1
         continue
       }
       var end = index + 1
       var terminated = false
-      if let close = lines[end...].firstIndex(where: { $0.trimmingCharacters(in: .whitespacesAndNewlines) == endMarker }),
+      if let close = lines[end...].firstIndex(where: isEndMarker),
         lines[end..<close].allSatisfy(isOwnLine)
       {
         end = close + 1
@@ -141,6 +141,10 @@ public struct HostsBlocklist: Sendable {
 
   private static func isBeginMarker(_ line: String) -> Bool {
     line.trimmingCharacters(in: .whitespacesAndNewlines) == beginMarker
+  }
+
+  private static func isEndMarker(_ line: String) -> Bool {
+    line.trimmingCharacters(in: .whitespacesAndNewlines) == endMarker
   }
 
   /// Inside a terminated section only comments and 0.0.0.0 routes can be ours; anything else means

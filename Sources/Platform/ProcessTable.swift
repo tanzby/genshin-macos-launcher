@@ -56,13 +56,18 @@ public struct SystemProcessTable: ProcessTable {
     _ = Darwin.kill(pid, SIGKILL)
   }
 
+  /// The C string in a fixed-size `char[MAXPATHLEN]` field, which Swift imports as a tuple.
+  private static func string<Path>(from path: inout Path) -> String {
+    withUnsafePointer(to: &path) {
+      $0.withMemoryRebound(to: CChar.self, capacity: Int(MAXPATHLEN)) { String(cString: $0) }
+    }
+  }
+
   static func workingDirectory(of pid: Int32) -> String? {
     var info = proc_vnodepathinfo()
     let size = proc_pidinfo(pid, PROC_PIDVNODEPATHINFO, 0, &info, Int32(MemoryLayout<proc_vnodepathinfo>.size))
     guard size == Int32(MemoryLayout<proc_vnodepathinfo>.size) else { return nil }
-    return withUnsafePointer(to: &info.pvi_cdir.vip_path) {
-      $0.withMemoryRebound(to: CChar.self, capacity: Int(MAXPATHLEN)) { String(cString: $0) }
-    }
+    return Self.string(from: &info.pvi_cdir.vip_path)
   }
 
   static func openPaths(of pid: Int32) -> [String] {
@@ -78,9 +83,7 @@ public struct SystemProcessTable: ProcessTable {
       let size = proc_pidfdinfo(
         pid, fd.proc_fd, PROC_PIDFDVNODEPATHINFO, &vnode, Int32(MemoryLayout<vnode_fdinfowithpath>.size))
       guard size == Int32(MemoryLayout<vnode_fdinfowithpath>.size) else { continue }
-      let path = withUnsafePointer(to: &vnode.pvip.vip_path) {
-        $0.withMemoryRebound(to: CChar.self, capacity: Int(MAXPATHLEN)) { String(cString: $0) }
-      }
+      let path = Self.string(from: &vnode.pvip.vip_path)
       if !path.isEmpty { paths.append(path) }
     }
     return paths
