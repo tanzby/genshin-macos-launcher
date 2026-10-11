@@ -111,13 +111,13 @@ public struct SophonAPI: Sendable {
 }
 
 /// Real client behind the `SophonClient` protocol.
-public struct LiveSophonClient: SophonClient {
+struct LiveSophonClient: SophonClient {
   private let api: SophonAPI
 
-  public init(api: SophonAPI = SophonAPI()) { self.api = api }
+  init(api: SophonAPI = SophonAPI()) { self.api = api }
 
   /// `installSize` is the compressed download size of the `game` category (what the chunks weigh).
-  public func onlineInfo() async throws -> SophonOnlineInfo {
+  func onlineInfo() async throws -> SophonOnlineInfo {
     let branches = try await api.gameBranches()
     guard let main = branches.main else { throw SophonError.malformedResponse }
     let game = try await api.build(for: main).manifest(matching: "game")

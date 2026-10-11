@@ -5,9 +5,9 @@ import os
 private let log = Logger(subsystem: "io.github.tanzby.yaagl", category: "wine")
 
 /// Executes a `LaunchRecipe`: launch mutations, run, wait, restore.
-public struct GameSession: Sendable {
+package struct GameSession: Sendable {
   /// Bundle id of `YaaglGame.app` (UPD-017). `codesign -i` must use the same id.
-  public static let gameHostBundleIdentifier = "io.github.tanzby.yaagl.game"
+  package static let gameHostBundleIdentifier = "io.github.tanzby.yaagl.game"
   static let keptGameLogs = 20
 
   let layout: WineLayout
@@ -17,7 +17,7 @@ public struct GameSession: Sendable {
   let helpers: GameHostHelpers?
   let timing: LaunchTiming
 
-  public init(
+  package init(
     layout: WineLayout,
     runner: any ProcessRunning,
     processes: any ProcessTable = SystemProcessTable(),
@@ -35,7 +35,7 @@ public struct GameSession: Sendable {
 
   /// Runs the game and restores everything afterwards. Never throws: the outcome is the result.
   /// `onStarted` is called at most once, from the startup watchdog, when the game process is first seen.
-  public func launch(_ recipe: LaunchRecipe, onStarted: @escaping @Sendable () -> Void = {}) async -> LaunchResult {
+  package func launch(_ recipe: LaunchRecipe, onStarted: @escaping @Sendable () -> Void = {}) async -> LaunchResult {
     let timedOut = OSAllocatedUnfairLock(initialState: false)
     let work = Task { await run(recipe) }
     let watchdog = Task { await watchStartup(recipe, timedOut: timedOut, work: work, onStarted: onStarted) }
@@ -56,7 +56,7 @@ public struct GameSession: Sendable {
   }
 
   /// Kills what is left of the prefix and replays the journal of a crashed launch (ADR 0002).
-  public func recover() async {
+  package func recover() async {
     await shutdownPrefix()
     await restoreFromJournal()
   }
@@ -69,7 +69,7 @@ public struct GameSession: Sendable {
   /// `WINEDEBUG` and recipe environment as a launch, plus `WINEPATH` pointing at the game directory.
   /// Touches neither the registry nor the journal. Returns the exit code once the prompt is
   /// closed, or `nil` if Wine could not be started.
-  public func openCommandPrompt(_ recipe: LaunchRecipe, gameDirectory: URL?) async -> Int32? {
+  package func openCommandPrompt(_ recipe: LaunchRecipe, gameDirectory: URL?) async -> Int32? {
     var environment = launchEnvironment(for: recipe)
     if let gameDirectory { environment["WINEPATH"] = Self.windowsPath(gameDirectory) }
     do {
@@ -399,7 +399,7 @@ public struct GameSession: Sendable {
   }
 
   /// A Unix path as Wine sees it on the `Z:` drive.
-  public static func windowsPath(_ url: URL) -> String {
+  package static func windowsPath(_ url: URL) -> String {
     "Z:" + url.path.replacingOccurrences(of: "/", with: "\\")
   }
 }

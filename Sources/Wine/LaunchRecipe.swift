@@ -1,6 +1,6 @@
 import Foundation
 
-public enum RegistryValue: Sendable, Equatable, Codable {
+package enum RegistryValue: Sendable, Equatable, Codable {
   case dword(UInt32)
   case string(String)
 }
@@ -89,14 +89,14 @@ public enum LaunchResult: Sendable, Equatable {
   case cancelled
 }
 
-public struct LaunchTiming: Sendable {
-  public var startupTimeout: Duration
-  public var pollInterval: Duration
+package struct LaunchTiming: Sendable {
+  package var startupTimeout: Duration
+  package var pollInterval: Duration
   /// How long `wineserver -w` may take after the game exits before the prefix is killed (LCH-036).
-  public var exitGrace: Duration
-  public var sleep: @Sendable (Duration) async throws -> Void
+  package var exitGrace: Duration
+  package var sleep: @Sendable (Duration) async throws -> Void
 
-  public init(
+  package init(
     startupTimeout: Duration = .seconds(120),
     pollInterval: Duration = .seconds(1),
     exitGrace: Duration = .seconds(15),
@@ -109,7 +109,7 @@ public struct LaunchTiming: Sendable {
   }
 
   /// Named, not a closure literal in the default argument: see `LauncherModel.defaultSleep` (issue #48).
-  public static func defaultSleep(_ duration: Duration) async throws {
+  package static func defaultSleep(_ duration: Duration) async throws {
     try await Task.sleep(for: duration)
   }
 }
@@ -127,6 +127,6 @@ public struct GameHostHelpers: Sendable, Equatable {
 }
 
 /// Registers an app bundle with LaunchServices. A seam so tests never touch the real database.
-public protocol LaunchServicesRegistering: Sendable {
+package protocol LaunchServicesRegistering: Sendable {
   func register(appAt url: URL) throws
 }

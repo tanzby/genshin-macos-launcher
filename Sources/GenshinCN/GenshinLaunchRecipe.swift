@@ -10,22 +10,13 @@ public struct GenshinLaunchSettings: Sendable, Equatable {
   public var hdr: Bool
   public var metalFX: Bool
   /// `nil` = do not touch the game's own resolution. Positive values only; validation is the settings UI's job.
-  public var customResolution: Resolution?
+  public var customResolution: LaunchOptions.Resolution?
   /// Raw `host:port`, passed through unchanged (LCH-034). `nil` or empty = no proxy.
   public var proxyHost: String?
 
-  public struct Resolution: Sendable, Equatable {
-    public var width: Int
-    public var height: Int
-    public init(width: Int, height: Int) {
-      self.width = width
-      self.height = height
-    }
-  }
-
   public init(
     retina: Bool = false, leftCommandIsControl: Bool = false, metalHUD: Bool = false, hdr: Bool = false,
-    metalFX: Bool = false, customResolution: Resolution? = nil, proxyHost: String? = nil
+    metalFX: Bool = false, customResolution: LaunchOptions.Resolution? = nil, proxyHost: String? = nil
   ) {
     self.retina = retina
     self.leftCommandIsControl = leftCommandIsControl
@@ -150,7 +141,7 @@ extension GenshinLaunchSettings {
     self.init(
       retina: options.retina, leftCommandIsControl: options.leftCommandIsControl, metalHUD: options.metalHUD,
       hdr: options.hdr, metalFX: options.metalFX,
-      customResolution: options.customResolution.map { Resolution(width: $0.width, height: $0.height) },
+      customResolution: options.customResolution,
       proxyHost: options.proxyHost)
   }
 }

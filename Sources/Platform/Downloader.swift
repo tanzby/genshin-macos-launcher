@@ -12,7 +12,7 @@ public struct DownloadProgress: Sendable, Equatable {
   }
 }
 
-public enum DownloadError: Error, Equatable {
+package enum DownloadError: Error, Equatable {
   case httpStatus(Int)
   case checksumMismatch(expected: String, actual: String)
 }

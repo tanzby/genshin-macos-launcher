@@ -42,11 +42,11 @@ public struct SophonUpdatePlan: Sendable, Equatable {
 
 /// Which pre-download the temp directory holds. State lives with the data it describes: deleting the
 /// temp directory forgets it, and it is recorded per target version, not as one yes/no flag (PRE-001).
-public struct SophonPredownloadRecord: Sendable, Equatable, Codable {
-  public let targetVersion: String
-  public let fromVersion: String
+struct SophonPredownloadRecord: Sendable, Equatable, Codable {
+  let targetVersion: String
+  let fromVersion: String
   /// `false` while the download is under way; set after the last ldiff and chunk is in place.
-  public let complete: Bool
+  let complete: Bool
 
   static func url(in tempDirectory: URL) -> URL { tempDirectory.appending(path: "predownload.json") }
 

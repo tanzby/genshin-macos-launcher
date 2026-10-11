@@ -5,7 +5,7 @@ import Sophon
 import Synchronization
 import Wine
 
-public enum GenshinCNClientError: Error, Sendable, Equatable {
+enum GenshinCNClientError: Error, Sendable, Equatable {
   case noGameDirectory
   /// The folder holds no (complete) install, so there is nothing to update or repair.
   case notInstalled

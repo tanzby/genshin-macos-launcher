@@ -48,6 +48,6 @@ public struct ProcessResult: Sendable, Equatable {
 }
 
 /// Runs a shell command with administrator privileges. Its only caller is `HostsBlocklist`.
-public protocol AdminPrivilege: Sendable {
+protocol AdminPrivilege: Sendable {
   func run(shellCommand: String) async throws
 }

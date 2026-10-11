@@ -172,15 +172,15 @@ extension JobProgress {
 
 /// Speed over a sliding time window, fed with `(bytes done, time)` samples (PRG-002). The caller passes
 /// the clock reading, so tests are deterministic.
-public struct TransferEstimator: Sendable {
+struct TransferEstimator: Sendable {
   private let window: TimeInterval
   private var samples: [(done: Int64, time: TimeInterval)] = []
 
-  public init(window: TimeInterval = 10) {
+  init(window: TimeInterval = 10) {
     self.window = window
   }
 
-  public mutating func record(done: Int64, at time: TimeInterval) {
+  mutating func record(done: Int64, at time: TimeInterval) {
     // A counter that goes backwards means a new phase started: measure it afresh.
     if let last = samples.last, done < last.done { samples.removeAll() }
     samples.append((done, time))
@@ -190,12 +190,12 @@ public struct TransferEstimator: Sendable {
     samples = recent.count >= 2 ? recent : Array(samples.suffix(2))
   }
 
-  public var bytesPerSecond: Double? {
+  var bytesPerSecond: Double? {
     guard let first = samples.first, let last = samples.last, last.time > first.time else { return nil }
     return Double(last.done - first.done) / (last.time - first.time)
   }
 
-  public func remaining(done: Int64, total: Int64) -> TimeInterval? {
+  func remaining(done: Int64, total: Int64) -> TimeInterval? {
     guard total > done, let speed = bytesPerSecond, speed > 0 else { return nil }
     return Double(total - done) / speed
   }

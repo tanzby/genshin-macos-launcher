@@ -1,7 +1,7 @@
 import Foundation
 
 /// Why a Sophon request or parse failed. Never carries a URL or a password.
-public enum SophonError: Error, Equatable, Sendable {
+package enum SophonError: Error, Equatable, Sendable {
   /// The server answered with something other than 200.
   case http(status: Int)
   /// The request never completed (`URLError.Code.rawValue`).
@@ -33,7 +33,7 @@ public enum SophonError: Error, Equatable, Sendable {
 }
 
 extension SophonError: LocalizedError {
-  public var errorDescription: String? {
+  package var errorDescription: String? {
     switch self {
     case .http(let status): "Sophon server answered HTTP \(status)"
     case .transport(let code): "Sophon request failed (network error \(code))"

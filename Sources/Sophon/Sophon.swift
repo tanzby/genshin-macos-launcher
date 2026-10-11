@@ -11,13 +11,13 @@ public enum SophonProgress: Sendable, Equatable {
 }
 
 /// Latest remote state of the game branch. `preDownload` is `nil` when the branch is null.
-public struct SophonOnlineInfo: Sendable, Equatable {
-  public var latestVersion: String
-  public var installSize: Int64
-  public var patchableVersions: [String]
-  public var preDownload: String?
+struct SophonOnlineInfo: Sendable, Equatable {
+  var latestVersion: String
+  var installSize: Int64
+  var patchableVersions: [String]
+  var preDownload: String?
 
-  public init(
+  init(
     latestVersion: String,
     installSize: Int64,
     patchableVersions: [String] = [],
@@ -31,6 +31,6 @@ public struct SophonOnlineInfo: Sendable, Equatable {
 }
 
 /// Entry point of the Sophon module. The implementation lands with the Sophon tickets.
-public protocol SophonClient: Sendable {
+protocol SophonClient: Sendable {
   func onlineInfo() async throws -> SophonOnlineInfo
 }

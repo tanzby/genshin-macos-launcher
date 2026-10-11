@@ -72,14 +72,14 @@ public struct DXMTBundle: Sendable, Equatable {
 }
 
 /// Written last when an install completes, inside `wine/`, so it disappears with the runtime.
-public struct WineStamp: Codable, Sendable, Equatable {
-  public static let currentSchemaVersion = 1
+struct WineStamp: Codable, Sendable, Equatable {
+  static let currentSchemaVersion = 1
 
-  public var schemaVersion: Int
-  public var wineVersion: String
-  public var dxmtVersion: String
+  var schemaVersion: Int
+  var wineVersion: String
+  var dxmtVersion: String
 
-  public init(schemaVersion: Int = Self.currentSchemaVersion, wineVersion: String, dxmtVersion: String) {
+  init(schemaVersion: Int = Self.currentSchemaVersion, wineVersion: String, dxmtVersion: String) {
     self.schemaVersion = schemaVersion
     self.wineVersion = wineVersion
     self.dxmtVersion = dxmtVersion

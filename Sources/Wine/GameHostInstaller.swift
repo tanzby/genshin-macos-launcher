@@ -4,10 +4,10 @@ import Platform
 import os
 
 /// Production `LaunchServicesRegistering` on `LSRegisterURL`.
-public struct SystemLaunchServices: LaunchServicesRegistering {
-  public init() {}
+package struct SystemLaunchServices: LaunchServicesRegistering {
+  package init() {}
 
-  public func register(appAt url: URL) throws {
+  package func register(appAt url: URL) throws {
     // LSRegisterURL is the only public API that registers a bundle that lives outside /Applications.
     let status = LSRegisterURL(url as CFURL, true)
     guard status == noErr else { throw GameHostError.registrationFailed(status: status) }
