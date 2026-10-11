@@ -10,6 +10,8 @@ extension GenshinCNClient {
 
   public func run(_ job: GameJob) -> AsyncThrowingStream<JobProgress, Error> {
     let (stream, continuation) = AsyncThrowingStream<JobProgress, Error>.makeStream()
+    // Fixed now: a job queued behind another must not follow a later `setGameDirectory`.
+    let directory = gameDirectory
     let task = serializer.enqueue { [self] in
       // Paused before it began: do not touch the disk at all.
       if Task.isCancelled {
@@ -17,7 +19,7 @@ extension GenshinCNClient {
         return
       }
       do {
-        try await perform(job) { continuation.yield($0) }
+        try await perform(job, in: directory) { continuation.yield($0) }
         continuation.finish()
       } catch {
         continuation.finish(throwing: Self.map(error))
@@ -27,8 +29,10 @@ extension GenshinCNClient {
     return stream
   }
 
-  private func perform(_ job: GameJob, report: @escaping @Sendable (JobProgress) -> Void) async throws {
-    let directory = try requireGameDirectory()
+  private func perform(
+    _ job: GameJob, in directory: URL?, report: @escaping @Sendable (JobProgress) -> Void
+  ) async throws {
+    guard let directory else { throw GenshinCNClientError.noGameDirectory }
     // An install is only known to target a game directory once `prepareForInstall` accepted it.
     if job != .install { SophonInstallation.removeLegacyTemporaryFolders(in: directory) }
     let sophonReport: @Sendable (SophonProgress) -> Void = { report(Self.jobProgress($0)) }

@@ -100,8 +100,8 @@ public final class GenshinCNClient: GameClient {
 
   public func status() async throws -> GameStatus {
     let directory = gameDirectory
-    // A folder that is not a China-release install reads as "no install"; the install then refuses it by name.
-    let installed = directory.flatMap { (try? SophonInstallation.installedVersion(in: $0)) ?? nil }
+    // A broken or non-China install throws `brokenInstallation` (UPG-005) instead of reading as "no install".
+    let installed = try directory.flatMap { try SophonInstallation.installedVersion(in: $0) }
     let branches: SophonGameBranches
     do {
       branches = try await sophon.gameBranches()

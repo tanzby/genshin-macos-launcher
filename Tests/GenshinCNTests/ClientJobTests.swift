@@ -70,6 +70,20 @@ private func isError(_ error: (any Error)?, _ expected: SophonError) -> Bool {
     #expect(rig.cdn.chunkRequests().isEmpty)
   }
 
+  @Test func ADR0002_aQueuedJobKeepsTheFolderItWasStartedWith() async throws {
+    let rig = ClientRig(main: .game("5.6.0"))
+    rig.cdn.chunkDelay = .milliseconds(200)
+    let first = rig.client.run(.install)
+    let second = rig.client.run(.repair)  // waits for `first`
+    let other = rig.root.appending(path: "other", directoryHint: .isDirectory)
+    rig.client.setGameDirectory(other)
+
+    for try await _ in first {}
+    for try await _ in second {}
+
+    #expect(!FileManager.default.fileExists(atPath: other.path))
+  }
+
   @Test func INS_003_installWithoutAGameDirectoryFailsBeforeAnyRequest() async throws {
     let rig = ClientRig(main: .game("5.6.0"), withGameDirectory: false)
 

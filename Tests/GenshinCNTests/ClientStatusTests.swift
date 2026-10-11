@@ -16,6 +16,14 @@ import Testing
     #expect(status == GameStatus(localVersion: nil, remoteVersion: "5.6.0", canUpdate: false, canPreDownload: false))
   }
 
+  @Test func UPG_005_aBrokenInstallationIsReportedNotTakenForNoInstall() async throws {
+    let rig = ClientRig(main: .game("5.6.0"))
+    rig.install(.game("5.5.0"))
+    rig.write("YuanShen_Data/Plugins/PCGameSDK.dll", Data("sdk".utf8))
+
+    await #expect(throws: SophonError.brokenInstallation) { try await rig.client.status() }
+  }
+
   @Test func INS_014_anInstallAtTheLatestVersionOffersNothing() async throws {
     let rig = ClientRig(main: .game("5.6.0"))
     rig.install(.game("5.6.0"))
