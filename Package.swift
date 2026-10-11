@@ -22,7 +22,8 @@ let package = Package(
   ],
   dependencies: [
     .package(url: "https://github.com/apple/swift-protobuf.git", from: "1.38.1"),
-    .package(url: "https://github.com/sparkle-project/Sparkle", from: "2.10.0"),
+    // Exact: release.yaml (SPARKLE_VERSION) and scripts/dev/sparkle-local-check use the same version's tools.
+    .package(url: "https://github.com/sparkle-project/Sparkle", exact: "2.10.0"),
   ],
   targets: [
     // facebook/zstd v1.5.7, decompressor only. Assembly is disabled so the target builds without .S files.

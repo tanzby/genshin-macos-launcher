@@ -23,7 +23,8 @@ if [ -d "$dxmt" ] || [ "${REQUIRE_DXMT:-0}" = 1 ]; then
   done
 fi
 # Sparkle reaches the app through the Updates package product (#87); Xcode must still embed the framework.
-[ -d "$app/Contents/Frameworks/Sparkle.framework" ] || { echo "missing: Contents/Frameworks/Sparkle.framework"; fail=1; }
+sparkle="$app/Contents/Frameworks/Sparkle.framework"
+codesign --verify --deep --strict "$sparkle" || { echo "missing or badly signed: $sparkle"; fail=1; }
 # Sparkle defaults: check on its own without the first-launch permission prompt, once a day.
 plist="$app/Contents/Info.plist"
 [ "$(/usr/libexec/PlistBuddy -c 'Print :SUEnableAutomaticChecks' "$plist" 2>/dev/null)" = "true" ] \
