@@ -1,6 +1,7 @@
 import Foundation
 import Platform
 import Testing
+import TestSupport
 
 @testable import Wine
 
@@ -405,10 +406,7 @@ private func expectFilesBack(_ urls: [URL], sourceLocation: SourceLocation = #_s
       f.table.probe.value = { number in number >= 3 ? [FakeProcessTable.gameRecord] : [] }
       let table = f.table
       f.runner.game.value = .custom { _ in
-        let deadline = ContinuousClock.now + .seconds(5)
-        while table.probeCount < 3 && ContinuousClock.now < deadline {
-          try await Task.sleep(for: .milliseconds(1))
-        }
+        _ = await pollUntil { table.probeCount >= 3 }
         // far more instant polls than the 10 s timeout allows would happen here if the watchdog kept running
         try await Task.sleep(for: .milliseconds(40))
         return 0
@@ -427,10 +425,7 @@ private func expectFilesBack(_ urls: [URL], sourceLocation: SourceLocation = #_s
       f.table.probe.value = { number in number >= 3 ? [FakeProcessTable.gameRecord] : [] }
       let table = f.table
       f.runner.game.value = .custom { _ in
-        let deadline = ContinuousClock.now + .seconds(5)
-        while table.probeCount < 3 && ContinuousClock.now < deadline {
-          try await Task.sleep(for: .milliseconds(1))
-        }
+        _ = await pollUntil { table.probeCount >= 3 }
         try await Task.sleep(for: .milliseconds(40))
         return 0
       }
@@ -462,10 +457,7 @@ private func expectFilesBack(_ urls: [URL], sourceLocation: SourceLocation = #_s
       }
       let table = f.table
       f.runner.game.value = .custom { _ in
-        let deadline = ContinuousClock.now + .seconds(5)
-        while table.probeCount < 1 && ContinuousClock.now < deadline {
-          try await Task.sleep(for: .milliseconds(1))
-        }
+        _ = await pollUntil { table.probeCount >= 1 }
         try await Task.sleep(for: .milliseconds(40))
         return 0
       }

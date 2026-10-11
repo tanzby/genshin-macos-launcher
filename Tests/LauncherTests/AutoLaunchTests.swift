@@ -32,11 +32,7 @@ private final class Harness {
 
   /// The phase watcher logs asynchronously; wait for its line instead of assuming it already ran.
   func waitForLine(_ line: String) async -> Bool {
-    for _ in 0..<500 {
-      if lines.contains(line) { return true }
-      try? await Task.sleep(for: .milliseconds(10))
-    }
-    return false
+    await pollUntil { lines.contains(line) }
   }
 
   func autoLaunch(allowDownload: Bool = true) -> AutoLaunch {

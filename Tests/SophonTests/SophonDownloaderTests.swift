@@ -297,15 +297,12 @@ private struct RunningInstall {
   /// Waits until the CDN has seen `count` requests. Records an issue and returns false when the
   /// install ends first (for instance because the stub fails at once) or nothing arrives in time.
   func waitForRequests(_ count: Int, in rig: Rig) async -> Bool {
-    let deadline = ContinuousClock.now + .seconds(10)
-    while ContinuousClock.now < deadline {
-      if rig.requests.count >= count { return true }
-      if finished.isSet {
-        let outcome = await task.result
-        Issue.record("install ended before \(count) request(s) arrived: \(outcome)")
-        return false
-      }
-      try? await Task.sleep(for: .milliseconds(5))
+    _ = await pollUntil { rig.requests.count >= count || finished.isSet }
+    if rig.requests.count >= count { return true }
+    if finished.isSet {
+      let outcome = await task.result
+      Issue.record("install ended before \(count) request(s) arrived: \(outcome)")
+      return false
     }
     Issue.record("timed out waiting for \(count) request(s); saw \(rig.requests.count)")
     task.cancel()

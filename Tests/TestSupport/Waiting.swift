@@ -10,10 +10,13 @@ public struct TestTimeout: Error, CustomStringConvertible {
   public var description: String { "timed out waiting for \(what) (failsafe, not a synchronization primitive)" }
 }
 
-/// Polls `condition` every few milliseconds until it holds; false once `timeout` has passed.
-public func pollUntil(timeout: Duration = .seconds(10), _ condition: () async throws -> Bool) async rethrows -> Bool {
+/// How long any wait in a test may take before it gives up. Only a red test ever reaches it.
+public let testFailsafe: Duration = .seconds(10)
+
+/// Polls `condition` every few milliseconds until it holds; false once `timeout` has passed or the task is cancelled.
+public func pollUntil(timeout: Duration = testFailsafe, _ condition: () async throws -> Bool) async rethrows -> Bool {
   let deadline = ContinuousClock.now + timeout
-  while ContinuousClock.now < deadline {
+  while ContinuousClock.now < deadline && !Task.isCancelled {
     if try await condition() { return true }
     try? await Task.sleep(for: .milliseconds(2))
   }
@@ -30,14 +33,8 @@ public func waitUntil(_ predicate: @escaping @MainActor @Sendable () -> Bool) as
     }
     outcome.push(false)
   }
-  let timer = Task {
-    try? await Task.sleep(for: AsyncQueue<Int>.failsafe)
-    outcome.push(false)
-  }
-  let result = await outcome.pop() ?? false
-  watcher.cancel()
-  timer.cancel()
-  return result
+  defer { watcher.cancel() }
+  return await outcome.pop() ?? false
 }
 
 /// FIFO hand-off between a producer and an awaiting test. `pop()` suspends without polling. The
@@ -49,7 +46,7 @@ public final class AsyncQueue<T: Sendable>: Sendable {
     var nextID = 0
   }
   private let state = Mutex(State())
-  public static var failsafe: Duration { .seconds(5) }
+  public static var failsafe: Duration { testFailsafe }
 
   public init() {}
 

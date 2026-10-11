@@ -548,7 +548,7 @@ extension WIN_005_ReinstallTests {
   @Test func WIN_005_preparationReadsTheWineStatusOnceAfterAnyOutcome() async throws {
     for finish in [true, false] {
       let h = Harness(wine: missing)
-        let (task, install) = try await h.bootstrapUntilPreparing()
+      let (task, install) = try await h.bootstrapUntilPreparing()
       let before = h.wine.statusCalls
       if finish {
         h.wine.finish(install: install)

@@ -220,7 +220,7 @@ final class BackgroundStub: URLProtocol, @unchecked Sendable {
   @Test func APP_021_missingGameOrEmptyBackgroundsFallBack() async {
     for body in [Self.info([(Self.imageURL, false)], biz: "hk4e_global"), Self.info([])] {
       let cache = makeCache()
-        let (session, _) = BackgroundStub.session { _ in (200, body) }
+      let (session, _) = BackgroundStub.session { _ in (200, body) }
       #expect(await provider(cache, session).backgroundImage() == .bundledDefault)
     }
   }
@@ -228,7 +228,7 @@ final class BackgroundStub: URLProtocol, @unchecked Sendable {
   @Test func APP_021_badRetcodeOrMalformedJSONFallBack() async {
     for body in [Data(#"{"retcode":-1,"message":"x","data":null}"#.utf8), Data("<html>".utf8)] {
       let cache = makeCache()
-        let (session, _) = BackgroundStub.session { _ in (200, body) }
+      let (session, _) = BackgroundStub.session { _ in (200, body) }
       #expect(await provider(cache, session).backgroundImage() == .bundledDefault)
     }
   }
@@ -236,7 +236,7 @@ final class BackgroundStub: URLProtocol, @unchecked Sendable {
   @Test func APP_021_nonImageOrHTTPErrorDownloadIsNotCached() async throws {
     for image in [(200, Data("not an image".utf8)), (404, Self.png)] {
       let cache = makeCache()
-        let (session, _) = BackgroundStub.session { url in
+      let (session, _) = BackgroundStub.session { url in
         url.path.hasSuffix("getAllGameBasicInfo")
           ? (200, Self.info([(Self.imageURL, false)])) : image
       }
