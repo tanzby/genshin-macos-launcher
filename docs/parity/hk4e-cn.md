@@ -135,7 +135,7 @@
 | LCH-007 | 用注册表实现自定义分辨率（强制窗口化） | 改写 | [#28](https://github.com/tanzby/yet-another-anime-game-launcher/issues/28) B13 | diag | GenshinLaunchRecipeTests；diag：`yaagl-diag` |
 | LCH-008 | 分辨率输入校验 | 改写 | [#28](https://github.com/tanzby/yet-another-anime-game-launcher/issues/28) B16 | 单元 |  |
 | LCH-009 | 写完注册表后等待 wineserver 退出 | 照搬 | TS 行为不变；LaunchRecipe/GameSession 重做 | diag | GameSessionLaunchTests |
-| LCH-010 | config.bat（默认启动路径） | 改写 | [#28](https://github.com/tanzby/yet-another-anime-game-launcher/issues/28) B14/A9：Steam patch 固定开启。不再生成或执行 config.bat，直接 `wine C:\windows\system32\steam.exe <游戏>`：真机对照（#57）显示 `cmd.exe` 作父进程时游戏会加载 HoYoKProtect.sys，在此 Wine 上因缺 WDFLDR.SYS 以退出码 5 终止，直接启动则不会；与 TS 的 Steam patch 路径一致 | 单元 | GameSessionLaunchTests、GenshinLaunchRecipeTests |
+| LCH-010 | 启动命令（原 config.bat 默认启动路径） | 改写 | [#28](https://github.com/tanzby/yet-another-anime-game-launcher/issues/28) B14/A9：Steam patch 固定开启。不再生成或执行 config.bat，直接 `wine C:\windows\system32\steam.exe <游戏>`：真机对照（#57）显示 `cmd.exe` 作父进程时游戏会加载 HoYoKProtect.sys，在此 Wine 上因缺 WDFLDR.SYS 以退出码 5 终止，直接启动则不会；与 TS 的 Steam patch 路径一致 | 单元 | GameSessionLaunchTests、GenshinLaunchRecipeTests |
 | LCH-011 | Steam patch 启动路径 | 改写 | [#28](https://github.com/tanzby/yet-another-anime-game-launcher/issues/28) B14：启动命令只有 `steam.exe <游戏>`，不带 `-platform_type … -is_cloud 1`、不复制驱动，与 TS 的 Steam patch 路径一致（#57 实测：多这些并无影响，经 `cmd` 才会失败） | diag | GenshinLaunchRecipeTests（启动命令 golden）；真机由 yaagl-diag 的 LCH-006/007 检查 |
 | LCH-012 | 补丁幂等 | 改写 | [#28](https://github.com/tanzby/yet-another-anime-game-launcher/issues/28) B12：启动前准备幂等，.bak 存在则不覆盖 | 单元 | GameSessionMutationTests |
 | LCH-013 | patch-off 只跳过对游戏文件的修改 | 作废 | [#28](https://github.com/tanzby/yet-another-anime-game-launcher/issues/28) A9 删除的开关 | — |  |
@@ -164,7 +164,7 @@
 | LCH-036 | 游戏退出后最多等待 Wine 15 秒，超时强杀 | 改写 | [#28](https://github.com/tanzby/yet-another-anime-game-launcher/issues/28) B15 | diag | GameSessionLaunchTests（启动超时、退出等待与强杀）；`LCH_036_*`（Launcher 的 120 s 启动超时）；diag：`yaagl-diag` |
 | LCH-037 | 正常退出后撤销 HDR 和分辨率注册表 | 改写 | [#28](https://github.com/tanzby/yet-another-anime-game-launcher/issues/28) B16 | 单元 | GameSessionLaunchTests |
 | LCH-038 | 启动失败或崩溃时不撤销注册表 | 改写 | [#28](https://github.com/tanzby/yet-another-anime-game-launcher/issues/28) B12：崩溃残留由 recover() 与幂等写入自愈 | 单元 | GameSessionLaunchTests、GameSessionMutationTests |
-| LCH-039 | 退出后删除 config.bat 并还原 | 改写 | [#28](https://github.com/tanzby/yet-another-anime-game-launcher/issues/28) B12：按 journal 还原游戏文件，无 DXMT/ReShade/patched 还原；不再有 config.bat 可删（见 LCH-010） | 单元 | GameSessionLaunchTests |
+| LCH-039 | 退出后还原（原：删除 config.bat 并还原） | 改写 | [#28](https://github.com/tanzby/yet-another-anime-game-launcher/issues/28) B12：按 journal 还原游戏文件，无 DXMT/ReShade/patched 还原；不再有 config.bat 可删（见 LCH-010） | 单元 | GameSessionLaunchTests |
 | PRE-001 | 何时显示预下载提示 | 改写 | [#26](https://github.com/tanzby/yet-another-anime-game-launcher/issues/26) | 组件、线上 | `PRE_001_*`（SophonUpdaterTests：按目标版本的预下载记录；提示显示逻辑属 Launcher）；`PRE_001_*`（ClientStatusTests、ClientPreDownloadTests） |
 | PRE-002 | 执行预下载 | 改写 | [#26](https://github.com/tanzby/yet-another-anime-game-launcher/issues/26) | 组件、线上 | `PRE_002_*`（SophonUpdaterTests）、`PRE_002_live_*`；`PRE_002_*`（ClientPreDownloadTests） |
 | PRE-003 | 预下载版本的显示 | 照搬 | 行为不变（流程由 Launcher + Fake GameClient 承载） | 组件 | `PRE_003_*`（ClientStatusTests） |
