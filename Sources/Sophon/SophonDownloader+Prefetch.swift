@@ -82,8 +82,9 @@ extension SophonDownloader {
   }
 }
 
-/// Like `runBounded`, but collects the result of `body` for every item, in the order of `items`. Stops
-/// starting new items once the task is cancelled, and then throws `CancellationError`.
+/// Runs `body` for every item with at most `limit` in flight and collects the results in the order of
+/// `items`. Returns after all of them have stopped, also when one throws. Stops starting new items once
+/// the task is cancelled, and then throws `CancellationError`.
 func mapBounded<Item: Sendable, Result: Sendable>(
   _ items: [Item], limit: Int, _ body: @escaping @Sendable (Item) async throws -> Result
 ) async throws -> [Result] {
@@ -106,19 +107,9 @@ func mapBounded<Item: Sendable, Result: Sendable>(
   return results.map { $0! }
 }
 
-/// Runs `body` for every item with at most `limit` in flight. Returns after all of them have stopped,
-/// also when one throws or the task is cancelled.
+/// `mapBounded` for a `body` without a result.
 func runBounded<Item: Sendable>(
   _ items: [Item], limit: Int, _ body: @escaping @Sendable (Item) async throws -> Void
 ) async throws {
-  try await withThrowingTaskGroup(of: Void.self) { group in
-    var iterator = items.makeIterator()
-    func submit() -> Bool {
-      guard let item = iterator.next() else { return false }
-      group.addTask { try await body(item) }
-      return true
-    }
-    for _ in 0..<max(1, limit) { if !submit() { break } }
-    while try await group.next() != nil { _ = submit() }
-  }
+  _ = try await mapBounded(items, limit: limit, body)
 }
