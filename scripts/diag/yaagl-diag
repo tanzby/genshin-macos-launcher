@@ -172,6 +172,16 @@ def snapshot(data):
     }
 
 
+def wine_run(data, *args, wait=False):
+    """Runs a program in the diag prefix, in the background unless `wait`."""
+    cmd = [str(data.wine / "bin/wine"), *map(str, args)]
+    env = {**os.environ, "WINEPREFIX": str(data.prefix), "WINEDEBUG": "-all"}
+    if wait:
+        run(cmd, env=env)
+    else:
+        subprocess.Popen(cmd, env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+
 def kill_prefix(data):
     server = data.wine / "bin/wineserver"
     if server.exists():
@@ -228,13 +238,26 @@ class ScreenCheck:
             r = run(["swiftc", "-O", "-o", str(exe), str(src)])
             if r.returncode:
                 sys.exit(f"swiftc failed: {r.stderr}")
-        self.exe, self.seen, self.step, self.results = str(exe), 0, {}, []
+        self.exe, self.seen, self.step, self.results, self.data = str(exe), 0, {}, [], data
+
+    def other_window(self):
+        """The game must drop below another Wine program's window: inactive, level <= 24, other window on screen."""
+        procs = [p for p in wine_procs(self.data.prefix) if p["prefix"] == str(self.data.prefix) and not is_game(p)]
+        others = [l for l in window_probe([p["pid"] for p in procs]) if l.startswith("window")] if procs else []
+        ok = bool(others) and self.step["active"] == "0" and int(self.step["level"]) <= 24
+        self.results.append(("other-window", f"verdict={'ok' if ok else 'fail'} other_windows={len(others)} "
+                             f"game_active={self.step['active']} game_level={self.step['level']}"))
+        wine_run(self.data, "taskkill", "/im", "notepad.exe", wait=True)
 
     def poll(self, hostlog):
         lines = hostlog.splitlines()
         for l in lines[self.seen:]:
+            if l == "screen: open-other":
+                wine_run(self.data, "notepad")
             if l.startswith("screen: step="):
                 self.step = kv(l)
+                if self.step["step"] == "other-window":
+                    self.other_window()
             m = re.match(r"shot: (\S+)\.png \d+x\d+ ok", l)
             if m and self.step:
                 screen = f"{m.group(1)}-screen.png"
@@ -279,7 +302,7 @@ def launch(app, data, a):
         shots = CACHE / "shots" / str(int(time.time()))
         shots.mkdir(parents=True, exist_ok=True)
         env += [f"YAAGL_GAMEHOST_SHOT_DIR={shots}"]
-        env += ["YAAGL_GAMEHOST_DEV=screen"] if a.screen_check else ["YAAGL_GAMEHOST_DEV=autoplay", "YAAGL_GAMEHOST_TURN=3"]
+        env += ["YAAGL_GAMEHOST_DEV=screen"] if a.screen_check else ["YAAGL_GAMEHOST_DEV=autoplay", f"YAAGL_GAMEHOST_TURN={a.turn:g}"]
     args = ["open", "-n", *[x for e in env for x in ("--env", e)], str(app), "--args", "--autolaunch"]
     r = run(args)
     if r.returncode:
@@ -311,6 +334,7 @@ def cmd_run(a):
     m = {}  # milestone name -> seconds
     waiting = set()
     closed_at = exited_at = wine_gone_at = None
+    turning = False
     window_at = None
     deadline = T0 + a.timeout
     mid = {}  # facts sampled while the game runs
@@ -325,6 +349,14 @@ def cmd_run(a):
             s = snapshot(data) if data.prefix.exists() else {"procs": [], "game": None, "windows": 0, "fullscreen_space": False}
             if screen:
                 screen.poll(hostlog)
+            if "autoplay: turn phase" in hostlog and not turning:
+                turner = work / "Contents/Helpers/turner.exe"
+                if turner.exists():
+                    wine_run(data, turner, a.turn)
+                    say("turning the camera (turner.exe)")
+                else:
+                    say("turner.exe missing (set LLVM_MINGW when building): the camera will not turn")
+                turning = True
             if "phase=preparingWine" in log:
                 m.setdefault("wine_prepare", now)
             if "autolaunch: ready" in log:
@@ -374,12 +406,15 @@ def cmd_run(a):
         else:
             say("timeout")
     finally:
-        left = kill_prefix(data) if data.prefix.exists() else 0
+        # The app waits for Wine itself; only what is left after it quit counts against WIN-018.
         for _ in range(60):
             if not app_pids(work):
                 break
             time.sleep(1)
         quit_by_itself = not app_pids(work)
+        left = len([p for p in wine_procs(data.prefix) if p["prefix"] == str(data.prefix)]) if data.prefix.exists() else 0
+        if left:
+            kill_prefix(data)
         if not quit_by_itself:  # timeout: never leave a downloading copy behind
             run(["pkill", "-f", f"{work}/Contents/MacOS/"])
             for _ in range(15):
@@ -458,8 +493,7 @@ def evaluate(a, data, work, m, mid, verdict_line, reg_before, hosts_before, left
           "game files moved aside while running, restored after exit", f"moved={len(mid.get('moved', []))}")
     check("APP-019", not (data.root / "launch-journal.json").exists(), "launch journal removed after a clean exit")
     # Exit.
-    check("WIN-018", left == 0 and not [p for p in wine_procs(data.prefix) if p["prefix"] == str(data.prefix)],
-          "no Wine process left after exit", f"killed_by_script={left}")
+    check("WIN-018", left == 0, "no Wine process left after the app quit", f"left_behind={left}")
     if closed_at and exited_at:
         took = exited_at - closed_at
         check("LCH-030", "game window closed" in hostlog and took <= 20, "game exits after its window closed",
@@ -474,10 +508,11 @@ def evaluate(a, data, work, m, mid, verdict_line, reg_before, hosts_before, left
     # Notch / screen check.
     if a.screen_check:
         verdicts = {step: out for step, out in screen_results}
-        ok = bool(verdicts) and all("verdict=ok" in o for st, o in verdicts.items() if st not in ("control", "other-window"))
+        control = next((o for st, o in verdicts.items() if st.startswith("control")), "")
+        ok = bool(verdicts) and all("verdict=ok" in o for st, o in verdicts.items() if not st.startswith("control"))
         check("LCH-029", ok, "screen shows the whole game picture (notch strip not covered)",
               " ".join(f"{st}:{verdict_of(o)}" for st, o in verdicts.items()))
-        check("LCH-029", "verdict=covered" in verdicts.get("control", ""), "the check can fail: the control step reports covered")
+        check("LCH-029", "verdict=covered" in control, "the check can fail: the control step reports covered")
     else:
         check("LCH-029", None, "full-screen picture covers the notch strip", "run with --screen-check")
 
@@ -518,6 +553,7 @@ def main():
     r.add_argument("--close-after", type=float, help="close the game window N seconds after the main interface")
     r.add_argument("--hosts-grace", type=float, default=30)
     r.add_argument("--login-grace", type=float, default=90)
+    r.add_argument("--turn", type=float, default=3, help="camera-turn phase length (s) with --autoplay")
     r.add_argument("--autoplay", action="store_true", help="enter the world with the dev companion (main-interface verdict)")
     r.add_argument("--screen-check", action="store_true", help="compare the screen with the game picture (needs Screen Recording)")
     r.set_defaults(fn=cmd_run)
