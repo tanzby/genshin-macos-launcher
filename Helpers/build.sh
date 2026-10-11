@@ -2,7 +2,7 @@
 # Build the x86_64 (Rosetta) game-host helpers into OUTDIR (default:
 # build/helpers): the wine loader shim and yaagl-gamehost.dylib.
 # With --dev, build only the development pieces used by
-# `yaagl-diag watch --autoplay` instead: yaagl-gamehost-dev.dylib and, when
+# `scripts/diag/yaagl-diag run --autoplay` instead: yaagl-gamehost-dev.dylib and, when
 # llvm-mingw is available (LLVM_MINGW=/path or on PATH), turner.exe.
 set -eu
 here="$(cd "$(dirname "$0")" && pwd)"
