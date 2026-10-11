@@ -25,6 +25,9 @@ public struct GameStatus: Sendable, Equatable {
     self.canPreDownload = canPreDownload
     self.preDownloadVersion = preDownloadVersion
   }
+
+  /// The version a pre-download fetches: its own branch, else the current remote one.
+  public var preDownloadTarget: String? { preDownloadVersion ?? remoteVersion }
 }
 
 public enum GameJob: String, Sendable, Equatable, Codable {

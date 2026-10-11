@@ -11,7 +11,7 @@ struct CheckForUpdatesCommand: View {
   }
 }
 
-/// The update controls for the Settings window. The General pane (#14) can embed it as a section.
+/// The update controls for the Settings window. Embedded in the General page of the Settings window.
 struct UpdateSettingsSection: View {
   @Bindable var updater: UpdaterModel
 
@@ -25,18 +25,5 @@ struct UpdateSettingsSection: View {
     } header: {
       Text("Updates")
     }
-  }
-}
-
-struct SettingsView: View {
-  let updater: UpdaterModel
-
-  var body: some View {
-    Form {
-      UpdateSettingsSection(updater: updater)
-    }
-    .formStyle(.grouped)
-    .frame(width: 420)
-    .fixedSize(horizontal: false, vertical: true)
   }
 }

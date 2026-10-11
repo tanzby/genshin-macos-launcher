@@ -291,6 +291,14 @@ private func jobJSON(kind: String, target: String? = nil, extra: String = "") ->
     #expect(h.fake.runs == [scenario.job])
   }
 
+  @Test func INS_015_preDownloadRecordsTheNextBranchAsItsTarget() async throws {
+    let status = GameStatus(localVersion: "5.6.0", remoteVersion: "5.6.0", canPreDownload: true, preDownloadVersion: "5.7.0")
+    let h = await Harness(status: status)
+    try await h.begin(.preDownload)
+    #expect(h.jobFile == PendingJob(kind: .preDownload, targetVersion: "5.7.0"))
+    await h.model.shutdown()
+  }
+
   @Test func APP_015_launchAllowsPreDownloadWhileLaunching() async throws {
     let h = await Harness(status: Status.preDownloadable)
     try await h.beginLaunch()
