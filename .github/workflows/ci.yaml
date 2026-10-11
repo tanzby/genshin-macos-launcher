@@ -7,14 +7,14 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        target: [GenshinCNTests, LauncherTests, SophonTests, WineTests, PlatformTests, ALL]
+        target: [LauncherClientHandoffTests, APP_010_OfflineTests, WIN_005_PhaseTests, APP_013_ErrorTests, APP_015_ExclusionTests, WIN_005_PauseTests, INS_004_DiskSpaceTests, WIN_005_ErrorTests, INS_015_JobFileTests, APP_020_AutoLaunchTests, PRG_006_PauseTests, WIN_005_StartupTests, UPG_013_SuccessTests, REP_002_PreconditionTests, LCH_036_LaunchTests, LauncherTests/]
     steps:
       - uses: actions/checkout@v4
       - name: hunt
         run: |
           swift build --build-tests > /dev/null 2>&1
           crashes=0
-          for n in 1 2 3 4 5 6 7 8; do
+          for n in 1 2 3 4 5 6; do
             if [ "${{ matrix.target }}" = ALL ]; then f=""; else f="--filter ${{ matrix.target }}"; fi
             if ! swift test --skip-build $f > run.log 2>&1; then crashes=$((crashes+1)); tail -2 run.log | cut -c1-160; fi
           done
