@@ -109,7 +109,6 @@ public struct AutoLaunch {
   }
 
   public func run() async -> Result {
-    log.reset()
     log.say("autolaunch: start")
     let watcher = Task { await watchPhase() }
     defer { watcher.cancel() }
@@ -174,6 +173,15 @@ public struct AutoLaunch {
   ) async {
     guard options.enabled, !started else { return }
     started = true  // the window's `.task` runs again when the window is recreated
+    log.reset()
+    // The composition root does this too; it is idempotent (the marker is written once).
+    do { _ = try options.prepareDataDirectory() } catch {
+      log.say("autolaunch: result=failed reason=data-dir \(error)")
+      log.say("autolaunch: exit")
+      terminate()
+      return
+    }
+    if let directory = options.gameDirectory { model.gameDirectory = directory }
     _ = await AutoLaunch(model: model, log: log).run()
     await model.shutdown()
     log.say("autolaunch: exit")

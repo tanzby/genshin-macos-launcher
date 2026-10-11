@@ -1,4 +1,5 @@
 import Foundation
+import Platform
 import Testing
 import Wine
 
@@ -72,6 +73,26 @@ private final class Harness {
     #expect(directory.root == root)
     #expect(FileManager.default.fileExists(atPath: directory.nativeMarker.path))
     #expect(!FileManager.default.fileExists(atPath: directory.winePrefix.path))
+  }
+
+  @Test func APP_020_entryPointPreparesTheDataRootAppliesTheGameDirectoryAndQuits() async throws {
+    let h = Harness(wine: .needsInstall(.notInstalled))
+    let root = h.logs.deletingLastPathComponent().appending(path: "data")
+    let game = h.logs.deletingLastPathComponent().appending(path: "game")
+    var terminated = 0
+    let wine = h.wine
+    let failer = Task {  // the entry point runs a real session; end it with a failed Wine install
+      let install = try await wine.nextInstall()
+      wine.fail(install: install, throwing: WineInstallError.extractionFailed(tool: "tar", exitCode: 1, output: ""))
+    }
+    await AutoLaunch.runIfRequested(
+      AutoLaunchOptions(enabled: true, dataRoot: root, gameDirectory: game), model: h.model, log: h.log
+    ) { terminated += 1 }
+    try await failer.value
+    #expect(terminated == 1)
+    #expect(h.model.gameDirectory == game)
+    #expect(FileManager.default.fileExists(atPath: root.appending(path: DataDirectory.nativeMarkerName).path))
+    #expect(h.lines.last == "autolaunch: exit")
   }
 
   @Test func APP_020_launchesAndReportsOkWhenTheGameExits() async throws {

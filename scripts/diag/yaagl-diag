@@ -310,7 +310,7 @@ def cmd_run(a):
 
     m = {}  # milestone name -> seconds
     waiting = set()
-    closed_at = exited_at = None
+    closed_at = exited_at = wine_gone_at = None
     window_at = None
     deadline = T0 + a.timeout
     mid = {}  # facts sampled while the game runs
@@ -364,6 +364,8 @@ def cmd_run(a):
                 say("closing the game window (taskkill, like the window's close button)")
             if closed_at and exited_at is None and not s["game"]:
                 exited_at = time.monotonic()
+            if closed_at and wine_gone_at is None and not s["procs"]:
+                wine_gone_at = time.monotonic()
             result = next((l for l in log.splitlines() if "autolaunch: result=" in l), None)
             if result and not app_pids(work):
                 verdict_line = result
@@ -377,19 +379,28 @@ def cmd_run(a):
             if not app_pids(work):
                 break
             time.sleep(1)
+        quit_by_itself = not app_pids(work)
+        if not quit_by_itself:  # timeout: never leave a downloading copy behind
+            run(["pkill", "-f", f"{work}/Contents/MacOS/"])
+            for _ in range(15):
+                if not app_pids(work):
+                    break
+                time.sleep(1)
+            else:
+                run(["pkill", "-9", "-f", f"{work}/Contents/MacOS/"])
         evaluate(a, data, work, m, mid, verdict_line, reg_before, hosts_before, left,
-                 first_run, closed_at, exited_at, waiting, screen_results)
+                 first_run, closed_at, exited_at, waiting, screen_results, quit_by_itself, wine_gone_at)
 
 
 def evaluate(a, data, work, m, mid, verdict_line, reg_before, hosts_before, left, first_run,
-             closed_at, exited_at, waiting, screen_results):
+             closed_at, exited_at, waiting, screen_results, quit_by_itself, wine_gone_at):
     log = data.read(data.launcher_log)
     hostlog = data.read(data.gamehost_log)
 
     # App: auto launch contract.
     check("APP-020", bool(verdict_line) and "result=ok" in verdict_line, "autolaunch verdict ok",
           verdict_line or "no verdict line in launcher.log")
-    check("APP-020", "autolaunch: exit" in log and not app_pids(work), "app quit by itself after the game")
+    check("APP-020", "autolaunch: exit" in log and quit_by_itself, "app quit by itself after the game")
     # Startup order: Wine ready before the game status is read and the game started.
     order = [k for k in ("wine_prepare", "ready", "launching", "game_process") if k in m]
     check("APP-001", order == sorted(order, key=m.get) and "ready" in m, "startup order",
@@ -451,9 +462,12 @@ def evaluate(a, data, work, m, mid, verdict_line, reg_before, hosts_before, left
           "no Wine process left after exit", f"killed_by_script={left}")
     if closed_at and exited_at:
         took = exited_at - closed_at
-        check("LCH-030", "game window closed" in hostlog and took <= 25, "game exits after its window closed",
+        check("LCH-030", "game window closed" in hostlog and took <= 20, "game exits after its window closed",
               f"{took:.0f}s")
-        check("LCH-036", took <= 30, "Wine stops within 15 s of the game exiting", f"{took:.0f}s")
+        # Every Wine process of the prefix (not just the game) must be gone 15 s after the game, plus polling slack.
+        wine_took = (wine_gone_at - exited_at) if wine_gone_at else None
+        check("LCH-036", wine_took is not None and wine_took <= 20, "Wine stops within 15 s of the game exiting",
+              "still running" if wine_took is None else f"{wine_took:.0f}s")
     else:
         check("LCH-030", None, "game exits after its window closed", "needs --close-after")
         check("LCH-036", None, "Wine stops within 15 s of the game exiting", "needs --close-after")
