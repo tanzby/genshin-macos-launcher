@@ -62,6 +62,16 @@ private func makeController(
     #expect(controller.launcher.gameDirectory == URL(filePath: "/tmp/elsewhere"))
   }
 
+  @Test func APP_017_installRightAfterPickingAFolderDoesNotWaitForARefresh() async throws {
+    let (controller, client, settings) = makeController(status: GameStatus(), gameDirectory: nil)
+    await controller.refresh()
+    settings.gameDirectory = FileManager.default.temporaryDirectory.appending(path: "yaagl-mc-\(UUID().uuidString)")
+    await controller.perform(.install)
+    #expect(controller.actionError == nil)
+    _ = try await client.nextRun()
+    await controller.launcher.shutdown()
+  }
+
   @Test func APP_017_installWithoutADirectoryAsksForOneInsteadOfFailing() async {
     let (controller, client, _) = makeController(status: GameStatus(), gameDirectory: nil)
     await controller.refresh()

@@ -57,10 +57,12 @@ private func snapshot(
     #expect(paused.status == .job(.install, nil, paused: true))
   }
 
-  @Test func APP_017_repairIsADisabledButton() {
-    let p = MainPresentation.derive(snapshot(phase: .repairing, progress: .running(done: 3, total: 9)))
-    #expect(p.button == .repairing)
-    #expect(!p.buttonEnabled)
+  @Test func APP_017_repairCanBePausedLikeInstallAndUpdate() {
+    let running = JobProgress.running(done: 3, total: 9)
+    let p = MainPresentation.derive(snapshot(phase: .repairing, progress: running))
+    #expect(p.button == .pause)
+    #expect(p.buttonEnabled)
+    #expect(p.status == .job(.repair, running, paused: false))
   }
 
   @Test func APP_017_errorWithUnfinishedJobOffersRetryFromTheBreakpoint() {

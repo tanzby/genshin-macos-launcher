@@ -46,8 +46,12 @@ public final class MainController {
     await reload()
   }
 
-  private func reload() async {
+  private func syncGameDirectory() {
     if launcher.gameDirectory != settings.gameDirectory { launcher.gameDirectory = settings.gameDirectory }
+  }
+
+  private func reload() async {
+    syncGameDirectory()
     if hasLoaded {
       await launcher.refreshWine()
       await launcher.refresh()
@@ -73,7 +77,7 @@ public final class MainController {
         try await self.launcher.launch()
       case .pause: await self.launcher.pause()
       case .resume, .retry: try await self.launcher.resume()
-      case .pausing, .repairing, .launching, .running: break
+      case .pausing, .launching, .running: break
       }
     }
   }
@@ -88,6 +92,8 @@ public final class MainController {
 
   private func run(_ work: () async throws -> Void) async {
     actionError = nil
+    // A folder picked a moment ago has not reached the launcher yet when the install button is tapped right after.
+    syncGameDirectory()
     do {
       try await work()
     } catch let error as LauncherError {

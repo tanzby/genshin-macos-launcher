@@ -41,7 +41,7 @@ public enum PrimaryButton: Sendable, Equatable {
   case prepareWine
   case install, update, launch
   case pause, pausing, resume, retry
-  case repairing, launching, running
+  case launching, running
 }
 
 /// What the capsule's status area says. The view maps each case to a localized sentence.
@@ -104,11 +104,9 @@ public struct MainPresentation: Sendable, Equatable {
       return make(pauseButton.0, pauseButton.1, .wine(s.progress))
     case .running: return make(.running, false, .running)
     case .launching: return make(.launching, false, .launching)
-    case .installing, .updating:
-      let job: GameJob = s.phase == .installing ? .install : .update
+    case .installing, .updating, .repairing:
+      let job: GameJob = s.phase == .installing ? .install : s.phase == .updating ? .update : .repair
       return make(pauseButton.0, pauseButton.1, .job(job, s.progress, paused: false))
-    case .repairing:
-      return make(.repairing, false, .job(.repair, s.progress, paused: false))
     case .idle, .preDownloading:
       break
     }

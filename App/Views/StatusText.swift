@@ -14,7 +14,6 @@ extension PrimaryButton {
     case .pausing: "Pausing…"
     case .resume: "Resume"
     case .retry: "Retry"
-    case .repairing: "Verifying…"
     case .launching: "Starting…"
     case .running: "Running"
     }
