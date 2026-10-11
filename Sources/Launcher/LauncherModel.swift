@@ -206,9 +206,6 @@ public final class LauncherModel {
     return !isRosettaMissing
   }
 
-  /// Runs `recover()` once per process. Overlapping callers share the one running recovery and all wait for
-  /// it; it counts as done only after it has returned, so nothing reads the game state before. While it runs
-  /// every job and launch entry answers `busy` (it kills the prefix and rewrites game files).
   /// The game launch found Wine broken although the stamp says ready: Wine counts as missing until a
   /// reinstall succeeds, and the main button goes back to "prepare Wine".
   func requireWineReinstall() {
@@ -218,6 +215,9 @@ public final class LauncherModel {
 
   private static let reportedByLaunch = WineStatus.needsInstall(.corrupt(missing: "reported by the game launch"))
 
+  /// Runs `recover()` once per process. Overlapping callers share the one running recovery and all wait for
+  /// it; it counts as done only after it has returned, so nothing reads the game state before. While it runs
+  /// every job and launch entry answers `busy` (it kills the prefix and rewrites game files).
   private func recoverOnce() async {
     guard !hasRecovered, let startup else { return }
     let task = recovery ?? Task { await startup.recoverSession() }
