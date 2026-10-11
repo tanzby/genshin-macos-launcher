@@ -7,15 +7,15 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        target: [LauncherClientHandoffTests, APP_020_AutoLaunchTests, LauncherTests/, ALL]
+        target: [ALL, ALL2, ALL3]
     steps:
       - uses: actions/checkout@v4
       - name: hunt
         run: |
           swift build --build-tests > /dev/null 2>&1
           crashes=0
-          for n in 1 2 3 4 5 6; do
-            if [ "${{ matrix.target }}" = ALL ]; then f=""; else f="--filter ${{ matrix.target }}"; fi
+          for n in 1 2 3 4 5 6 7 8 9 10 11 12; do
+            if [ "${{ matrix.target }}" != X ]; then f=""; else f="--filter ${{ matrix.target }}"; fi
             if ! swift test --skip-build $f > run.log 2>&1; then crashes=$((crashes+1)); tail -2 run.log | cut -c1-160; fi
           done
           echo "CRASHES target=${{ matrix.target }}: $crashes of 8"
