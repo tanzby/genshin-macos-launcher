@@ -165,8 +165,8 @@
 | LCH-037 | 正常退出后撤销 HDR 和分辨率注册表 | 改写 | [#28](https://github.com/tanzby/yet-another-anime-game-launcher/issues/28) B16 | 单元 | GameSessionLaunchTests |
 | LCH-038 | 启动失败或崩溃时不撤销注册表 | 改写 | [#28](https://github.com/tanzby/yet-another-anime-game-launcher/issues/28) B12：崩溃残留由 recover() 与幂等写入自愈 | 单元 | GameSessionLaunchTests、GameSessionMutationTests |
 | LCH-039 | 退出后删除 config.bat 并还原 | 改写 | [#28](https://github.com/tanzby/yet-another-anime-game-launcher/issues/28) B12：只删除 config.bat 并按 journal 还原游戏文件，无 DXMT/ReShade/patched 还原 | 单元 | GameSessionLaunchTests |
-| PRE-001 | 何时显示预下载提示 | 改写 | [#26](https://github.com/tanzby/yet-another-anime-game-launcher/issues/26) | 组件、线上 |  |
-| PRE-002 | 执行预下载 | 改写 | [#26](https://github.com/tanzby/yet-another-anime-game-launcher/issues/26) | 组件、线上 |  |
+| PRE-001 | 何时显示预下载提示 | 改写 | [#26](https://github.com/tanzby/yet-another-anime-game-launcher/issues/26) | 组件、线上 | `PRE_001_*`（SophonUpdaterTests：按目标版本的预下载记录；提示显示逻辑属 Launcher） |
+| PRE-002 | 执行预下载 | 改写 | [#26](https://github.com/tanzby/yet-another-anime-game-launcher/issues/26) | 组件、线上 | `PRE_002_*`（SophonUpdaterTests）、`PRE_002_live_*` |
 | PRE-003 | 预下载版本的显示 | 照搬 | 行为不变（流程由 Launcher + Fake GameClient 承载） | 组件 |  |
 | PRG-001 | 任务事件推送（WebSocket） | 改写 | [#28](https://github.com/tanzby/yet-another-anime-game-launcher/issues/28) C 负面用例 | 单元 |  |
 | PRG-002 | 进度与速度计算 | 改写 | [#21](https://github.com/tanzby/yet-another-anime-game-launcher/issues/21) SwiftUI 主界面 / 设置窗口重新设计 | 单元 |  |
@@ -203,12 +203,12 @@
 | UPG-004 | CN 的更新和预下载请求必然失败 | 改写 | [#26](https://github.com/tanzby/yet-another-anime-game-launcher/issues/26) | 单元、线上 | `UPG_004_*`（SophonProtocolTests）、`APP_009_live_*` |
 | UPG-005 | Sophon 判定发行类型与已安装版本 | 照搬 | TS 行为不变，但依 ADR 0002 在 Sophon/Launcher 重做 | 单元 |  |
 | UPG-006 | 没有可用更新时报错 | 照搬 | TS 行为不变，但依 ADR 0002 在 Sophon/Launcher 重做 | 单元 |  |
-| UPG-007 | 删除旧文件（files_delete） | 照搬 | TS 行为不变，但依 ADR 0002 在 Sophon/Launcher 重做 | 单元 |  |
-| UPG-008 | 单个文件的 ldiff 下载决策 | 照搬 | TS 行为不变，但依 ADR 0002 在 Sophon/Launcher 重做 | 单元 |  |
-| UPG-009 | 应用 ldiff（hpatchz） | 改写 | [#26](https://github.com/tanzby/yet-another-anime-game-launcher/issues/26) | 单元 |  |
-| UPG-010 | 下载新增文件和需要整体替换的文件 | 照搬 | TS 行为不变，但依 ADR 0002 在 Sophon/Launcher 重做 | 单元 |  |
-| UPG-011 | 更新后的快速校验与写入 config.ini | 照搬 | TS 行为不变，但依 ADR 0002 在 Sophon/Launcher 重做 | 单元 |  |
-| UPG-012 | 清理 ldiff | 照搬 | TS 行为不变，但依 ADR 0002 在 Sophon/Launcher 重做 | 单元 |  |
+| UPG-007 | 删除旧文件（files_delete） | 照搬 | TS 行为不变，但依 ADR 0002 在 Sophon/Launcher 重做 | 单元 | `UPG_007_*`（SophonUpdaterTests） |
+| UPG-008 | 单个文件的 ldiff 下载决策 | 照搬 | TS 行为不变，但依 ADR 0002 在 Sophon/Launcher 重做 | 单元 | `UPG_008_*`（SophonUpdaterTests） |
+| UPG-009 | 应用 ldiff（hpatchz） | 改写 | [#26](https://github.com/tanzby/yet-another-anime-game-launcher/issues/26) | 单元 | `UPG_009_*`（SophonUpdaterTests、HDiffPatcherTests）、`UPG_009_live_*` |
+| UPG-010 | 下载新增文件和需要整体替换的文件 | 照搬 | TS 行为不变，但依 ADR 0002 在 Sophon/Launcher 重做 | 单元 | `UPG_010_*`（SophonUpdaterTests） |
+| UPG-011 | 更新后的快速校验与写入 config.ini | 照搬 | TS 行为不变，但依 ADR 0002 在 Sophon/Launcher 重做 | 单元 | `UPG_011_*`（SophonUpdaterTests：Sophon 侧的大小与旧文件校验；写 config.ini 由 GenshinCN 负责） |
+| UPG-012 | 清理 ldiff | 照搬 | TS 行为不变，但依 ADR 0002 在 Sophon/Launcher 重做 | 单元 | `UPG_012_*`（SophonUpdaterTests） |
 | UPG-013 | 更新完成后启动器侧的状态 | 照搬 | TS 行为不变，但依 ADR 0002 在 Sophon/Launcher 重做 | 单元 | `UPG_013_*` |
 | UPG-014 | 更新和修复的处理范围 | 照搬 | [#28](https://github.com/tanzby/yet-another-anime-game-launcher/issues/28) A5 语音包不管（有意照搬） | 单元 |  |
 | WIN-001 | 内置的 Wine 发行版清单 | 改写 | ADR 0001/0002 / [#27](https://github.com/tanzby/yet-another-anime-game-launcher/issues/27) (removexattr 不提权) | 单元 | WineStatusTests（pinned 清单） |

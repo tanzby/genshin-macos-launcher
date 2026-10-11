@@ -1,0 +1,35 @@
+{
+  "files": [
+    {
+      "name": "a",
+      "singleStream": false,
+      "offset": 21,
+      "length": 4136,
+      "oldSize": 49152,
+      "oldMD5": "92e54679c859856cf08a9ac5ec8190e2",
+      "newSize": 49152,
+      "newMD5": "a3500d7521fd019129e5eecf86f18473"
+    },
+    {
+      "name": "b",
+      "singleStream": false,
+      "offset": 4157,
+      "length": 9039,
+      "oldSize": 40960,
+      "oldMD5": "d424ef0ad164e86a2d81efffed0be055",
+      "newSize": 42000,
+      "newMD5": "2aa11918d7dc9d6ac75220f3d196ec74"
+    },
+    {
+      "name": "c",
+      "singleStream": true,
+      "offset": 13196,
+      "length": 20513,
+      "oldSize": 16384,
+      "oldMD5": "bdaa73909d48d8d03b559b790f87d1e6",
+      "newSize": 21504,
+      "newMD5": "90b9102786753c194a302012a0e3a05d"
+    }
+  ],
+  "ldiffSize": 33716
+}
