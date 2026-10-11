@@ -234,54 +234,25 @@ private func edits(_ recipe: LaunchRecipe, key: String) -> [RegistryEdit] {
       ])
   }
 
-  @Test func LCH_010_batchScriptGoldenForGameDirectoryGamesGI() {
-    let recipe = make()
+  @Test func LCH_010_commandGoldenForGameDirectoryGamesGI() {
+    #expect(make().command == [#"C:\windows\system32\steam.exe"#, #"Z:\Games\GI\YuanShen.exe"#])
+  }
 
+  @Test func LCH_011_commandGoesThroughSteamExeWithoutCmdDriverCopyOrCloudArguments() {
+    let command = make().command
+
+    // #57: a `cmd` parent makes the game load HoYoKProtect.sys, which fails on this Wine
+    #expect(command.count == 2)
+    #expect(command.first == #"C:\windows\system32\steam.exe"#)
+    #expect(!command.contains("cmd"))
+  }
+
+  @Test func LCH_010_aPercentSignAndANonAsciiGameDirectoryAppearVerbatim() {
     #expect(
-      recipe.batchScript == #"""
-        @echo off
-        cd "%~dp0"
-        copy "Z:\Games\GI\HoYoKProtect.sys" "%WINDIR%\system32\"
-        cd /d "Z:\Games\GI"
-        "%WINDIR%\system32\steam.exe" "Z:\Games\GI\YuanShen.exe" -platform_type CLOUD_THIRD_PARTY_PC -is_cloud 1
-
-        """#)
-  }
-
-  @Test func LCH_011_batchScriptLaunchesThroughSteamExeWithTheCloudArguments() {
-    let script = make().batchScript
-
-    #expect(script.contains(#""%WINDIR%\system32\steam.exe" "Z:\Games\GI\YuanShen.exe""#))
-    #expect(script.hasSuffix(" -platform_type CLOUD_THIRD_PARTY_PC -is_cloud 1\n"))
-    #expect(!script.contains("\r"))
-  }
-
-  @Test func LCH_010_aPercentSignInTheGameDirectoryIsDoubledInEveryOccurrence() {
-    let recipe = make(gameDirectory: URL(filePath: "/Games/50%Off", directoryHint: .isDirectory))
-
-    #expect(
-      recipe.batchScript == #"""
-        @echo off
-        cd "%~dp0"
-        copy "Z:\Games\50%%Off\HoYoKProtect.sys" "%WINDIR%\system32\"
-        cd /d "Z:\Games\50%%Off"
-        "%WINDIR%\system32\steam.exe" "Z:\Games\50%%Off\YuanShen.exe" -platform_type CLOUD_THIRD_PARTY_PC -is_cloud 1
-
-        """#)
-  }
-
-  @Test func LCH_010_aNonAsciiGameDirectoryAppearsVerbatimInTheScript() {
+      make(gameDirectory: URL(filePath: "/Games/50%Off", directoryHint: .isDirectory)).command.last
+        == #"Z:\Games\50%Off\YuanShen.exe"#)
     let recipe = make(gameDirectory: URL(filePath: "/Games/原神 GI", directoryHint: .isDirectory))
-
-    #expect(
-      recipe.batchScript == #"""
-        @echo off
-        cd "%~dp0"
-        copy "Z:\Games\原神 GI\HoYoKProtect.sys" "%WINDIR%\system32\"
-        cd /d "Z:\Games\原神 GI"
-        "%WINDIR%\system32\steam.exe" "Z:\Games\原神 GI\YuanShen.exe" -platform_type CLOUD_THIRD_PARTY_PC -is_cloud 1
-
-        """#)
+    #expect(recipe.command.last == #"Z:\Games\原神 GI\YuanShen.exe"#)
     #expect(recipe.moveAside.first?.path == "/Games/原神 GI/YuanShen_Data/upload_crash.exe")
   }
 }

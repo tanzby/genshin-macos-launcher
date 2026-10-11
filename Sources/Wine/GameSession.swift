@@ -60,7 +60,6 @@ public struct GameSession: Sendable {
   public func recover() async {
     await shutdownPrefix()
     await restoreFromJournal()
-    try? FileManager.default.removeItem(at: layout.configBatch)
   }
 
   /// `start /wait` gives `cmd` its own console window: the runner hands Wine `/dev/null` as stdin, so a bare
@@ -69,7 +68,7 @@ public struct GameSession: Sendable {
 
   /// Opens an interactive `wine cmd` in the game's prefix (CFG-032, WIN-022): same loader, `WINEPREFIX`,
   /// `WINEDEBUG` and recipe environment as a launch, plus `WINEPATH` pointing at the game directory.
-  /// Touches neither the registry, the journal nor `config.bat`. Returns the exit code once the prompt is
+  /// Touches neither the registry nor the journal. Returns the exit code once the prompt is
   /// closed, or `nil` if Wine could not be started.
 
   public func openCommandPrompt(_ recipe: LaunchRecipe, gameDirectory: URL?) async -> Int32? {
@@ -121,7 +120,6 @@ public struct GameSession: Sendable {
 
       let fileManager = FileManager.default
       try fileManager.createDirectory(at: layout.logsDirectory, withIntermediateDirectories: true)
-      try recipe.batchScript.write(to: layout.configBatch, atomically: true, encoding: .utf8)
       let logFile = layout.logsDirectory.appending(
         path: "game_\(Int(Date().timeIntervalSince1970 * 1000)).log", directoryHint: .notDirectory)
       pruneGameLogs(keeping: logFile)
@@ -130,7 +128,7 @@ public struct GameSession: Sendable {
       for (name, value) in recipe.environment where !value.isEmpty { environment[name] = value }  // LCH-035
       environment.merge(hostEnvironment) { _, new in new }
       let code = try await runner.runLogging(
-        layout.loader, arguments: ["cmd", "/c", Self.windowsPath(layout.configBatch)], environment: environment,
+        layout.loader, arguments: recipe.command, environment: environment,
         workingDirectory: layout.root, logFile: logFile)
       if Task.isCancelled { return .cancelled }
       return code == 0 ? .exited : .failedExit(code: code, log: logFile)
@@ -183,7 +181,6 @@ public struct GameSession: Sendable {
       await waitForPrefixExit()
     }
     await restoreFromJournal()
-    try? FileManager.default.removeItem(at: layout.configBatch)
   }
 
   /// `wineserver -w` raced against the grace period; on timeout the prefix is killed (LCH-036).

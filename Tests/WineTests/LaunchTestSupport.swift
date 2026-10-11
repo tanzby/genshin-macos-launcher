@@ -108,14 +108,12 @@ struct FakeCall: Sendable, Equatable {
   var kind: FakeCallKind
   /// Disk state at the moment of the call.
   var journalExisted: Bool
-  var configBatchExisted: Bool
 }
 
 /// What the world looked like the moment the game started.
 struct GameSnapshot: Sendable {
   var journal: LaunchJournal?
   var journalExisted: Bool
-  var configBatch: String?
   var registry: [String: RegistryValue]
   /// Watched file path -> text (only for files that exist).
   var files: [String: String]
@@ -296,8 +294,7 @@ final class FakeProcessRunner: ProcessRunning, @unchecked Sendable {
       executable: executable.path, arguments: arguments, environment: environment,
       workingDirectory: cwd?.path, logFile: logFile?.path,
       kind: classify(executable, arguments, isGame: logFile != nil),
-      journalExisted: FileManager.default.fileExists(atPath: layout.launchJournal.path),
-      configBatchExisted: FileManager.default.fileExists(atPath: layout.configBatch.path))
+      journalExisted: FileManager.default.fileExists(atPath: layout.launchJournal.path))
     state.mutate { $0.calls.append(call) }
     switch call.kind {
     case .wineserverKill: trace.append("wineserver -k")
@@ -322,7 +319,6 @@ final class FakeProcessRunner: ProcessRunning, @unchecked Sendable {
     let snapshot = GameSnapshot(
       journal: journalData.flatMap { try? JSONDecoder().decode(LaunchJournal.self, from: $0) },
       journalExisted: journalData != nil,
-      configBatch: launchRead(layout.configBatch),
       registry: state.value.registry,
       files: files,
       logsDirectoryExists: fm.fileExists(atPath: layout.logsDirectory.path),
@@ -513,7 +509,6 @@ struct LaunchFixture {
   /// Asserts nothing of a launch is left behind.
   func expectNoLaunchResidue(sourceLocation: SourceLocation = #_sourceLocation) {
     #expect(!FileManager.default.fileExists(atPath: layout.launchJournal.path), sourceLocation: sourceLocation)
-    #expect(!FileManager.default.fileExists(atPath: layout.configBatch.path), sourceLocation: sourceLocation)
   }
 }
 
@@ -562,11 +557,11 @@ func withLaunchFixture<T>(
 /// A recipe with sensible defaults; tests override what they exercise.
 func makeLaunchRecipe(
   environment: [String: String] = [:], registry: [RegistryEdit] = [], moveAside: [URL] = [],
-  prefixCopies: [PrefixCopy] = [], batchScript: String = "@echo off\necho test-script\n"
+  prefixCopies: [PrefixCopy] = [], command: [String] = ["test-game.exe"]
 ) -> LaunchRecipe {
   LaunchRecipe(
     environment: environment, registry: registry, moveAside: moveAside, prefixCopies: prefixCopies,
-    batchScript: batchScript, gameExecutableName: "YuanShen.exe", gameDisplayName: "原神")
+    command: command, gameExecutableName: "YuanShen.exe", gameDisplayName: "原神")
 }
 
 /// Starts `body` on a task, waits (bounded) until the game run has been entered, returns the task.

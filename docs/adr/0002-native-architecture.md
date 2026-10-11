@@ -22,7 +22,7 @@ x86_64 helper（XcodeGen target，放进 Contents/Helpers/）: YaaglWineShim、Y
 - 不设 `Core`（会变成杂物堆）、`Patch`（见术语）、`Updater`（Sparkle 的 `SPUStandardUpdaterController` 本身就是深模块，在 `YaaglApp` 里直接用，appcast 和公钥写在 Info.plist）。
 - `Launcher` 与 `YaaglApp` 分开，是因为 App target 无法 `swift test`；业务编排和状态机必须能脱离 UI 测试。
 - 游戏无关的东西（数据目录、hosts、Wine 运行时、启动会话的执行）归 `Platform` / `Wine`，由 `Launcher` 直接使用；游戏相关的东西（端点、game_id、可执行文件名、`removed` 列表、hosts 域名、`HoYoKProtect.sys`、`-is_cloud` 参数、HDR 注册表键）归 `GenshinCN`。
-- **LaunchRecipe**：`GenshinCN` 把设置快照（`LaunchOptions`）翻译成一个值类型 `LaunchRecipe`：注册表项、`config.bat` 内容、环境变量表、要改动的文件列表、要复制进 prefix 的资源。`Wine.GameSession` 只执行它，因此 `Wine` 完全游戏无关。`.reg`、`.bat`、环境变量表都是纯函数的产物。
+- **LaunchRecipe**：`GenshinCN` 把设置快照（`LaunchOptions`）翻译成一个值类型 `LaunchRecipe`：注册表项、Wine 启动命令（`steam.exe <游戏>`，不经 `cmd`，见 #57）、环境变量表、要改动的文件列表、要复制进 prefix 的资源。`Wine.GameSession` 只执行它，因此 `Wine` 完全游戏无关。`.reg`、启动命令、环境变量表都是纯函数的产物。
 
 ## GameClient
 

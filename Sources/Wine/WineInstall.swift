@@ -111,7 +111,6 @@ public struct WineLayout: Sendable, Equatable {
 
   /// Written by `GameSession` before it mutates anything; deleted after the restore. Its presence means a crash.
   public var launchJournal: URL { root.appending(path: "launch-journal.json", directoryHint: .notDirectory) }
-  public var configBatch: URL { root.appending(path: "config.bat", directoryHint: .notDirectory) }
   public var logsDirectory: URL { root.appending(path: "logs", directoryHint: .isDirectory) }
   public var gameHostApp: URL { root.appending(path: "YaaglGame.app", directoryHint: .isDirectory) }
   /// `lib/wine/x86_64-unix/wine`: Wine execs this for every new Windows process. The Game Mode shim replaces it.

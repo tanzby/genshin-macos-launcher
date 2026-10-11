@@ -154,7 +154,7 @@ public final class GenshinCNClient: GameClient {
     if let wineLoader, !FileManager.default.isExecutableFile(atPath: wineLoader.path) {
       throw GameClientError.wineReinstallRequired
     }
-    // `cmd` cannot take such a path in config.bat (LCH-011); an empty folder has nothing to launch.
+    // An unsupported path (LCH-010) or an empty folder has nothing to launch.
     guard GenshinLaunchRecipe.isSupported(gameDirectory: directory),
       FileManager.default.fileExists(atPath: directory.appending(path: GenshinCN.executableName).path)
     else { return .failedToLaunch }

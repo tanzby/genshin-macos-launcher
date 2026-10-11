@@ -90,10 +90,10 @@ private func expectFilesBack(_ urls: [URL], sourceLocation: SourceLocation = #_s
     }
   }
 
-  @Test func LCH_009_everyRegistryWriteComesBeforeWineserverWaitWhichComesBeforeTheGameAndConfigBatch() async throws {
+  @Test func LCH_009_everyRegistryWriteComesBeforeWineserverWaitWhichComesBeforeTheGame() async throws {
     try await withLaunchFixture { f in
       let recipe = makeLaunchRecipe(
-        registry: [LaunchRegistry.retinaEdit("y")] + resolutionEdits(), batchScript: "@echo off\nrem LCH-009\n")
+        registry: [LaunchRegistry.retinaEdit("y")] + resolutionEdits())
       let result = await f.session.launch(recipe)
 
       #expect(result == .exited)
@@ -105,8 +105,6 @@ private func expectFilesBack(_ urls: [URL], sourceLocation: SourceLocation = #_s
       #expect(lastPrepWrite < firstWait)
       // the wait is the last thing before the game
       #expect(firstWait + 1 == gameIndex)
-      #expect(calls[firstWait].configBatchExisted == false)
-      #expect(calls[gameIndex].configBatchExisted == true)
     }
   }
 
@@ -130,50 +128,23 @@ private func expectFilesBack(_ urls: [URL], sourceLocation: SourceLocation = #_s
 // MARK: - The game run
 
 @Suite("GameSession game run", .timeLimit(.minutes(1))) struct GameSessionRunTests {
-  @Test func LCH_010_gameRunIsOneCmdCallOnConfigBatchWithLogInTheLogsDirectory() async throws {
+  @Test func LCH_010_gameRunIsOneWineCallOnTheRecipeCommandWithLogInTheLogsDirectory() async throws {
     try await withLaunchFixture { f in
-      let script = "@echo off\r\ncd \"%~dp0\"\r\necho 原神\r\n"
-      let result = await f.session.launch(makeLaunchRecipe(environment: ["MARK": "1"], batchScript: script))
+      let command = [#"C:\windows\system32\steam.exe"#, #"Z:\Games\原神 GI\YuanShen.exe"#]
+      let result = await f.session.launch(makeLaunchRecipe(environment: ["MARK": "1"], command: command))
 
       #expect(result == .exited)
       #expect(f.runner.gameCalls.count == 1)
       let game = try #require(f.runner.gameCall)
       #expect(game.executable == f.layout.loader.path)
-      #expect(
-        game.arguments == ["cmd", "/c", "Z:" + f.layout.configBatch.path.replacingOccurrences(of: "/", with: "\\")])
+      // never `cmd /c`: a `cmd.exe` parent makes the game load its anti-cheat driver, which fails (#57)
+      #expect(game.arguments == command)
       #expect(game.workingDirectory == f.layout.root.path)
       #expect(game.environment["WINEPREFIX"] == f.layout.prefixDirectory.path)
       #expect(game.environment["WINEDEBUG"] == wineDebug)
       #expect(game.environment["MARK"] == "1")
       let logFile = try #require(game.logFile)
       #expect(URL(filePath: logFile).deletingLastPathComponent().path == f.layout.logsDirectory.path)
-    }
-  }
-
-  @Test func LCH_010_configBatchHoldsTheRecipeScriptUtf8WhileTheGameRuns() async throws {
-    try await withLaunchFixture { f in
-      let script = "@echo off\ncd /d \"Z:\\Games\\原神 GI\"\n"
-      let result = await f.session.launch(makeLaunchRecipe(batchScript: script))
-
-      #expect(result == .exited)
-      let snapshot = try #require(f.runner.snapshots.first)
-      #expect(snapshot.configBatch == script)
-    }
-  }
-
-  @Test func WIN_017_gameRunPassesConfigBatchAsZDrivePathWithBackslashesEvenForNonAsciiAndSpaces() async throws {
-    var options = LaunchFixtureOptions()
-    options.rootName = "Yaagl 数据 data"
-    try await withLaunchFixture(options) { f in
-      let result = await f.session.launch(makeLaunchRecipe())
-
-      #expect(result == .exited)
-      let game = try #require(f.runner.gameCall)
-      let argument = try #require(game.arguments.last)
-      #expect(argument.hasPrefix("Z:\\"))
-      #expect(argument.hasSuffix("\\Yaagl 数据 data\\config.bat"))
-      #expect(!argument.contains("/"))
-      #expect(argument == "Z:" + f.layout.configBatch.path.replacingOccurrences(of: "/", with: "\\"))
     }
   }
 
@@ -191,12 +162,11 @@ private func expectFilesBack(_ urls: [URL], sourceLocation: SourceLocation = #_s
     }
   }
 
-  @Test func LCH_039_configBatchIsDeletedAfterANormalExitAndLogsStay() async throws {
+  @Test func LCH_039_nothingIsLeftAfterANormalExitAndLogsStay() async throws {
     try await withLaunchFixture { f in
       let result = await f.session.launch(makeLaunchRecipe())
 
       #expect(result == .exited)
-      #expect(f.runner.snapshots.first?.configBatch != nil)
       f.expectNoLaunchResidue()
       #expect(f.gameLogs.count == 1)
     }

@@ -59,7 +59,7 @@ private let noop: @Sendable () -> Void = {}
     #expect(outcome == .exited)
     let recipe = try #require(rig.launcher.recipes.first)
     #expect(recipe.gameExecutableName == "YuanShen.exe")
-    #expect(recipe.batchScript.contains(rig.game.path.replacingOccurrences(of: "/", with: "\\")))
+    #expect(recipe.command.last?.contains(rig.game.path.replacingOccurrences(of: "/", with: "\\")) == true)
     #expect(recipe.environment["DXMT_LOG_PATH"] == rig.data.path)
     #expect(recipe.prefixCopies.allSatisfy { $0.source.path.hasPrefix(rig.protonExtras.path) })
   }
@@ -73,7 +73,7 @@ private let noop: @Sendable () -> Void = {}
 
     for recipe in rig.launcher.recipes {
       #expect(recipe.environment["WINE_ENABLE_TIMEOUT_FIX"] == "1")
-      #expect(recipe.batchScript.contains("-platform_type CLOUD_THIRD_PARTY_PC -is_cloud 1"))
+      #expect(recipe.command.first == #"C:\windows\system32\steam.exe"#)
       #expect(recipe.prefixCopies.count == 4)
       #expect(recipe.moveAside.count == 3)
     }

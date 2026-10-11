@@ -65,8 +65,8 @@ public enum GenshinLaunchRecipe {
     ("lsteamclient32.dll", "syswow64/lsteamclient.dll"),
   ]
 
-  /// `cmd` cannot take a double quote or a line break inside the quoted paths of `config.bat`. The game client
-  /// must reject such a game directory before launching.
+  /// A double quote or a line break in the game directory is rejected up front: no known game folder needs one, and
+  /// it keeps every path handed to Wine and the log plain.
   public static func isSupported(gameDirectory: URL) -> Bool {
     !gameDirectory.path.contains { $0 == "\"" || $0.isNewline }
   }
@@ -130,24 +130,18 @@ public enum GenshinLaunchRecipe {
       prefixCopies: protonExtras.map {
         PrefixCopy(source: protonExtrasDirectory.appending(path: $0.0), destination: $0.1)
       },
-      batchScript: batchScript(gameDirectory: gameDirectory),
+      command: command(gameDirectory: gameDirectory),
       gameExecutableName: GenshinCN.executableName,
       gameDisplayName: displayName)
   }
 
-  /// `config.bat` (LCH-010/011). `cmd` reads it in the OEM code page; a non-ASCII game directory is a
-  /// real-machine item for the diag. `%` is doubled so it cannot start a variable expansion.
-  static func batchScript(gameDirectory: URL) -> String {
-    let directory = "Z:" + gameDirectory.path.replacingOccurrences(of: "/", with: "\\")
-      .replacingOccurrences(of: "%", with: "%%")
-    return [
-      "@echo off",
-      #"cd "%~dp0""#,
-      #"copy "\#(directory)\HoYoKProtect.sys" "%WINDIR%\system32\""#,
-      #"cd /d "\#(directory)""#,
-      #""%WINDIR%\system32\steam.exe" "\#(directory)\\#(GenshinCN.executableName)" -platform_type CLOUD_THIRD_PARTY_PC -is_cloud 1"#,
-      "",
-    ].joined(separator: "\n")
+  /// The Wine arguments (LCH-010/011): Proton's `steam.exe` shim starts the game, as the TS launcher's Steam patch
+  /// did. Never through `cmd`: with `cmd.exe` as the parent the game loads `HoYoKProtect.sys`, which this Wine cannot
+  /// load (#57). No driver copy and no cloud arguments either, like the TS Steam-patch path that worked.
+  static func command(gameDirectory: URL) -> [String] {
+    let path = gameDirectory.appending(path: GenshinCN.executableName).path
+    let executable = "Z:" + path.replacingOccurrences(of: "/", with: "\\")
+    return [#"C:\windows\system32\steam.exe"#, executable]
   }
 }
 
