@@ -17,8 +17,12 @@ private final class StepsProbe: Sendable {
   private struct State {
     var rosetta = true
     var rosettaChecks = 0
-    var recoveries: [Int] = []  // game-status reads seen at each recovery
+    var recoveries: [Int] = []  // game-status reads seen when each recovery finished
+    var stallsRecovery = false
   }
+  /// One element each time a stalled recovery has begun; push to `recoveryGate` to let it finish.
+  let recoveryStarted = AsyncQueue<Void>()
+  let recoveryGate = AsyncQueue<Void>()
   private let state = Mutex(State())
   private let fake: FakeGameClient
 
@@ -27,6 +31,7 @@ private final class StepsProbe: Sendable {
     state.withLock { $0.rosetta = rosetta }
   }
 
+  func stallRecovery() { state.withLock { $0.stallsRecovery = true } }
   func setRosetta(_ installed: Bool) { state.withLock { $0.rosetta = installed } }
   var rosettaChecks: Int { state.withLock { $0.rosettaChecks } }
   var recoveries: [Int] { state.withLock { $0.recoveries } }
@@ -40,6 +45,10 @@ private final class StepsProbe: Sendable {
         }
       },
       recoverSession: { [self] in
+        if state.withLock({ $0.stallsRecovery }) {
+          recoveryStarted.push(())
+          _ = await recoveryGate.pop()
+        }
         let reads = fake.statusCalls
         state.withLock { $0.recoveries.append(reads) }
       })
@@ -88,6 +97,36 @@ private struct Harness {
     #expect(h.model.phase == .idle)
     await #expect(throws: LauncherError.rosettaMissing) { try await h.model.prepareWine() }
     #expect(h.wine.installCount == 0)
+  }
+
+  @Test func APP_001_prepareWineBeforeBootstrapStillChecksRosettaFirst() async throws {
+    let h = Harness(wine: missing, rosetta: false)
+    defer { h.cleanUp() }
+    await #expect(throws: LauncherError.rosettaMissing) { try await h.model.prepareWine() }
+    #expect(h.wine.installCount == 0)
+    #expect(h.model.phase == .idle)
+  }
+
+  @Test func APP_001_overlappingBootstrapsWaitForTheSameRecovery() async throws {
+    let h = Harness(wine: .ready)
+    defer { h.cleanUp() }
+    h.probe.stallRecovery()
+    let model = h.model
+    let first = Task { @MainActor in await model.bootstrap() }
+    try await h.probe.recoveryStarted.pop("the recovery to begin")
+    let second = Task { @MainActor in await model.bootstrap() }
+    var turns = 0
+    while h.wine.statusCalls < 2, turns < 10_000 {
+      await Task.yield()
+      turns += 1
+    }
+    for _ in 0..<50 { await Task.yield() }
+    #expect(h.fake.statusCalls == 0, "no game status read while the recovery is still running")
+    h.probe.recoveryGate.push(())
+    await first.value
+    await second.value
+    #expect(h.probe.recoveries == [0], "one recovery, finished before any game status read")
+    #expect(h.fake.statusCalls == 2)
   }
 
   @Test func APP_001_bootstrapContinuesOnceRosettaIsInstalled() async throws {

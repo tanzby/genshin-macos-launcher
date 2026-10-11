@@ -118,6 +118,7 @@ public final class LauncherModel {
   private var statusRead: Task<Void, Never>?
   /// `GameSession.recover()` has run in this process; it must not run again while a game may be running.
   private var hasRecovered = false
+  private var recovery: Task<Void, Never>?
   /// The game launch found Wine broken although the stamp says ready; only a reinstall clears it.
   private var needsForcedReinstall = false
 
@@ -160,14 +161,7 @@ public final class LauncherModel {
   /// preparation is paused or fails, `bootstrap()` returns without them (`lastError` and `events` say why).
   public func bootstrap() async {
     guard exclusive == .idle, !isPausing, !isShuttingDown else { return }
-    if let startup {
-      isRosettaMissing = !(await startup.rosettaInstalled())
-      if isRosettaMissing {
-        lastError = .rosettaMissing
-        return
-      }
-      if lastError == .rosettaMissing { lastError = nil }
-    }
+    guard await rosettaIsAvailable() else { return }
     hasBootstrapped = true
     await refreshWine()
     guard isWineMissing else {
@@ -197,10 +191,27 @@ public final class LauncherModel {
     }
   }
 
+  /// Re-checks Rosetta (when there is a check to make) and records the result. False: `lastError` says why.
+  private func rosettaIsAvailable() async -> Bool {
+    guard let startup else { return true }
+    isRosettaMissing = !(await startup.rosettaInstalled())
+    if isRosettaMissing {
+      lastError = .rosettaMissing
+    } else if lastError == .rosettaMissing {
+      lastError = nil
+    }
+    return !isRosettaMissing
+  }
+
+  /// Runs `recover()` once per process. Overlapping callers share the one running recovery and all wait for
+  /// it; it counts as done only after it has returned, so nothing reads the game state or launches before.
   private func recoverOnce() async {
     guard !hasRecovered, let startup else { return }
+    let task = recovery ?? Task { await startup.recoverSession() }
+    recovery = task
+    await task.value
     hasRecovered = true
-    await startup.recoverSession()
+    recovery = nil
   }
 
   /// A failed query keeps the previous status: offline must not turn an installed game into "install".
@@ -412,6 +423,8 @@ public final class LauncherModel {
   /// Prepares Wine in the exclusive slot. Returns once the Task is running; a no-op when Wine is ready.
   /// Pause is cancel-and-await. The downloads keep their `.part` files, so calling this again resumes.
   public func prepareWine() async throws {
+    // Pressed before `bootstrap()` got to the Rosetta check: do it here, the 2 GB download must not come first.
+    if !hasBootstrapped, !(await rosettaIsAvailable()) { throw LauncherError.rosettaMissing }
     guard !isPausing, !isShuttingDown, exclusive == .idle else { throw LauncherError.busy }
     guard !isRosettaMissing else { throw LauncherError.rosettaMissing }
     guard let wine, wineStatus != .ready else { return }
