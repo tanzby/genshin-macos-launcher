@@ -1,5 +1,6 @@
 import Foundation
 import Testing
+import TestSupport
 
 @testable import Platform
 
@@ -28,46 +29,40 @@ import Testing
   }
 
   @Test func WIN_011_statusIsMissingWithoutSection() throws {
-    let temp = try TempDir()
-    defer { temp.cleanup() }
+    let temp = TempDir()
     let (blocklist, _, _) = try makeBlocklist(temp, hosts: Self.system)
     #expect(try blocklist.status() == .missing)
   }
 
   @Test func WIN_011_statusIsMissingWhenHostsFileDoesNotExist() throws {
-    let temp = try TempDir()
-    defer { temp.cleanup() }
+    let temp = TempDir()
     let (blocklist, _, _) = try makeBlocklist(temp, hosts: nil)
     #expect(try blocklist.status() == .missing)
   }
 
   @Test func WIN_011_statusIsCurrentWhenSectionMatches() throws {
-    let temp = try TempDir()
-    defer { temp.cleanup() }
+    let temp = TempDir()
     let hosts = Self.system + "\n" + HostsBlocklist.section(for: Self.domains)
     let (blocklist, _, _) = try makeBlocklist(temp, hosts: hosts)
     #expect(try blocklist.status() == .current)
   }
 
   @Test func WIN_011_statusIsOutdatedWhenADomainIsMissingOrChanged() throws {
-    let temp = try TempDir()
-    defer { temp.cleanup() }
+    let temp = TempDir()
     let stale = HostsBlocklist.section(for: Array(Self.domains.dropLast()))
     let (blocklist, _, _) = try makeBlocklist(temp, hosts: Self.system + stale)
     #expect(try blocklist.status() == .outdated)
   }
 
   @Test func WIN_011_statusIsOutdatedWhenSectionHasNoEndMarker() throws {
-    let temp = try TempDir()
-    defer { temp.cleanup() }
+    let temp = TempDir()
     let hosts = Self.system + "# Added by Yaagl\n0.0.0.0 a.example.com\n"
     let (blocklist, _, _) = try makeBlocklist(temp, hosts: hosts)
     #expect(try blocklist.status() == .outdated)
   }
 
   @Test func WIN_011_applyAppendsSectionAndKeepsEveryOtherLine() async throws {
-    let temp = try TempDir()
-    defer { temp.cleanup() }
+    let temp = TempDir()
     let original = Self.system + "10.0.0.5 100% weird\\n host\n"  // `%` and `\` must survive
     let (blocklist, admin, file) = try makeBlocklist(temp, hosts: original)
 
@@ -81,8 +76,7 @@ import Testing
   }
 
   @Test func WIN_011_applyReplacesOutdatedSectionInPlace() async throws {
-    let temp = try TempDir()
-    defer { temp.cleanup() }
+    let temp = TempDir()
     let stale = "# Added by Yaagl\n# old\n0.0.0.0 old.example.com\n# End of section\n"
     let hosts = Self.system + stale + "192.168.0.2 nas\n"
     let (blocklist, _, file) = try makeBlocklist(temp, hosts: hosts)
@@ -98,8 +92,7 @@ import Testing
 
   @Test func WIN_011_unterminatedSectionOnlyLosesItsOwnLines() async throws {
     // The TS version dropped everything after an unterminated start marker.
-    let temp = try TempDir()
-    defer { temp.cleanup() }
+    let temp = TempDir()
     let hosts = Self.system + "# Added by Yaagl\n0.0.0.0 a.example.com\n192.168.0.2 nas\n"
     let (blocklist, _, file) = try makeBlocklist(temp, hosts: hosts)
 
@@ -111,8 +104,7 @@ import Testing
   }
 
   @Test func WIN_011_duplicateSectionsCollapseToOne() async throws {
-    let temp = try TempDir()
-    defer { temp.cleanup() }
+    let temp = TempDir()
     let section = HostsBlocklist.section(for: Self.domains)
     let (blocklist, _, file) = try makeBlocklist(temp, hosts: section + "1.2.3.4 mid\n" + section)
 
@@ -124,8 +116,7 @@ import Testing
   }
 
   @Test func WIN_011_applyWhenCurrentDoesNotAskForAPassword() async throws {
-    let temp = try TempDir()
-    defer { temp.cleanup() }
+    let temp = TempDir()
     let hosts = Self.system + HostsBlocklist.section(for: Self.domains)
     let (blocklist, admin, _) = try makeBlocklist(temp, hosts: hosts)
 
@@ -135,8 +126,7 @@ import Testing
   }
 
   @Test func WIN_011_cancelledPasswordPromptLeavesHostsUntouchedAndPropagates() async throws {
-    let temp = try TempDir()
-    defer { temp.cleanup() }
+    let temp = TempDir()
     let admin = ShellAdmin()
     admin.failure = AdminPrivilegeError.cancelled
     let (blocklist, _, file) = try makeBlocklist(temp, hosts: Self.system, admin: admin)
@@ -148,8 +138,7 @@ import Testing
   }
 
   @Test func WIN_011_commandQuotesPathsWithSpacesAndQuotes() async throws {
-    let temp = try TempDir()
-    defer { temp.cleanup() }
+    let temp = TempDir()
     let scratch = temp.path("it's a dir")
     try FileManager.default.createDirectory(at: scratch, withIntermediateDirectories: true)
     let file = temp.path("my hosts")
@@ -184,8 +173,7 @@ import Testing
 
 @Suite struct HostsBlocklistReviewTests {
   @Test func WIN_011_crlfHostsFileIsRecognised() throws {
-    let temp = try TempDir()
-    defer { temp.cleanup() }
+    let temp = TempDir()
     let crlf = HostsBlocklist.section(for: ["a.example.com"]).replacingOccurrences(of: "\n", with: "\r\n")
     let file = temp.path("hosts")
     try ("127.0.0.1 localhost\r\n" + crlf).write(to: file, atomically: true, encoding: .utf8)
@@ -194,8 +182,7 @@ import Testing
   }
 
   @Test func WIN_011_foreignEndMarkerDoesNotSwallowUserLines() async throws {
-    let temp = try TempDir()
-    defer { temp.cleanup() }
+    let temp = TempDir()
     let file = temp.path("hosts")
     let hosts = "# Added by Yaagl\n0.0.0.0 a.example.com\n10.0.0.1 mine\n# End of section\n"
     try hosts.write(to: file, atomically: true, encoding: .utf8)
@@ -207,8 +194,7 @@ import Testing
 
 @Suite struct HostsBlocklistConcurrencyTests {
   @Test func WIN_011_editDuringPasswordPromptIsPreservedAndBlocklistStillApplied() async throws {
-    let temp = try TempDir()
-    defer { temp.cleanup() }
+    let temp = TempDir()
     let file = temp.path("hosts")
     try "127.0.0.1 localhost\n".write(to: file, atomically: true, encoding: .utf8)
     let admin = ShellAdmin()

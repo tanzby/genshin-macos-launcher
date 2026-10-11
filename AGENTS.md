@@ -36,7 +36,7 @@ git fetch origin && git worktree add .claude/worktrees/<name> -b <branch> origin
 - Only Wine, the x86_64 helpers and the system tools `codesign`, `tar` and `ditto` may run as external processes. Everything else is Swift or a linked C target.
 - Research behind these decisions is in `docs/research/`. Its `file:line` references point at the old TS repo.
 - Swift code: never use a closure literal as the default of an `async` closure parameter (`sleep: ... = { try await Task.sleep(for: $0) }`); the Xcode 26.6 runtime in CI aborts with "freed pointer was not the last allocation" (#48). Use a named function as the default.
-- Tests: wait for a condition by polling with a timeout, not with a fixed `Task.sleep`; CI runners are slow and uneven.
+- Tests: wait for a condition by polling with a timeout, not with a fixed `Task.sleep`; CI runners are slow and uneven. Use the `TestSupport` target: `pollUntil`, `waitUntil` (observation) and `AsyncQueue` for waiting, `makeTemporaryDirectory` / `temporaryURL` for files (removed when the test process exits, so tests don't clean up).
 - UI strings: String Catalog, zh-Hans and en only. Use the swiftui-specialist skill when writing SwiftUI.
 
 ## Verification

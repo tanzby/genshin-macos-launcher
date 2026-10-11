@@ -1,5 +1,6 @@
 import Foundation
 import Testing
+import TestSupport
 
 @testable import Platform
 
@@ -14,9 +15,8 @@ import Testing
   }
 
   @Test func WIN_018_systemTableListsOpenFiles() throws {
-    let url = FileManager.default.temporaryDirectory.appending(path: "yaagl-open-\(UUID().uuidString)")
+    let url = temporaryURL("yaagl-open")
     try Data("x".utf8).write(to: url)
-    defer { try? FileManager.default.removeItem(at: url) }
     let handle = try FileHandle(forReadingFrom: url)
     defer { try? handle.close() }
     let me = SystemProcessTable().processes(includeOpenPaths: true).first { $0.pid == getpid() }

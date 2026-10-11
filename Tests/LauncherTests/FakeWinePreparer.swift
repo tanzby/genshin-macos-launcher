@@ -1,5 +1,6 @@
 import Foundation
 import Synchronization
+import TestSupport
 import Wine
 
 @testable import Launcher

@@ -1,6 +1,7 @@
 import Foundation
 import Synchronization
 import Testing
+import TestSupport
 
 @testable import Launcher
 
@@ -61,12 +62,7 @@ private final class Harness {
   ) async {
     let fake = FakeGameClient(status: status ?? GameStatus())
     if status == nil { fake.setStatusFailure(GameClientError.network) }
-    var directory: URL?
-    if hasGameDirectory {
-      let url = FileManager.default.temporaryDirectory.appending(path: "LauncherJobTests-\(UUID().uuidString)")
-      try! FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
-      directory = url
-    }
+    let directory = hasGameDirectory ? makeTemporaryDirectory("LauncherJobTests") : nil
     self.fake = fake
     self.directory = directory
     let sleeper = self.sleeper
@@ -81,10 +77,6 @@ private final class Harness {
     log = EventLog(model.events)
     if let preexistingJobFile { writeJobFile(preexistingJobFile) }
     await model.refresh()
-  }
-
-  deinit {
-    if let directory { try? FileManager.default.removeItem(at: directory) }
   }
 
   func writeJobFile(_ text: String) {
@@ -106,20 +98,6 @@ private final class Harness {
     try await fake.nextLaunch()
   }
 
-  /// Suspends (no polling) until `predicate` holds, via `Observations`; false on failsafe expiry.
-  func waitUntil(_ predicate: @escaping @MainActor @Sendable () -> Bool) async -> Bool {
-    let outcome = AsyncQueue<Bool>()
-    let watcher = Task { @MainActor in outcome.push(await observeUntilTrue(predicate)) }
-    let timer = Task {
-      try? await Task.sleep(for: AsyncQueue<Int>.failsafe)
-      outcome.push(false)
-    }
-    let result = await outcome.pop() ?? false
-    watcher.cancel()
-    timer.cancel()
-    return result
-  }
-
   func waitForPhase(_ phase: LauncherPhase) async -> Bool {
     let model = model
     return await waitUntil { model.phase == phase }
@@ -132,13 +110,6 @@ private final class Harness {
     fake.finish(run: index, throwing: GameClientError.network)
     #expect(try await log.next() == .failed(.install, .client(.network)))
   }
-}
-
-@MainActor
-private func observeUntilTrue(_ predicate: @escaping @MainActor @Sendable () -> Bool) async -> Bool {
-  let values = Observations { predicate() }
-  for await value in values where value { return true }
-  return false
 }
 
 private func jobJSON(kind: String, target: String? = nil, extra: String = "") -> String {
@@ -321,7 +292,7 @@ private func jobJSON(kind: String, target: String? = nil, extra: String = "") ->
     #expect(h.model.phase == .running)
 
     h.fake.finish(run: run)
-    #expect(await h.waitUntil { !h.model.isPreDownloading })
+    #expect(await waitUntil { !h.model.isPreDownloading })
     #expect(h.model.phase == .running)
     h.fake.finishLaunch(.exited)
     await h.model.waitUntilIdle()

@@ -1,6 +1,7 @@
 import CryptoKit
 import Foundation
 import Testing
+import TestSupport
 
 @testable import Platform
 
@@ -64,16 +65,11 @@ private func withDownloaderFixture(
   status: Int = 200, body: Data = Data((0..<200_000).map { UInt8($0 % 251) }), includeLength: Bool = true,
   _ test: (Downloader, URL, Data, URL) async throws -> Void
 ) async throws {
-  let dir = FileManager.default.temporaryDirectory
-    .appending(path: "yaagl-downloader-test-\(UUID().uuidString)", directoryHint: .isDirectory)
-  try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+  let dir = makeTemporaryDirectory("yaagl-downloader-test")
   let url = URL(string: "https://downloads.invalid/\(UUID().uuidString)/file.bin")!
   DownloaderStubProtocol.register(
     .init(status: status, body: body, chunkSize: 50_000, includeLength: includeLength), for: url)
-  defer {
-    DownloaderStubProtocol.unregister(url)
-    try? FileManager.default.removeItem(at: dir)
-  }
+  defer { DownloaderStubProtocol.unregister(url) }
   try await test(makeDownloader(), url, body, dir)
 }
 

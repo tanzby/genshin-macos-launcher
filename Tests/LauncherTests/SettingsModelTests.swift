@@ -1,5 +1,6 @@
 import Foundation
 import Testing
+import TestSupport
 
 @testable import Launcher
 
@@ -97,37 +98,28 @@ private func freshDefaults() -> UserDefaults {
 }
 
 @Suite struct CFG_010_GameDirectoryTests {
-  private func makeDirectory() throws -> URL {
-    let url = FileManager.default.temporaryDirectory.appending(path: "yaagl-dir-\(UUID().uuidString)")
-    try FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
-    return url
-  }
 
   private let supported: @Sendable (URL) -> Bool = { !$0.path.contains("\"") }
 
   @Test func CFG_010_emptyDirectoryIsAnInstallTarget() throws {
-    let dir = try makeDirectory()
-    defer { try? FileManager.default.removeItem(at: dir) }
+    let dir = makeTemporaryDirectory("yaagl-dir")
     #expect(try GameDirectoryValidator.validate(dir, gameExecutable: "YuanShen.exe", isSupportedPath: supported) == .empty)
   }
 
   @Test func CFG_010_interruptedInstallLeftoversStillCount() throws {
-    let dir = try makeDirectory()
-    defer { try? FileManager.default.removeItem(at: dir) }
+    let dir = makeTemporaryDirectory("yaagl-dir")
     try FileManager.default.createDirectory(at: dir.appending(path: ".yaagl-tmp"), withIntermediateDirectories: true)
     #expect(try GameDirectoryValidator.validate(dir, gameExecutable: "YuanShen.exe", isSupportedPath: supported) == .empty)
   }
 
   @Test func CFG_010_existingGameIsRecognised() throws {
-    let dir = try makeDirectory()
-    defer { try? FileManager.default.removeItem(at: dir) }
+    let dir = makeTemporaryDirectory("yaagl-dir")
     try Data().write(to: dir.appending(path: "YuanShen.exe"))
     #expect(try GameDirectoryValidator.validate(dir, gameExecutable: "YuanShen.exe", isSupportedPath: supported) == .existingGame)
   }
 
   @Test func CFG_010_otherContentIsRefused() throws {
-    let dir = try makeDirectory()
-    defer { try? FileManager.default.removeItem(at: dir) }
+    let dir = makeTemporaryDirectory("yaagl-dir")
     try Data().write(to: dir.appending(path: "photos.zip"))
     #expect(throws: GameDirectoryProblem.notEmpty) {
       try GameDirectoryValidator.validate(dir, gameExecutable: "YuanShen.exe", isSupportedPath: supported)
@@ -135,8 +127,7 @@ private func freshDefaults() -> UserDefaults {
   }
 
   @Test func CFG_010_aFileNamedLikeTheTempFolderIsNotIgnored() throws {
-    let dir = try makeDirectory()
-    defer { try? FileManager.default.removeItem(at: dir) }
+    let dir = makeTemporaryDirectory("yaagl-dir")
     let tmp = dir.appending(path: PendingJobStore.directoryName)
     try Data().write(to: tmp)
     #expect(throws: GameDirectoryProblem.notEmpty) {
@@ -148,11 +139,9 @@ private func freshDefaults() -> UserDefaults {
   }
 
   @Test func CFG_010_aFolderThatCannotBeListedIsNotTreatedAsEmpty() throws {
-    let dir = try makeDirectory()
-    defer {
-      try? FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: dir.path)
-      try? FileManager.default.removeItem(at: dir)
-    }
+    let dir = makeTemporaryDirectory("yaagl-dir")
+    // Readable again, so TestSupport can remove it.
+    defer { try? FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: dir.path) }
     try FileManager.default.setAttributes([.posixPermissions: 0o000], ofItemAtPath: dir.path)
     #expect(throws: GameDirectoryProblem.unreadable) {
       try GameDirectoryValidator.validate(dir, gameExecutable: "YuanShen.exe", isSupportedPath: supported)
@@ -160,8 +149,7 @@ private func freshDefaults() -> UserDefaults {
   }
 
   @Test func CFG_010_missingOrFileOrUnsupportedPathsAreRefused() throws {
-    let dir = try makeDirectory()
-    defer { try? FileManager.default.removeItem(at: dir) }
+    let dir = makeTemporaryDirectory("yaagl-dir")
     #expect(throws: GameDirectoryProblem.missing) {
       try GameDirectoryValidator.validate(dir.appending(path: "nope"), gameExecutable: "x", isSupportedPath: supported)
     }

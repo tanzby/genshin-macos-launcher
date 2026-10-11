@@ -1,5 +1,6 @@
 import Foundation
 import Synchronization
+import TestSupport
 
 @testable import Launcher
 

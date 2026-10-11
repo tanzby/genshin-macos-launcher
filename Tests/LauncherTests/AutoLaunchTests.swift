@@ -1,6 +1,7 @@
 import Foundation
 import Platform
 import Testing
+import TestSupport
 import Wine
 
 @testable import Launcher
@@ -19,13 +20,11 @@ private final class Harness {
   init(wine wineStatus: WineStatus = .ready, game: GameStatus = GameStatus(localVersion: "5.0.0", remoteVersion: "5.0.0")) {
     wine = FakeWinePreparer(status: wineStatus)
     fake = FakeGameClient(status: game)
-    let directory = FileManager.default.temporaryDirectory.appending(path: "AutoLaunchTests-\(UUID().uuidString)")
+    let directory = temporaryURL("AutoLaunchTests")
     logs = directory.appending(path: "logs")
     log = DiagLog(logsDirectory: logs)
     model = LauncherModel(client: fake, wine: wine, gameDirectory: directory, chunkTempMargin: 0)
   }
-
-  deinit { try? FileManager.default.removeItem(at: logs.deletingLastPathComponent()) }
 
   var lines: [String] {
     ((try? String(contentsOf: log.file, encoding: .utf8)) ?? "").split(separator: "\n").map { String($0.dropFirst(21)) }
@@ -33,11 +32,7 @@ private final class Harness {
 
   /// The phase watcher logs asynchronously; wait for its line instead of assuming it already ran.
   func waitForLine(_ line: String) async -> Bool {
-    for _ in 0..<500 {
-      if lines.contains(line) { return true }
-      try? await Task.sleep(for: .milliseconds(10))
-    }
-    return false
+    await pollUntil { lines.contains(line) }
   }
 
   func autoLaunch(allowDownload: Bool = true) -> AutoLaunch {
@@ -75,8 +70,7 @@ private final class Harness {
   }
 
   @Test func APP_020_overriddenDataRootLeavesTheRealLeftoversAlone() throws {
-    let base = FileManager.default.temporaryDirectory.appending(path: "AutoLaunchData-\(UUID().uuidString)")
-    defer { try? FileManager.default.removeItem(at: base) }
+    let base = temporaryURL("AutoLaunchData")
     let root = base.appending(path: "data")
     try FileManager.default.createDirectory(at: root.appending(path: "wineprefix"), withIntermediateDirectories: true)
     let directory = try AutoLaunchOptions(enabled: true, dataRoot: root).prepareDataDirectory()
@@ -179,10 +173,9 @@ private final class Harness {
 
 @Suite struct RosettaDetectionTests {
   @Test func APP_001_rosettaIsDetectedByItsRuntimeLibraryNotAnExecutableFlag() throws {
-    let file = FileManager.default.temporaryDirectory.appending(path: "libRosettaRuntime-\(UUID().uuidString)")
+    let file = temporaryURL("libRosettaRuntime")
     #expect(!StartupSteps.isRosettaInstalled(at: file))
     try Data("x".utf8).write(to: file)  // not executable, like the real library
-    defer { try? FileManager.default.removeItem(at: file) }
     #expect(StartupSteps.isRosettaInstalled(at: file))
   }
 }

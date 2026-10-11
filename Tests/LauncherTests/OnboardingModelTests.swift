@@ -2,6 +2,7 @@ import Foundation
 import Platform
 import Synchronization
 import Testing
+import TestSupport
 
 @testable import Launcher
 
@@ -33,11 +34,7 @@ private func settings() -> SettingsModel {
   return SettingsModel(defaults: defaults)
 }
 
-private func tempDirectory() -> URL {
-  let url = FileManager.default.temporaryDirectory.appending(path: "yaagl-onb-\(UUID().uuidString)")
-  try? FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
-  return url
-}
+private func tempDirectory() -> URL { makeTemporaryDirectory("yaagl-onb") }
 
 @MainActor @Suite struct OnboardingModelTests {
   @Test func APP_020_autoLaunchNeverOffersTheGameFolderPickerButStillOffersHosts() {
@@ -98,7 +95,6 @@ private func tempDirectory() -> URL {
   @Test func INS_001_chosenGameDirectoryCompletesOnboarding() {
     let settings = settings()
     let dir = tempDirectory()
-    defer { try? FileManager.default.removeItem(at: dir) }
     let model = OnboardingModel(hosts: FakeHosts(.current), settings: settings)
     model.refresh()
     #expect(model.step == .gameDirectory)
@@ -112,7 +108,6 @@ private func tempDirectory() -> URL {
     let hosts = FakeHosts(.current)
     let settings = settings()
     let dir = tempDirectory()
-    defer { try? FileManager.default.removeItem(at: dir) }
     settings.gameDirectory = dir
     let model = OnboardingModel(hosts: hosts, settings: settings)
     model.refresh()
@@ -150,10 +145,8 @@ private func tempDirectory() -> URL {
   @Test func CFG_009_aSavedGameFolderThatBecameUnreadableSendsTheUserBackToThePicker() throws {
     let settings = settings()
     let dir = tempDirectory()
-    defer {
-      try? FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: dir.path)
-      try? FileManager.default.removeItem(at: dir)
-    }
+    // Readable again, so TestSupport can remove it.
+    defer { try? FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: dir.path) }
     settings.gameDirectory = dir
     let model = OnboardingModel(hosts: FakeHosts(.current), settings: settings)
     model.refresh()

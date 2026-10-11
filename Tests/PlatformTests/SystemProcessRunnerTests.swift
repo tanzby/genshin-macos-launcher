@@ -1,15 +1,10 @@
 import Foundation
 import Testing
+import TestSupport
 
 @testable import Platform
 
-private func runnerTempDirectory() throws -> URL {
-  let dir = FileManager.default.temporaryDirectory
-    .appending(path: "yaagl-runner-test-\(UUID().uuidString)", directoryHint: .isDirectory)
-    .resolvingSymlinksInPath()
-  try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-  return dir
-}
+private func runnerTempDirectory() -> URL { makeTemporaryDirectory("yaagl-runner-test") }
 
 private func writeScript(_ body: String, named name: String = "tool.sh", in dir: URL) throws -> URL {
   let url = dir.appending(path: name)
@@ -29,8 +24,7 @@ private func writeScript(_ body: String, named name: String = "tool.sh", in dir:
 
   @Test("WIN-008 runs /usr/bin/ditto")
   func runsDitto() async throws {
-    let dir = try runnerTempDirectory()
-    defer { try? FileManager.default.removeItem(at: dir) }
+    let dir = runnerTempDirectory()
     let source = dir.appending(path: "a.txt")
     try Data("hello".utf8).write(to: source)
     let target = dir.appending(path: "b.txt")
@@ -51,8 +45,7 @@ private func writeScript(_ body: String, named name: String = "tool.sh", in dir:
 
   @Test("WIN-008 an allowed root that does not exist yet still admits its executables once created")
   func rootCreatedAfterRunner() async throws {
-    let base = try runnerTempDirectory()
-    defer { try? FileManager.default.removeItem(at: base) }
+    let base = runnerTempDirectory()
     // Spelled with the /private prefix, as a data directory under /tmp or /var is when only the runtime
     // folder is missing at construction time.
     let root = URL(filePath: "/private" + base.path, directoryHint: .isDirectory).appending(path: "wine")
@@ -73,7 +66,7 @@ private func writeScript(_ body: String, named name: String = "tool.sh", in dir:
 
   @Test("WIN-008 a rejected runLogging leaves the log file untouched")
   func rejectedRunLoggingKeepsLog() async throws {
-    let log = try runnerTempDirectory().appending(path: "game.log")
+    let log = runnerTempDirectory().appending(path: "game.log")
     try Data("previous run".utf8).write(to: log)
     await #expect(throws: ProcessRunnerError.executableNotAllowed("/bin/sh")) {
       _ = try await SystemProcessRunner().runLogging(
@@ -84,8 +77,7 @@ private func writeScript(_ body: String, named name: String = "tool.sh", in dir:
 
   @Test("WIN-008 rejects an executable below a path that merely shares an allowed root's prefix")
   func rejectsSiblingPrefix() async throws {
-    let dir = try runnerTempDirectory()
-    defer { try? FileManager.default.removeItem(at: dir) }
+    let dir = runnerTempDirectory()
     let root = dir.appending(path: "wine", directoryHint: .isDirectory)
     let evil = dir.appending(path: "wine-evil", directoryHint: .isDirectory)
     try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
@@ -99,8 +91,7 @@ private func writeScript(_ body: String, named name: String = "tool.sh", in dir:
 
   @Test("WIN-008 rejects a path that escapes the allowed root with ..")
   func rejectsTraversal() async throws {
-    let dir = try runnerTempDirectory()
-    defer { try? FileManager.default.removeItem(at: dir) }
+    let dir = runnerTempDirectory()
     let root = dir.appending(path: "wine", directoryHint: .isDirectory)
     try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
     let escape = URL(filePath: root.path + "/../../../../../../bin/echo")
@@ -112,8 +103,7 @@ private func writeScript(_ body: String, named name: String = "tool.sh", in dir:
 
   @Test("WIN-012 runs a script below an allowed root with arguments and returns combined output")
   func runsScriptWithArguments() async throws {
-    let dir = try runnerTempDirectory()
-    defer { try? FileManager.default.removeItem(at: dir) }
+    let dir = runnerTempDirectory()
     let script = try writeScript("echo \"args:$1,$2\"; echo oops >&2", in: dir)
     let result = try await SystemProcessRunner(allowedRoots: [dir]).run(
       script, arguments: ["one", "two words"], environment: [:], workingDirectory: nil)
@@ -124,8 +114,7 @@ private func writeScript(_ body: String, named name: String = "tool.sh", in dir:
 
   @Test("WIN-012 non-zero exit code is returned, not thrown")
   func nonZeroExit() async throws {
-    let dir = try runnerTempDirectory()
-    defer { try? FileManager.default.removeItem(at: dir) }
+    let dir = runnerTempDirectory()
     let script = try writeScript("echo failing; exit 3", in: dir)
     let result = try await SystemProcessRunner(allowedRoots: [dir]).run(
       script, arguments: [], environment: [:], workingDirectory: nil)
@@ -135,8 +124,7 @@ private func writeScript(_ body: String, named name: String = "tool.sh", in dir:
 
   @Test("WIN-012 provided environment variables are visible and inherited ones are kept")
   func environmentMerged() async throws {
-    let dir = try runnerTempDirectory()
-    defer { try? FileManager.default.removeItem(at: dir) }
+    let dir = runnerTempDirectory()
     let script = try writeScript("echo \"WINEPREFIX=$WINEPREFIX\"; echo \"HOME=$HOME\"", in: dir)
     let result = try await SystemProcessRunner(allowedRoots: [dir]).run(
       script, arguments: [], environment: ["WINEPREFIX": "/fake/prefix"], workingDirectory: nil)
@@ -147,8 +135,7 @@ private func writeScript(_ body: String, named name: String = "tool.sh", in dir:
 
   @Test("WIN-012 provided environment overrides the inherited value")
   func environmentOverrides() async throws {
-    let dir = try runnerTempDirectory()
-    defer { try? FileManager.default.removeItem(at: dir) }
+    let dir = runnerTempDirectory()
     let script = try writeScript("echo \"HOME=$HOME\"", in: dir)
     let result = try await SystemProcessRunner(allowedRoots: [dir]).run(
       script, arguments: [], environment: ["HOME": "/override/home"], workingDirectory: nil)
@@ -157,8 +144,7 @@ private func writeScript(_ body: String, named name: String = "tool.sh", in dir:
 
   @Test("WIN-012 runs in the given working directory")
   func workingDirectory() async throws {
-    let dir = try runnerTempDirectory()
-    defer { try? FileManager.default.removeItem(at: dir) }
+    let dir = runnerTempDirectory()
     let cwd = dir.appending(path: "cwd", directoryHint: .isDirectory)
     try FileManager.default.createDirectory(at: cwd, withIntermediateDirectories: true)
     let script = try writeScript("pwd", in: dir)
@@ -170,27 +156,20 @@ private func writeScript(_ body: String, named name: String = "tool.sh", in dir:
 
   @Test("WIN-012 cancelling the task terminates the child promptly")
   func cancellationKillsChild() async throws {
-    let dir = try runnerTempDirectory()
-    defer { try? FileManager.default.removeItem(at: dir) }
+    let dir = runnerTempDirectory()
     let pidFile = dir.appending(path: "pid")
     // exec so the recorded pid is the sleeping process itself and no orphan keeps the pipe open.
     let script = try writeScript("echo $$ > \"$1\"\nexec sleep 30", in: dir)
     let runner = SystemProcessRunner(allowedRoots: [dir])
     let started = ContinuousClock.now
     let task = Task { try await runner.run(script, arguments: [pidFile.path], environment: [:], workingDirectory: nil) }
-    for _ in 0..<100 where !FileManager.default.fileExists(atPath: pidFile.path) {
-      try await Task.sleep(for: .milliseconds(50))
-    }
+    #expect(await pollUntil { FileManager.default.fileExists(atPath: pidFile.path) })
     let pidText = try String(contentsOf: pidFile, encoding: .utf8).trimmingCharacters(in: .whitespacesAndNewlines)
     let pid = try #require(Int32(pidText))
     task.cancel()
     _ = await task.result
     #expect(ContinuousClock.now - started < .seconds(15))
-    var alive = true
-    for _ in 0..<50 where alive {
-      alive = kill(pid, 0) == 0
-      if alive { try await Task.sleep(for: .milliseconds(100)) }
-    }
+    let alive = !(await pollUntil { kill(pid, 0) != 0 })
     #expect(!alive, "child \(pid) still running after cancel")
     if alive { kill(pid, SIGKILL) }
   }
@@ -203,8 +182,7 @@ private func writeScript(_ body: String, named name: String = "tool.sh", in dir:
   }
 
   @Test func WIN_018_aTaskCancelledBeforeTheProcessStartsStillKillsATermIgnoringProcess() async throws {
-    let dir = try runnerTempDirectory()
-    defer { try? FileManager.default.removeItem(at: dir) }
+    let dir = runnerTempDirectory()
     let script = try stubbornScript(in: dir)
     let runner = SystemProcessRunner(allowedRoots: [dir], terminationGrace: 0.3)
     let log = dir.appending(path: "game.log")
@@ -219,8 +197,7 @@ private func writeScript(_ body: String, named name: String = "tool.sh", in dir:
   }
 
   @Test func WIN_018_aBufferedRunCancelledBeforeTheProcessStartsIsAlsoKilled() async throws {
-    let dir = try runnerTempDirectory()
-    defer { try? FileManager.default.removeItem(at: dir) }
+    let dir = runnerTempDirectory()
     let script = try stubbornScript(in: dir)
     let runner = SystemProcessRunner(allowedRoots: [dir], terminationGrace: 0.3)
     let started = Date()
@@ -234,8 +211,7 @@ private func writeScript(_ body: String, named name: String = "tool.sh", in dir:
   }
 
   @Test func WIN_018_aTaskCancelledWhileRunningKillsATermIgnoringProcessAfterTheGrace() async throws {
-    let dir = try runnerTempDirectory()
-    defer { try? FileManager.default.removeItem(at: dir) }
+    let dir = runnerTempDirectory()
     let script = try stubbornScript(in: dir)
     let runner = SystemProcessRunner(allowedRoots: [dir], terminationGrace: 0.3)
     let started = Date()

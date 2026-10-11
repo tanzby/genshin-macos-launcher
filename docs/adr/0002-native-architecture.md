@@ -10,7 +10,7 @@
 
 ## Target 与依赖
 
-仓库根目录的 `Package.swift` 一个包放所有库 target，每个库一个测试 target。XcodeGen 的 `project.yml` 只定义 App 和两个 x86_64 helper，App 依赖这个本地包。
+仓库根目录的 `Package.swift` 一个包放所有库 target，每个库一个测试 target；测试 target 共用的临时目录与等待工具放在只给测试依赖的 `TestSupport` target（`Tests/TestSupport`，#75）。XcodeGen 的 `project.yml` 只定义 App 和两个 x86_64 helper，App 依赖这个本地包。
 
 ```
 YaaglApp (XcodeGen app)   SwiftUI 视图、Sparkle、系统通知、组合根

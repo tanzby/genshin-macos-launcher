@@ -2,6 +2,7 @@ import Foundation
 import Launcher
 import Sophon
 import Testing
+import TestSupport
 import Wine
 
 @testable import GenshinCN
@@ -136,7 +137,7 @@ private let noop: @Sendable () -> Void = {}
     let calls = Counter()
 
     let task = Task { try await rig.client.launch(.init(gameDirectory: rig.game), onStarted: { calls.increment() }) }
-    while rig.launcher.started.withLock({ $0 }) == 0 { try await Task.sleep(for: .milliseconds(2)) }
+    #expect(await pollUntil { rig.launcher.started.withLock { $0 } > 0 })
     task.cancel()
     _ = await task.result
 
@@ -148,7 +149,7 @@ private let noop: @Sendable () -> Void = {}
     rig.launcher.script(.runUntilCancelled)
 
     let task = Task { try await rig.client.launch(.init(gameDirectory: rig.game), onStarted: noop) }
-    while rig.launcher.started.withLock({ $0 }) == 0 { try await Task.sleep(for: .milliseconds(2)) }
+    #expect(await pollUntil { rig.launcher.started.withLock { $0 } > 0 })
     task.cancel()
     let result = await task.result
 
@@ -272,10 +273,9 @@ actor Log {
 
 @Suite struct BundledHelpersTests {
   @Test func LCH_022_theHelpersAreFoundInContentsHelpersAndMissingOnesMeanNoGameMode() throws {
-    let app = FileManager.default.temporaryDirectory.appending(path: "Fake-\(UUID().uuidString).app")
+    let app = temporaryURL("Fake").appendingPathExtension("app")
     let helpers = app.appending(path: "Contents/Helpers")
     try FileManager.default.createDirectory(at: helpers, withIntermediateDirectories: true)
-    defer { try? FileManager.default.removeItem(at: app) }
 
     #expect(GenshinCNClient.helpers(in: app) == nil)
     try Data("shim".utf8).write(to: helpers.appending(path: "yaagl-wine-shim"))

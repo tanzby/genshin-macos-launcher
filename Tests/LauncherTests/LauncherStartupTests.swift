@@ -1,6 +1,7 @@
 import Foundation
 import Synchronization
 import Testing
+import TestSupport
 import Wine
 
 @testable import Launcher
@@ -61,7 +62,6 @@ private struct Harness {
   let fake: FakeGameClient
   let probe: StepsProbe
   let model: LauncherModel
-  let directory: URL
   /// The launch watchdog sleeps on this instead of the real clock, like the other launch tests.
   let sleeper = ManualSleeper()
   /// Drains `model.events` the way every other launcher test does; an unread stream crashed the CI toolchain.
@@ -71,16 +71,13 @@ private struct Harness {
     wine = FakeWinePreparer(status: wineStatus)
     fake = FakeGameClient(status: installed)
     probe = StepsProbe(fake: fake, rosetta: rosetta)
-    directory = FileManager.default.temporaryDirectory.appending(path: "LauncherStartupTests-\(UUID().uuidString)")
-    try! FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    let directory = makeTemporaryDirectory("LauncherStartupTests")
     let sleeper = sleeper
     model = LauncherModel(
       client: fake, wine: wine, startup: probe.steps, gameDirectory: directory, chunkTempMargin: 0,
       sleep: { try await sleeper.sleep($0) })
     log = EventLog(model.events)
   }
-
-  func cleanUp() { try? FileManager.default.removeItem(at: directory) }
 
   func bootstrapUntilPreparing() async throws -> (task: Task<Void, Never>, install: Int) {
     let model = model
@@ -92,7 +89,6 @@ private struct Harness {
 @MainActor @Suite struct APP_001_StartupOrderTests {
   @Test func APP_001_missingRosettaStopsBeforeAnyWineWork() async throws {
     let h = Harness(wine: missing, rosetta: false)
-    defer { h.cleanUp() }
     await h.model.bootstrap()
     #expect(h.wine.statusCalls == 0)
     #expect(h.wine.installCount == 0)
@@ -108,7 +104,6 @@ private struct Harness {
 
   @Test func APP_001_prepareWineBeforeBootstrapStillChecksRosettaFirst() async throws {
     let h = Harness(wine: missing, rosetta: false)
-    defer { h.cleanUp() }
     await #expect(throws: LauncherError.rosettaMissing) { try await h.model.prepareWine() }
     #expect(h.wine.installCount == 0)
     #expect(h.model.phase == .idle)
@@ -116,7 +111,6 @@ private struct Harness {
 
   @Test func APP_001_overlappingBootstrapsWaitForTheSameRecovery() async throws {
     let h = Harness(wine: .ready)
-    defer { h.cleanUp() }
     h.probe.stallRecovery()
     let model = h.model
     let first = Task { @MainActor in await model.bootstrap() }
@@ -137,7 +131,6 @@ private struct Harness {
 
   @Test func APP_001_jobsAndLaunchAreBusyWhileTheRecoveryRuns() async throws {
     let h = Harness(wine: .ready)
-    defer { h.cleanUp() }
     h.probe.stallRecovery()
     let model = h.model
     let boot = Task { @MainActor in await model.bootstrap() }
@@ -156,7 +149,6 @@ private struct Harness {
 
   @Test func APP_001_shutdownWaitsForARunningRecovery() async throws {
     let h = Harness(wine: .ready)
-    defer { h.cleanUp() }
     h.probe.stallRecovery()
     let model = h.model
     let boot = Task { @MainActor in await model.bootstrap() }
@@ -179,7 +171,6 @@ private struct Harness {
 
   @Test func APP_001_bootstrapContinuesOnceRosettaIsInstalled() async throws {
     let h = Harness(wine: .ready, rosetta: false)
-    defer { h.cleanUp() }
     await h.model.bootstrap()
     h.probe.setRosetta(true)
     await h.model.bootstrap()
@@ -192,7 +183,6 @@ private struct Harness {
 
   @Test func APP_001_recoverRunsAfterWineIsReadyAndBeforeTheGameStatusRead() async throws {
     let h = Harness(wine: .ready)
-    defer { h.cleanUp() }
     await h.model.bootstrap()
     #expect(h.probe.recoveries == [0], "recover must have run before the first game status read")
     #expect(h.fake.statusCalls == 1)
@@ -201,7 +191,6 @@ private struct Harness {
 
   @Test func APP_001_recoverRunsAfterAWinePreparationToo() async throws {
     let h = Harness(wine: missing)
-    defer { h.cleanUp() }
     let (task, install) = try await h.bootstrapUntilPreparing()
     #expect(h.probe.recoveries.isEmpty, "no recovery while Wine is missing: there is no wineserver yet")
     h.wine.finish(install: install)
@@ -212,7 +201,6 @@ private struct Harness {
 
   @Test func APP_001_failedPreparationRecoversNothing() async throws {
     let h = Harness(wine: missing)
-    defer { h.cleanUp() }
     let (task, install) = try await h.bootstrapUntilPreparing()
     h.wine.fail(install: install, throwing: WineInstallError.dxmtBundleInvalid)
     await task.value
@@ -221,7 +209,6 @@ private struct Harness {
 
   @Test func APP_001_recoverRunsOncePerRun() async throws {
     let h = Harness(wine: .ready)
-    defer { h.cleanUp() }
     await h.model.bootstrap()
     h.wine.setStatus(missing)
     await h.model.refreshWine()

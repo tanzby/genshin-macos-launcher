@@ -1,6 +1,7 @@
 import CryptoKit
 import Foundation
 import Testing
+import TestSupport
 
 @testable import Platform
 
@@ -117,15 +118,10 @@ private func withResumeFixture(
   server: RangeStubProtocol.Server = .init(body: body),
   _ test: (Downloader, URL, URL, URL) async throws -> Void
 ) async throws {
-  let dir = FileManager.default.temporaryDirectory
-    .appending(path: "yaagl-resume-test-\(UUID().uuidString)", directoryHint: .isDirectory)
-  try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+  let dir = makeTemporaryDirectory("yaagl-resume-test")
   let url = URL(string: "https://downloads.invalid/\(UUID().uuidString)/archive.bin")!
   RangeStubProtocol.register(server, for: url)
-  defer {
-    RangeStubProtocol.unregister(url)
-    try? FileManager.default.removeItem(at: dir)
-  }
+  defer { RangeStubProtocol.unregister(url) }
   let configuration = URLSessionConfiguration.ephemeral
   configuration.protocolClasses = [RangeStubProtocol.self]
   try await test(Downloader(configuration: configuration), url, dir.appending(path: "archive.bin"), dir)
@@ -235,14 +231,12 @@ private func partFile(of destination: URL) -> URL { URL(filePath: destination.pa
     try await withResumeFixture(server: server) { downloader, url, destination, _ in
       let task = Task { try await downloader.download(from: url, to: destination, sha256: nil) { _ in } }
       let part = partFile(of: destination)
-      for _ in 0..<200 {  // wait (at most ~4 s) until some bytes are on disk
-        if ((try? FileManager.default.attributesOfItem(atPath: part.path)[.size] as? Int) ?? 0) >= 30_000 { break }
-        try await Task.sleep(for: .milliseconds(20))
-      }
+      func partSize() -> Int { (try? FileManager.default.attributesOfItem(atPath: part.path)[.size] as? Int) ?? 0 }
+      _ = await pollUntil { partSize() >= 30_000 }  // some bytes are on disk
       task.cancel()
       _ = try? await task.value
 
-      let size = (try? FileManager.default.attributesOfItem(atPath: part.path)[.size] as? Int) ?? 0
+      let size = partSize()
       #expect(size >= 30_000)
       #expect(size <= 600_000)
       #expect(!FileManager.default.fileExists(atPath: destination.path))

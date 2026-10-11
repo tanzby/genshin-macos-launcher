@@ -1,5 +1,6 @@
 import Foundation
 import Testing
+import TestSupport
 
 @testable import Platform
 
@@ -33,8 +34,7 @@ import Testing
   }
 
   @Test func APP_002_firstLaunchWithoutMarkerWipesTSResidueAndKeepsUserData() throws {
-    let temp = try TempDir()
-    defer { temp.cleanup() }
+    let temp = TempDir()
     for file in Self.residue + Self.kept { try temp.makeFile("Yaagl/" + file) }
     let root = temp.path("Yaagl")
 
@@ -50,8 +50,7 @@ import Testing
   }
 
   @Test func APP_002_externalCachesAreRemovedToo() throws {
-    let temp = try TempDir()
-    defer { temp.cleanup() }
+    let temp = TempDir()
     try temp.makeFile("Yaagl/wine/x")
     try temp.makeFile("Caches/com.3shain.yaagl/Cache.db")
     try temp.makeFile("WebKit/com.3shain.yaagl/data")
@@ -65,8 +64,7 @@ import Testing
   }
 
   @Test func APP_002_freshInstallCreatesRootAndMarker() throws {
-    let temp = try TempDir()
-    defer { temp.cleanup() }
+    let temp = TempDir()
     let root = temp.path("Yaagl")
 
     let directory = try DataDirectory.prepare(root: root, externalResidue: [])
@@ -77,8 +75,7 @@ import Testing
   }
 
   @Test func APP_002_existingMarkerSkipsCleanup() throws {
-    let temp = try TempDir()
-    defer { temp.cleanup() }
+    let temp = TempDir()
     let root = temp.path("Yaagl")
     _ = try DataDirectory.prepare(root: root, externalResidue: [])
     try temp.makeFile("Yaagl/wine/stamp")
@@ -91,8 +88,7 @@ import Testing
   }
 
   @Test func APP_002_markerIgnoresUnknownFields() throws {
-    let temp = try TempDir()
-    defer { temp.cleanup() }
+    let temp = TempDir()
     try temp.makeFile("Yaagl/.yaagl-native", contents: #"{"schemaVersion":1,"future":"x"}"#)
     try temp.makeFile("Yaagl/wine/stamp")
 
@@ -102,8 +98,7 @@ import Testing
   }
 
   @Test func APP_002_unreadableMarkerIsAnErrorAndNeverWipes() throws {
-    let temp = try TempDir()
-    defer { temp.cleanup() }
+    let temp = TempDir()
     try temp.makeFile("Yaagl/.yaagl-native", contents: "garbage")
     try temp.makeFile("Yaagl/wine/stamp")
 
@@ -115,8 +110,7 @@ import Testing
   }
 
   @Test func APP_002_markerFromNewerSchemaIsAnError() throws {
-    let temp = try TempDir()
-    defer { temp.cleanup() }
+    let temp = TempDir()
     try temp.makeFile("Yaagl/.yaagl-native", contents: #"{"schemaVersion":999}"#)
     try temp.makeFile("Yaagl/wine/stamp")
 
@@ -128,8 +122,7 @@ import Testing
 
   @Test func APP_002_cleanupIsIdempotentAfterInterruption() throws {
     // A previous run removed part of the residue and never wrote the marker.
-    let temp = try TempDir()
-    defer { temp.cleanup() }
+    let temp = TempDir()
     try temp.makeFile("Yaagl/sidecar/x")
     try temp.makeFile("Yaagl/logs/game.log")
 
@@ -141,8 +134,7 @@ import Testing
   }
 
   @Test func APP_002_symlinkResidueIsUnlinkedNotFollowed() throws {
-    let temp = try TempDir()
-    defer { temp.cleanup() }
+    let temp = TempDir()
     try temp.makeFile("Elsewhere/keep.txt")
     try FileManager.default.createDirectory(at: temp.path("Yaagl"), withIntermediateDirectories: true)
     try FileManager.default.createSymbolicLink(
@@ -157,8 +149,7 @@ import Testing
 
 @Suite struct DataDirectoryMarkerLinkTests {
   @Test func APP_002_danglingSymlinkMarkerIsNotTreatedAsMissing() throws {
-    let temp = try TempDir()
-    defer { temp.cleanup() }
+    let temp = TempDir()
     try temp.makeFile("Yaagl/wine/stamp")
     try FileManager.default.createSymbolicLink(
       at: temp.path("Yaagl", ".yaagl-native"), withDestinationURL: temp.path("nowhere"))

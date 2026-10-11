@@ -1,6 +1,7 @@
 import CryptoKit
 import Foundation
 import Testing
+import TestSupport
 
 @testable import Sophon
 
@@ -78,9 +79,7 @@ struct SophonLiveContractTests {
     #expect(segment.count == Int(patch.length))
     #expect(segment.prefix(9) == Data("HDIFF13&\0".utf8))
 
-    let directory = FileManager.default.temporaryDirectory.appendingPathComponent("live-hdiff-\(UUID().uuidString)")
-    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-    defer { try? FileManager.default.removeItem(at: directory) }
+    let directory = makeTemporaryDirectory("live-hdiff")
     let old = directory.appendingPathComponent("old")
     let ldiff = directory.appendingPathComponent("ldiff")
     FileManager.default.createFile(atPath: old.path, contents: nil)
