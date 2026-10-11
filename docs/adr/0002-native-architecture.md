@@ -6,6 +6,8 @@
 >
 > **修订（票 #87）：** Sparkle 改由 `Package.swift` 声明，经一个只做 `@_exported import Sparkle` 的 `Updates` 库 target 进 App；`project.yml` 不再直接引用任何远程包。原因是 SwiftPM 和 Xcode 共用根目录的 `Package.resolved`，两边依赖图不同就会来回改写它。`Updates` 不是下文否决的 `Updater` 模块：它不包装 Sparkle，`SPUStandardUpdaterController` 仍在 `YaaglApp` 里直接用。
 >
+> **修订（票 #76）：** `AutoLaunch` / `DiagLog`（`--autolaunch` 与 `logs/launcher.log`，供 yaagl-diag 用）移出产品库 `Launcher`，放进只有 `YaaglApp` 依赖的 `Diagnostics` target（`Diagnostics → {Launcher, Platform}`）。`Launcher` 里只剩中性的 `OnboardingModel.showsSheet(unattended:)`。
+>
 > **修订（地图 #1、票 #2，依据旧仓库 [#28](https://github.com/tanzby/yet-another-anime-game-launcher/issues/28) 的决定）：** 删除 ReShade；DXMT 在安装 Wine 时一次装好，运行时不再注入和还原。下文相应段落已改。
 
 ## Target 与依赖
@@ -17,6 +19,7 @@ YaaglApp (XcodeGen app)   SwiftUI 视图、Sparkle、系统通知、组合根
  ├─> Launcher             LauncherModel / SettingsModel、PrimaryAction.derive、JobCoordinator；定义 GameClient 协议
  │    ├─> Platform        DataDirectory、HostsBlocklist(+AdminShell)、Downloader、日志；定义 ProcessRunning / AdminPrivilege 端口
  │    └─> Wine            WineRuntime(actor)、GameSession(执行 LaunchRecipe、Launch Mutations + journal)、GameHost 准备；游戏无关
+ ├─> Diagnostics          --autolaunch 入口与 logs/launcher.log（yaagl-diag 用，#76）；依赖 Launcher、Platform
  └─> GenshinCN            原神 CN 常量、LaunchRecipe、GenshinCNClient: GameClient（组合 Sophon + Wine + Platform）
       └─> Sophon          SophonClient、已装版本检测；依赖 swift-protobuf、libzstd、CHDiffPatch(C target)
 x86_64 helper（XcodeGen target，放进 Contents/Helpers/）: YaaglWineShim、YaaglGameHost，源码在 Helpers/
@@ -93,7 +96,7 @@ protocol GameClient: Sendable {
 
 - **通知**：`JobCoordinator` 除了更新 `@Observable` 状态，还发出离散的 `JobEvent` 流（更新发布、可预下载、失败）。`@Observable` 会合并中间状态，不适合触发通知。通知代码只在 `YaaglApp`。
 - **ReShade**：删除（旧仓库 #28 A7）。不下载、不注入、不复制 DLL，`LaunchRecipe` 里没有对应项；「高级」设置页放什么由设置 UI 票决定，不再有解锁手势。
-- **yaagl-diag 与自动启动（TS 的 `YAAGL_AUTOLAUNCH`）**：本票只保证架构上有位置（`Launcher` 暴露可由命令行参数驱动的入口，日志写数据目录 `logs/`），具体方案见 `docs/genshin-macos.md` 的 Verification：`--autolaunch`、`--data-dir`、`--game-dir`（或对应环境变量），由 `AutoLaunch` 驱动，日志是 `logs/launcher.log`。`AutoLaunch` / `DiagLog` 在独立的 `Diagnostics` target（依赖 `Launcher`、`Platform`，只有 App 依赖它），不在产品库 `Launcher` 里（#76）。
+- **yaagl-diag 与自动启动（TS 的 `YAAGL_AUTOLAUNCH`）**：本票只保证架构上有位置（App 经 `Diagnostics` 暴露可由命令行参数驱动的入口，日志写数据目录 `logs/`），具体方案见 `docs/genshin-macos.md` 的 Verification：`--autolaunch`、`--data-dir`、`--game-dir`（或对应环境变量），由 `AutoLaunch` 驱动，日志是 `logs/launcher.log`。`AutoLaunch` / `DiagLog` 在独立的 `Diagnostics` target（依赖 `Launcher`、`Platform`，只有 App 依赖它），不在产品库 `Launcher` 里（#76）。
 - **HTTP 重试与退避**：`Sophon` 与 `Platform` 各有一份，是十几行的值类型。为保持 `Sophon` 不依赖 `Platform`，接受这点重复。
 - **Wine 孤儿进程**：启动器被强杀后 Wine 会残留。`recover()` 在重放 journal 之前先 `wineserver -k` 并清理，避免游戏还在跑时还原游戏文件。
 

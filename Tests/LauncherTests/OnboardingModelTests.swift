@@ -41,12 +41,12 @@ private func tempDirectory() -> URL { makeTemporaryDirectory("yaagl-onb") }
     let model = OnboardingModel(hosts: FakeHosts(.current), settings: settings())
     model.refresh()
     #expect(model.step == .gameDirectory)
-    #expect(model.showsSheet(drivenByAutoLaunch: false))
-    #expect(!model.showsSheet(drivenByAutoLaunch: true))
+    #expect(model.showsSheet(unattended: false))
+    #expect(!model.showsSheet(unattended: true))
 
     let blocked = OnboardingModel(hosts: FakeHosts(.missing), settings: settings())
     blocked.refresh()
-    #expect(blocked.showsSheet(drivenByAutoLaunch: true))
+    #expect(blocked.showsSheet(unattended: true))
   }
 
   @Test func WIN_011_hostsBlockIsTheFirstRequiredStep() {

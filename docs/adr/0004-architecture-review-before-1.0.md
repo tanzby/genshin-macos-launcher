@@ -24,5 +24,5 @@
 
 - [#73](https://github.com/tanzby/genshin-macos-launcher/issues/73)：收窄各模块的 `public` 接口，顺手合并 `GenshinLaunchSettings.Resolution`。
 - [#74](https://github.com/tanzby/genshin-macos-launcher/issues/74)：把 `SophonDownloader`、`LauncherModel`、`GameSession` 里混在一起的职责拆成独立类型（`JobCoordinator` 在 ADR 0002 里有名字，代码里还没有独立类型）。
-- [#75](https://github.com/tanzby/genshin-macos-launcher/issues/75)：共用的测试支持 target。
-- [#76](https://github.com/tanzby/genshin-macos-launcher/issues/76)：`AutoLaunch` / `DiagLog` 移出产品库。
+- [#75](https://github.com/tanzby/genshin-macos-launcher/issues/75)：共用的测试支持 target。（已完成，PR #89）
+- [#76](https://github.com/tanzby/genshin-macos-launcher/issues/76)：`AutoLaunch` / `DiagLog` 移出产品库。（已完成，`Diagnostics` target，PR #90）

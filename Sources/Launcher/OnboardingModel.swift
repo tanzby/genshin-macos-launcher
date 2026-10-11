@@ -43,11 +43,11 @@ public final class OnboardingModel {
 
   public var isComplete: Bool { step == .done }
 
-  /// Whether the first-run sheet is up. `--autolaunch` has its game folder from the command line (APP-020) and no
-  /// one to choose one: only the hosts step, the one a person can still do, is offered; the picker would write the
-  /// real preferences while the game already runs.
-  public func showsSheet(drivenByAutoLaunch: Bool) -> Bool {
-    drivenByAutoLaunch ? step == .hosts : !isComplete
+  /// Whether the first-run sheet is up. An unattended run (the diag's `--autolaunch`, APP-020) has its game folder
+  /// from the command line and no one to choose one: only the hosts step, the one a person can still do, is offered;
+  /// the picker would write the real preferences while the game already runs.
+  public func showsSheet(unattended: Bool) -> Bool {
+    unattended ? step == .hosts : !isComplete
   }
 
   /// Re-reads `/etc/hosts` (no privileges needed). An unreadable file counts as "not in place".
