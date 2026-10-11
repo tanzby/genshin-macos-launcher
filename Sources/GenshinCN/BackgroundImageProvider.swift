@@ -6,8 +6,8 @@ import Launcher
 /// Fetches the official launcher background (APP-021) and keeps one copy in the data directory.
 /// Never throws: any failure yields the last cached image, or `.bundledDefault` when there is none.
 /// The static image only; the video the same entry carries is not played (old repo #30).
-public struct BackgroundImageProvider: Sendable {
-  public static let infoURL = URL(
+package struct BackgroundImageProvider: Sendable {
+  package static let infoURL = URL(
     string: "https://hyp-api.mihoyo.com/hyp/hyp-connect/api/getAllGameBasicInfo")!
   static let biz = "hk4e_cn"
   static let launcherID = "jGHBHlcOq1"
@@ -21,7 +21,7 @@ public struct BackgroundImageProvider: Sendable {
   private var fileManager: FileManager { .default }
 
   /// `cacheDirectory` holds at most one image; it is created on first download.
-  public init(
+  package init(
     cacheDirectory: URL, session: URLSession = .shared, retention: TimeInterval = 3600
   ) {
     self.cacheDirectory = cacheDirectory
@@ -29,7 +29,7 @@ public struct BackgroundImageProvider: Sendable {
     self.retention = retention
   }
 
-  public func backgroundImage() async -> BackgroundImage {
+  package func backgroundImage() async -> BackgroundImage {
     if let remote = try? await officialImageURL() {
       let cached = cacheFile(for: remote)
       if touch(cached) { return .remote(cached) }

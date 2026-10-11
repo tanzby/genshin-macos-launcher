@@ -3,27 +3,20 @@ import Launcher
 import Wine
 
 /// The launch-time preferences that reach Wine (a snapshot, never read from `UserDefaults` here).
-public struct GenshinLaunchSettings: Sendable, Equatable {
-  public var retina: Bool
-  public var leftCommandIsControl: Bool
-  public var metalHUD: Bool
-  public var hdr: Bool
-  public var metalFX: Bool
+struct GenshinLaunchSettings: Sendable, Equatable {
+  var retina: Bool
+  var leftCommandIsControl: Bool
+  var metalHUD: Bool
+  var hdr: Bool
+  var metalFX: Bool
   /// `nil` = do not touch the game's own resolution. Positive values only; validation is the settings UI's job.
-  public var customResolution: Resolution?
+  var customResolution: Resolution?
   /// Raw `host:port`, passed through unchanged (LCH-034). `nil` or empty = no proxy.
-  public var proxyHost: String?
+  var proxyHost: String?
 
-  public struct Resolution: Sendable, Equatable {
-    public var width: Int
-    public var height: Int
-    public init(width: Int, height: Int) {
-      self.width = width
-      self.height = height
-    }
-  }
+  typealias Resolution = LaunchOptions.Resolution
 
-  public init(
+  init(
     retina: Bool = false, leftCommandIsControl: Bool = false, metalHUD: Bool = false, hdr: Bool = false,
     metalFX: Bool = false, customResolution: Resolution? = nil, proxyHost: String? = nil
   ) {
@@ -71,7 +64,7 @@ public enum GenshinLaunchRecipe {
     !gameDirectory.path.contains { $0 == "\"" || $0.isNewline }
   }
 
-  public static func make(
+  static func make(
     settings: GenshinLaunchSettings,
     gameDirectory: URL,
     dataDirectory: URL,
@@ -146,11 +139,11 @@ public enum GenshinLaunchRecipe {
 
 extension GenshinLaunchSettings {
   /// The settings part of a launch snapshot.
-  public init(_ options: LaunchOptions) {
+  init(_ options: LaunchOptions) {
     self.init(
       retina: options.retina, leftCommandIsControl: options.leftCommandIsControl, metalHUD: options.metalHUD,
       hdr: options.hdr, metalFX: options.metalFX,
-      customResolution: options.customResolution.map { Resolution(width: $0.width, height: $0.height) },
+      customResolution: options.customResolution,
       proxyHost: options.proxyHost)
   }
 }

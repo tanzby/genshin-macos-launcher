@@ -1,19 +1,19 @@
 import Foundation
 
-public enum ProcessRunnerError: Error, Equatable {
+enum ProcessRunnerError: Error, Equatable {
   case executableNotAllowed(String)
 }
 
 /// Production `ProcessRunning`. Only the system tools `codesign`, `tar`, `ditto` and executables
 /// inside `allowedRoots` (the Wine runtime) may run (ADR 0002).
-public struct SystemProcessRunner: ProcessRunning {
-  public static let systemTools: Set<String> = ["/usr/bin/codesign", "/usr/bin/tar", "/usr/bin/ditto"]
+package struct SystemProcessRunner: ProcessRunning {
+  private static let systemTools: Set<String> = ["/usr/bin/codesign", "/usr/bin/tar", "/usr/bin/ditto"]
 
   private let allowedRoots: [URL]
   /// How long a cancelled process gets after SIGTERM before it is killed.
   let terminationGrace: TimeInterval
 
-  public init(allowedRoots: [URL] = []) {
+  package init(allowedRoots: [URL] = []) {
     self.init(allowedRoots: allowedRoots, terminationGrace: 5)
   }
 
@@ -31,7 +31,7 @@ public struct SystemProcessRunner: ProcessRunning {
     return allowedRoots.contains { resolved.hasPrefix($0.standardizedFileURL.resolvingSymlinksInPath().path + "/") }
   }
 
-  public func run(
+  package func run(
     _ executable: URL,
     arguments: [String],
     environment: [String: String],
@@ -70,7 +70,7 @@ public struct SystemProcessRunner: ProcessRunning {
     }
   }
 
-  public func runLogging(
+  package func runLogging(
     _ executable: URL,
     arguments: [String],
     environment: [String: String],

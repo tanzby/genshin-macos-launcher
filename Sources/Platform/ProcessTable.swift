@@ -2,16 +2,16 @@ import Darwin
 import Foundation
 
 /// One running process, as far as the Wine launch code needs to see it.
-public struct ProcessRecord: Sendable, Equatable {
-  public var pid: Int32
+package struct ProcessRecord: Sendable, Equatable {
+  package var pid: Int32
   /// The process's argv as it holds it in memory. Wine rewrites it to the Windows command line.
-  public var arguments: [String]
+  package var arguments: [String]
   /// Working directory and open files are only filled when asked for (a syscall per process or fd).
-  public var workingDirectory: String?
+  package var workingDirectory: String?
   /// Paths of files the process has open.
-  public var openPaths: [String]
+  package var openPaths: [String]
 
-  public init(pid: Int32, arguments: [String], workingDirectory: String? = nil, openPaths: [String] = []) {
+  package init(pid: Int32, arguments: [String], workingDirectory: String? = nil, openPaths: [String] = []) {
     self.pid = pid
     self.arguments = arguments
     self.workingDirectory = workingDirectory
@@ -21,16 +21,16 @@ public struct ProcessRecord: Sendable, Equatable {
 
 /// Reads and kills processes in-process. Replaces the `ps | lsof | awk` pipeline of the TS launcher; `lsof`
 /// is not on the external-process allowlist (ADR 0002).
-public protocol ProcessTable: Sendable {
+package protocol ProcessTable: Sendable {
   func processes(includeOpenPaths: Bool) -> [ProcessRecord]
   func kill(_ pid: Int32)
 }
 
 /// Production `ProcessTable` on libproc. Only the current user's processes are listed.
-public struct SystemProcessTable: ProcessTable {
-  public init() {}
+package struct SystemProcessTable: ProcessTable {
+  package init() {}
 
-  public func processes(includeOpenPaths: Bool) -> [ProcessRecord] {
+  package func processes(includeOpenPaths: Bool) -> [ProcessRecord] {
     let capacity = proc_listallpids(nil, 0)
     guard capacity > 0 else { return [] }
     var pids = [Int32](repeating: 0, count: Int(capacity) + 64)
@@ -52,7 +52,7 @@ public struct SystemProcessTable: ProcessTable {
     return result
   }
 
-  public func kill(_ pid: Int32) {
+  package func kill(_ pid: Int32) {
     _ = Darwin.kill(pid, SIGKILL)
   }
 

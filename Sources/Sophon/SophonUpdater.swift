@@ -1,27 +1,27 @@
 import Foundation
 
 /// One file the update turns from the installed version into the new one with an ldiff patch.
-public struct SophonPlannedPatch: Sendable, Equatable {
-  public let file: SophonDiffFile
-  public let patch: SophonPatch
+package struct SophonPlannedPatch: Sendable, Equatable {
+  package let file: SophonDiffFile
+  package let patch: SophonPatch
   /// The same file in the chunk manifest: used when the patch cannot be applied (UPG-009).
-  public let fallback: SophonFile
+  package let fallback: SophonFile
 }
 
 /// What an update from one installed version has to do. Built by `SophonUpdater.plan`.
-public struct SophonUpdatePlan: Sendable, Equatable {
-  public let fromVersion: String
+package struct SophonUpdatePlan: Sendable, Equatable {
+  package let fromVersion: String
   /// Files patched in place from the ldiff files.
-  public let patches: [SophonPlannedPatch]
+  package let patches: [SophonPlannedPatch]
   /// New, missing or damaged files, downloaded as chunks (UPG-010).
-  public let downloads: [SophonFile]
+  package let downloads: [SophonFile]
   /// Old files the new version no longer has (UPG-007).
-  public let deletions: [SophonDeletedFile]
+  package let deletions: [SophonDeletedFile]
   /// Every file of the diff manifest; the update is checked against it at the end (UPG-011).
-  public let expectedFiles: [SophonDiffFile]
+  package let expectedFiles: [SophonDiffFile]
 
   /// The ldiff files to download, each once, in first-use order.
-  public var ldiffs: [SophonLdiffFile] {
+  package var ldiffs: [SophonLdiffFile] {
     var seen = Set<String>()
     return patches.compactMap { planned in
       seen.insert(planned.patch.patchID).inserted
@@ -29,24 +29,24 @@ public struct SophonUpdatePlan: Sendable, Equatable {
     }
   }
 
-  public var ldiffSize: Int64 { ldiffs.reduce(0) { $0 + $1.size } }
+  package var ldiffSize: Int64 { ldiffs.reduce(0) { $0 + $1.size } }
 
   /// Compressed bytes of every chunk of the files in `downloads`.
-  public var chunkSize: Int64 {
+  package var chunkSize: Int64 {
     downloads.reduce(Int64(0)) { sum, file in file.chunks.reduce(sum) { $0 + Int64($1.compressedSize) } }
   }
 
   /// Nothing to download or patch (deletions may still be left).
-  public var isUpToDate: Bool { patches.isEmpty && downloads.isEmpty }
+  package var isUpToDate: Bool { patches.isEmpty && downloads.isEmpty }
 }
 
 /// Which pre-download the temp directory holds. State lives with the data it describes: deleting the
 /// temp directory forgets it, and it is recorded per target version, not as one yes/no flag (PRE-001).
-public struct SophonPredownloadRecord: Sendable, Equatable, Codable {
-  public let targetVersion: String
-  public let fromVersion: String
+struct SophonPredownloadRecord: Sendable, Equatable, Codable {
+  let targetVersion: String
+  let fromVersion: String
   /// `false` while the download is under way; set after the last ldiff and chunk is in place.
-  public let complete: Bool
+  let complete: Bool
 
   static func url(in tempDirectory: URL) -> URL { tempDirectory.appending(path: "predownload.json") }
 
@@ -63,10 +63,10 @@ public struct SophonPredownloadRecord: Sendable, Equatable, Codable {
 
 /// ldiff incremental update and pre-download (UPG-007..012, PRE-001/002). Every step is idempotent:
 /// pausing is cancelling, and calling again with the same arguments continues from what is on disk.
-public struct SophonUpdater: Sendable {
+package struct SophonUpdater: Sendable {
   private let downloader: SophonDownloader
 
-  public init(session: URLSession = .shared, configuration: SophonDownloadConfiguration = .init()) {
+  package init(session: URLSession = .shared, configuration: SophonDownloadConfiguration = .init()) {
     downloader = SophonDownloader(session: session, configuration: configuration)
   }
 
@@ -75,14 +75,14 @@ public struct SophonUpdater: Sendable {
   /// Whether `targetVersion` was pre-downloaded completely, for the game at `installedVersion`: an ldiff
   /// only fits the version it was made for. Cheap, so a launcher can ask it at startup; it trusts the
   /// record and does not look at the files.
-  public static func isPredownloaded(_ targetVersion: String, from installedVersion: String, in tempDirectory: URL) -> Bool {
+  package static func isPredownloaded(_ targetVersion: String, from installedVersion: String, in tempDirectory: URL) -> Bool {
     guard let record = SophonPredownloadRecord.read(from: tempDirectory) else { return false }
     return record.complete && record.targetVersion == targetVersion && record.fromVersion == installedVersion
   }
 
   /// Like `isPredownloaded(_:from:in:)`, and also checks that every ldiff file and chunk `plan` needs is
   /// still in `tempDirectory` with its size, so a cleaned cache is not reported as done.
-  public static func isPredownloaded(_ targetVersion: String, plan: SophonUpdatePlan, in tempDirectory: URL) -> Bool {
+  package static func isPredownloaded(_ targetVersion: String, plan: SophonUpdatePlan, in tempDirectory: URL) -> Bool {
     guard isPredownloaded(targetVersion, from: plan.fromVersion, in: tempDirectory) else { return false }
     for ldiff in plan.ldiffs
     where ldiffDirectory(in: tempDirectory).appending(path: ldiff.id).fileSize != ldiff.size {
@@ -112,7 +112,7 @@ public struct SophonUpdater: Sendable {
   /// | MD5 and size match the new file | untouched (already updated) |
   /// | size and MD5 match `original_hash` | patch |
   /// | missing, or anything else | chunk download |
-  public func plan(
+  package func plan(
     from installedVersion: String,
     diff: SophonDiffManifest,
     manifest: SophonManifest,
@@ -245,7 +245,7 @@ public struct SophonUpdater: Sendable {
   /// PRE-002: downloads the ldiff files and the chunks of the new files into `tempDirectory`. The game
   /// directory is not touched: nothing is deleted, patched or replaced. The record that makes
   /// `isPredownloaded` true is written last.
-  public func predownload(
+  package func predownload(
     _ plan: SophonUpdatePlan,
     targetVersion: String,
     diff diffRef: SophonManifestRef,
@@ -284,7 +284,7 @@ public struct SophonUpdater: Sendable {
   /// files (the ones from a pre-download are reused), patch, delete old files, download the rest,
   /// check. Old files go only after patching because a patch may read a file the new version drops.
   /// Writing the new version into `config.ini` is left to the caller.
-  public func update(
+  package func update(
     _ plan: SophonUpdatePlan,
     diff diffRef: SophonManifestRef,
     chunks chunkRef: SophonManifestRef,

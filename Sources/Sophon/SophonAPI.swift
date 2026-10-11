@@ -2,14 +2,14 @@ import Foundation
 import SwiftProtobuf
 
 /// Where the Sophon APIs live. The ids are public identifiers (from DGP-Studio/Snap.Hutao, MIT).
-public struct SophonEndpoints: Sendable, Equatable {
-  public var hypConnectBase: URL
+package struct SophonEndpoints: Sendable, Equatable {
+  package var hypConnectBase: URL
   /// Serves getBuild and getPatchBuild: install, repair, update and pre-download all use this host.
-  public var downloaderBase: URL
-  public var gameID: String
-  public var launcherID: String
+  package var downloaderBase: URL
+  package var gameID: String
+  package var launcherID: String
 
-  public init(hypConnectBase: URL, downloaderBase: URL, gameID: String, launcherID: String) {
+  package init(hypConnectBase: URL, downloaderBase: URL, gameID: String, launcherID: String) {
     self.hypConnectBase = hypConnectBase
     self.downloaderBase = downloaderBase
     self.gameID = gameID
@@ -17,7 +17,7 @@ public struct SophonEndpoints: Sendable, Equatable {
   }
 
   /// Genshin Impact, CN server.
-  public static let genshinCN = SophonEndpoints(
+  package static let genshinCN = SophonEndpoints(
     hypConnectBase: URL(string: "https://hyp-api.mihoyo.com/hyp/hyp-connect/api")!,
     downloaderBase: URL(string: "https://api-takumi.mihoyo.com/downloader/sophon_chunk/api")!,
     gameID: "1Z8W5NHUQb",
@@ -27,29 +27,29 @@ public struct SophonEndpoints: Sendable, Equatable {
 
 /// The Sophon protocol: branches, builds, patch builds and manifests. Stateless and cache-free,
 /// so no credential is ever written to disk.
-public struct SophonAPI: Sendable {
-  public let endpoints: SophonEndpoints
+package struct SophonAPI: Sendable {
+  package let endpoints: SophonEndpoints
   let session: URLSession
 
-  public init(endpoints: SophonEndpoints = .genshinCN, session: URLSession = .shared) {
+  package init(endpoints: SophonEndpoints = .genshinCN, session: URLSession = .shared) {
     self.endpoints = endpoints
     self.session = session
   }
 
-  public func gameBranches() async throws -> SophonGameBranches {
+  package func gameBranches() async throws -> SophonGameBranches {
     let url = try makeURL(
       endpoints.hypConnectBase, path: "getGameBranches",
       query: [("game_ids[]", endpoints.gameID), ("launcher_id", endpoints.launcherID)])
     return try SophonGameBranches.decode(try await send(URLRequest(url: url)))
   }
 
-  public func build(for branch: SophonGameBranch) async throws -> SophonBuild {
+  package func build(for branch: SophonGameBranch) async throws -> SophonBuild {
     let url = try makeURL(endpoints.downloaderBase, path: "getBuild", query: query(for: branch))
     return try SophonBuild.decode(try await send(URLRequest(url: url)))
   }
 
   /// `getPatchBuild` only answers POST (with an empty body).
-  public func patchBuild(for branch: SophonGameBranch) async throws -> SophonPatchBuild {
+  package func patchBuild(for branch: SophonGameBranch) async throws -> SophonPatchBuild {
     let url = try makeURL(endpoints.downloaderBase, path: "getPatchBuild", query: query(for: branch))
     var request = URLRequest(url: url)
     request.httpMethod = "POST"
@@ -57,12 +57,12 @@ public struct SophonAPI: Sendable {
   }
 
   /// Downloads and parses the chunk manifest of one category.
-  public func manifest(for ref: SophonManifestRef) async throws -> SophonManifest {
+  package func manifest(for ref: SophonManifestRef) async throws -> SophonManifest {
     try SophonManifest(zstdCompressed: try await downloadManifest(ref))
   }
 
   /// Downloads and parses the ldiff manifest of one category.
-  public func diffManifest(for ref: SophonManifestRef) async throws -> SophonDiffManifest {
+  package func diffManifest(for ref: SophonManifestRef) async throws -> SophonDiffManifest {
     try SophonDiffManifest(zstdCompressed: try await downloadManifest(ref))
   }
 
@@ -111,13 +111,13 @@ public struct SophonAPI: Sendable {
 }
 
 /// Real client behind the `SophonClient` protocol.
-public struct LiveSophonClient: SophonClient {
+struct LiveSophonClient: SophonClient {
   private let api: SophonAPI
 
-  public init(api: SophonAPI = SophonAPI()) { self.api = api }
+  init(api: SophonAPI = SophonAPI()) { self.api = api }
 
   /// `installSize` is the compressed download size of the `game` category (what the chunks weigh).
-  public func onlineInfo() async throws -> SophonOnlineInfo {
+  func onlineInfo() async throws -> SophonOnlineInfo {
     let branches = try await api.gameBranches()
     guard let main = branches.main else { throw SophonError.malformedResponse }
     let game = try await api.build(for: main).manifest(matching: "game")

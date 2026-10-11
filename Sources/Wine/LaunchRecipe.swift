@@ -1,27 +1,27 @@
 import Foundation
 
-public enum RegistryValue: Sendable, Equatable, Codable {
+package enum RegistryValue: Sendable, Equatable, Codable {
   case dword(UInt32)
   case string(String)
 }
 
 /// One registry change, applied with `wine reg` (argv, never a batch file: `cmd` reads batch files in the
 /// OEM code page and would mangle non-ASCII keys such as `原神`).
-public struct RegistryEdit: Sendable, Equatable {
-  public enum Action: Sendable, Equatable {
+package struct RegistryEdit: Sendable, Equatable {
+  package enum Action: Sendable, Equatable {
     case set(RegistryValue)
     case delete
   }
 
   /// Key in `reg` syntax, e.g. `HKCU\Software\miHoYo\原神`.
-  public var key: String
-  public var name: String
-  public var action: Action
+  package var key: String
+  package var name: String
+  package var action: Action
   /// `true`: the original value (or its absence) is recorded in the journal and put back after the game.
   /// `false`: a persistent preference such as the Mac Driver keys.
-  public var restoresOnExit: Bool
+  package var restoresOnExit: Bool
 
-  public init(key: String, name: String, action: Action, restoresOnExit: Bool) {
+  package init(key: String, name: String, action: Action, restoresOnExit: Bool) {
     self.key = key
     self.name = name
     self.action = action
@@ -31,12 +31,12 @@ public struct RegistryEdit: Sendable, Equatable {
 
 /// A file copied into `drive_c/windows/<destination>` of the prefix on every launch when it differs.
 /// Never restored (LCH-018).
-public struct PrefixCopy: Sendable, Equatable {
-  public var source: URL
+package struct PrefixCopy: Sendable, Equatable {
+  package var source: URL
   /// Relative to `drive_c/windows`, e.g. `system32/steam.exe`.
-  public var destination: String
+  package var destination: String
 
-  public init(source: URL, destination: String) {
+  package init(source: URL, destination: String) {
     self.source = source
     self.destination = destination
   }
@@ -44,21 +44,21 @@ public struct PrefixCopy: Sendable, Equatable {
 
 /// Everything a game needs from Wine for one launch, as plain values. The game module builds it;
 /// `GameSession` only executes it, so this module stays game-agnostic.
-public struct LaunchRecipe: Sendable, Equatable {
+package struct LaunchRecipe: Sendable, Equatable {
   /// Game environment on top of `WINEPREFIX`/`WINEDEBUG`. Empty values are dropped (LCH-035).
-  public var environment: [String: String]
-  public var registry: [RegistryEdit]
+  package var environment: [String: String]
+  package var registry: [RegistryEdit]
   /// Files renamed to `<name>.bak` before the game and renamed back afterwards (LCH-014).
-  public var moveAside: [URL]
-  public var prefixCopies: [PrefixCopy]
+  package var moveAside: [URL]
+  package var prefixCopies: [PrefixCopy]
   /// The Wine arguments that start the game: `wine <command>` (LCH-010). Deliberately not a `cmd /c` batch file:
   /// with `cmd.exe` as the parent the game loads its anti-cheat driver, which fails on this Wine (#57).
-  public var command: [String]
+  package var command: [String]
   /// File name of the game process, e.g. `YuanShen.exe`. Used for Game Mode and to see the game start.
-  public var gameExecutableName: String
-  public var gameDisplayName: String
+  package var gameExecutableName: String
+  package var gameDisplayName: String
 
-  public init(
+  package init(
     environment: [String: String] = [:],
     registry: [RegistryEdit] = [],
     moveAside: [URL] = [],
@@ -77,7 +77,7 @@ public struct LaunchRecipe: Sendable, Equatable {
   }
 }
 
-public enum LaunchResult: Sendable, Equatable {
+package enum LaunchResult: Sendable, Equatable {
   /// The loader exited with 0.
   case exited
   case failedExit(code: Int32, log: URL)
@@ -89,14 +89,14 @@ public enum LaunchResult: Sendable, Equatable {
   case cancelled
 }
 
-public struct LaunchTiming: Sendable {
-  public var startupTimeout: Duration
-  public var pollInterval: Duration
+package struct LaunchTiming: Sendable {
+  package var startupTimeout: Duration
+  package var pollInterval: Duration
   /// How long `wineserver -w` may take after the game exits before the prefix is killed (LCH-036).
-  public var exitGrace: Duration
-  public var sleep: @Sendable (Duration) async throws -> Void
+  package var exitGrace: Duration
+  package var sleep: @Sendable (Duration) async throws -> Void
 
-  public init(
+  package init(
     startupTimeout: Duration = .seconds(120),
     pollInterval: Duration = .seconds(1),
     exitGrace: Duration = .seconds(15),
@@ -109,24 +109,24 @@ public struct LaunchTiming: Sendable {
   }
 
   /// Named, not a closure literal in the default argument: see `LauncherModel.defaultSleep` (issue #48).
-  public static func defaultSleep(_ duration: Duration) async throws {
+  package static func defaultSleep(_ duration: Duration) async throws {
     try await Task.sleep(for: duration)
   }
 }
 
 /// The Game Mode helpers inside the app bundle (`Contents/Helpers/`). Passed in so `Wine` never touches
 /// `Bundle.main`.
-public struct GameHostHelpers: Sendable, Equatable {
-  public var shim: URL
-  public var dylib: URL
+package struct GameHostHelpers: Sendable, Equatable {
+  package var shim: URL
+  package var dylib: URL
 
-  public init(shim: URL, dylib: URL) {
+  package init(shim: URL, dylib: URL) {
     self.shim = shim
     self.dylib = dylib
   }
 }
 
 /// Registers an app bundle with LaunchServices. A seam so tests never touch the real database.
-public protocol LaunchServicesRegistering: Sendable {
+package protocol LaunchServicesRegistering: Sendable {
   func register(appAt url: URL) throws
 }

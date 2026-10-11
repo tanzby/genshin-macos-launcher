@@ -1,17 +1,17 @@
 import CryptoKit
 import Foundation
 
-public struct SophonDownloadConfiguration: Sendable, Equatable {
+package struct SophonDownloadConfiguration: Sendable, Equatable {
   /// Files downloaded at the same time (INS-007).
-  public var concurrency: Int
+  package var concurrency: Int
   /// Attempts per file before the whole job fails (INS-010).
-  public var maxAttempts: Int
+  package var maxAttempts: Int
   /// Wait before the second attempt; doubles each time.
-  public var retryDelay: Duration
+  package var retryDelay: Duration
   /// Minimum gap between progress reports (ADR 0002: at most 4 per second).
-  public var progressInterval: Duration
+  package var progressInterval: Duration
 
-  public init(
+  package init(
     concurrency: Int = 8, maxAttempts: Int = 5, retryDelay: Duration = .seconds(1),
     progressInterval: Duration = .milliseconds(250)
   ) {
@@ -24,11 +24,11 @@ public struct SophonDownloadConfiguration: Sendable, Equatable {
 
 /// Downloads, verifies and assembles the files of a chunk manifest. Every call is idempotent:
 /// cancelling it (pause) and calling again with the same arguments continues from what is on disk.
-public struct SophonDownloader: Sendable {
+package struct SophonDownloader: Sendable {
   let session: URLSession
   let configuration: SophonDownloadConfiguration
 
-  public init(session: URLSession = .shared, configuration: SophonDownloadConfiguration = .init()) {
+  package init(session: URLSession = .shared, configuration: SophonDownloadConfiguration = .init()) {
     self.session = session
     self.configuration = configuration
   }
@@ -37,7 +37,7 @@ public struct SophonDownloader: Sendable {
   /// size and MD5 both match, so "right size, wrong MD5" files are downloaded again (REP-004).
   /// Chunks are cached in `tempDirectory` until their file is complete. Returns after every
   /// worker has stopped, also when cancelled (throws `CancellationError`).
-  public func install(
+  package func install(
     _ files: [SophonFile],
     using ref: SophonManifestRef,
     into gameDirectory: URL,
@@ -126,7 +126,7 @@ public struct SophonDownloader: Sendable {
   }
 
   /// The files that are missing, have the wrong size or the wrong MD5 (REP-003).
-  public func findDamagedFiles(
+  package func findDamagedFiles(
     in files: [SophonFile],
     gameDirectory: URL,
     progress: @escaping @Sendable (SophonProgress) -> Void
