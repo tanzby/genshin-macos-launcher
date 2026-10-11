@@ -202,6 +202,13 @@ public final class LauncherModel {
   /// Runs `recover()` once per process. Overlapping callers share the one running recovery and all wait for
   /// it; it counts as done only after it has returned, so nothing reads the game state before. While it runs
   /// every job and launch entry answers `busy` (it kills the prefix and rewrites game files).
+  /// The game launch found Wine broken although the stamp says ready: Wine counts as missing until a
+  /// reinstall succeeds, and the main button goes back to "prepare Wine".
+  func requireWineReinstall() {
+    needsForcedReinstall = true
+    wineStatus = Self.reportedByLaunch
+  }
+
   private static let reportedByLaunch = WineStatus.needsInstall(.corrupt(missing: "reported by the game launch"))
 
   private func recoverOnce() async {
@@ -549,10 +556,7 @@ public final class LauncherModel {
     if let failure {
       lastError = failure
       eventSink.yield(.launchFailed(failure))
-      if failure == .client(.wineReinstallRequired) {
-        needsForcedReinstall = true
-        wineStatus = Self.reportedByLaunch  // not ready any more: the main button goes back to "prepare Wine"
-      }
+      if failure == .client(.wineReinstallRequired) { requireWineReinstall() }
     }
     launchGate = nil
     launchWork = nil

@@ -241,14 +241,13 @@ private struct Harness {
   }
 }
 
-#if false
 @MainActor @Suite struct WIN_005_ReinstallTests {
+  /// What `launch()` does when the client throws `wineReinstallRequired`. The thrown-error path itself is not
+  /// driven through the fake: any test that makes `GameClient.launch` throw aborts the test process on CI's
+  /// Xcode 26.6 (see PR #44), so the hook is called directly.
   private func failLaunchWithReinstall(_ h: Harness) async throws {
     await h.model.bootstrap()
-    try await h.model.launch()
-    try await h.fake.nextLaunch()
-    h.fake.failLaunch(GameClientError.wineReinstallRequired)
-    await h.model.waitUntilIdle()
+    h.model.requireWineReinstall()
   }
 
   @Test func WIN_005_wineReinstallRequiredReturnsToPreparation() async throws {
@@ -302,11 +301,7 @@ extension WIN_005_ReinstallTests {
   @Test func WIN_005_aPausedReinstallStaysRequired() async throws {
     let h = Harness(wine: .ready)
     defer { h.cleanUp() }
-    await h.model.bootstrap()
-    try await h.model.launch()
-    try await h.fake.nextLaunch()
-    h.fake.failLaunch(GameClientError.wineReinstallRequired)
-    await h.model.waitUntilIdle()
+    try await failLaunchWithReinstall(h)
     try await h.model.prepareWine()
     _ = try await h.wine.nextInstall()
     await h.model.pause()
@@ -319,7 +314,6 @@ extension WIN_005_ReinstallTests {
   }
 }
 
-#endif
 @MainActor @Suite struct WIN_005_RefreshWineTests {
   @Test func WIN_005_preparationReadsTheWineStatusOnceAfterAnyOutcome() async throws {
     for finish in [true, false] {

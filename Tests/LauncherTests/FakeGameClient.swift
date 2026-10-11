@@ -81,7 +81,7 @@ final class FakeGameClient: GameClient, Sendable {
     continuation?.resume(returning: outcome)
   }
 
-  func failLaunch(_ error: GameClientError) {
+  func failLaunch(_ error: any Error) {
     let continuation = takeLaunchContinuation()
     continuation?.resume(throwing: error)
   }

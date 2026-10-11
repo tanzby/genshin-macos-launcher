@@ -5,7 +5,7 @@
 set -eu
 cd "$(dirname "$0")/../.."
 scripts/dev/parity-coverage
-SWIFT_BACKTRACE=enable=yes,color=no,output-to=stderr,symbolicate=full swift test
+swift test
 xcodegen generate
 xcodebuild -project Yaagl.xcodeproj -scheme Yaagl -configuration Debug \
   -destination 'platform=macOS,arch=arm64' -derivedDataPath build/DerivedData build
