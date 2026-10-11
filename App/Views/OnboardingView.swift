@@ -1,3 +1,4 @@
+import AppKit
 import Launcher
 import SwiftUI
 
@@ -43,6 +44,7 @@ struct OnboardingView: View {
     }
     .padding(28)
     .frame(width: 520)
+    .background(AllowsTermination())
   }
 }
 
@@ -65,6 +67,21 @@ private struct StepRow<Actions: View>: View {
           .fixedSize(horizontal: false, vertical: true)
         actions
       }
+    }
+  }
+}
+
+/// AppKit refuses `terminate(_:)` while a sheet is up (`preventsApplicationTerminationWhenModal`, true by default),
+/// so Quit and Sparkle's "Install and Relaunch" did nothing while the first-run sheet was open. The sheet holds no
+/// unsaved work: put the setting back on the sheet's own window.
+private struct AllowsTermination: NSViewRepresentable {
+  func makeNSView(context: Context) -> NSView { Anchor() }
+  func updateNSView(_ view: NSView, context: Context) {}
+
+  private final class Anchor: NSView {
+    override func viewDidMoveToWindow() {
+      super.viewDidMoveToWindow()
+      window?.preventsApplicationTerminationWhenModal = false
     }
   }
 }
