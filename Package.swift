@@ -8,7 +8,8 @@ import PackageDescription
 //   Sophon    -> swift-protobuf, CZstd (vendored facebook/zstd, decompression only),
 //                CHDiffPatch (vendored sisong/HDiffPatch v4.5.2, patching only)
 //   Updates   -> Sparkle (re-exported for the app, so Package.resolved pins it, #87)
-// The SwiftUI app (project.yml) sits on top of Launcher, GenshinCN and Updates.
+//   Diagnostics -> Launcher, Platform (the --autolaunch entry and launcher.log for yaagl-diag, #76)
+// The SwiftUI app (project.yml) sits on top of Launcher, GenshinCN, Updates and Diagnostics.
 let package = Package(
   name: "YaaglKit",
   platforms: [.macOS(.v26)],
@@ -19,6 +20,7 @@ let package = Package(
     .library(name: "GenshinCN", targets: ["GenshinCN"]),
     .library(name: "Launcher", targets: ["Launcher"]),
     .library(name: "Updates", targets: ["Updates"]),
+    .library(name: "Diagnostics", targets: ["Diagnostics"]),
   ],
   dependencies: [
     .package(url: "https://github.com/apple/swift-protobuf.git", from: "1.38.1"),
@@ -45,6 +47,7 @@ let package = Package(
     .target(name: "Launcher", dependencies: ["Platform", "Wine"]),
     .target(name: "GenshinCN", dependencies: ["Launcher", "Sophon", "Wine", "Platform"]),
     .target(name: "Updates", dependencies: [.product(name: "Sparkle", package: "Sparkle")]),
+    .target(name: "Diagnostics", dependencies: ["Launcher", "Platform"]),
 
     // Shared by the test targets only: temporary directories and waiting helpers.
     .target(name: "TestSupport", path: "Tests/TestSupport"),
@@ -55,7 +58,7 @@ let package = Package(
     ),
     .testTarget(name: "PlatformTests", dependencies: ["Platform", "TestSupport"]),
     .testTarget(name: "WineTests", dependencies: ["Wine", "TestSupport"]),
-    .testTarget(name: "LauncherTests", dependencies: ["Launcher", "TestSupport"]),
+    .testTarget(name: "LauncherTests", dependencies: ["Launcher", "Diagnostics", "TestSupport"]),
     .testTarget(
       name: "GenshinCNTests",
       dependencies: [

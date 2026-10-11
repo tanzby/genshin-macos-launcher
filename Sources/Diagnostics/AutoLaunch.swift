@@ -1,4 +1,5 @@
 import Foundation
+import Launcher
 import Platform
 
 /// Command-line switches that let a script (`scripts/diag/yaagl-diag`) drive the app without clicks (APP-020,

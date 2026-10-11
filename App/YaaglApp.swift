@@ -1,4 +1,5 @@
 import AppKit
+import Diagnostics
 import GenshinCN
 import Launcher
 import Platform

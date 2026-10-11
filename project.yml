@@ -77,6 +77,8 @@ targets:
         product: Wine
       - package: YaaglKit
         product: Updates
+      - package: YaaglKit
+        product: Diagnostics
       - target: YaaglWineShim
         embed: true
         link: false
