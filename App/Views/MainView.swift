@@ -28,16 +28,30 @@ struct MainView: View {
     .task {
       for await event in controller.launcher.events { await notifier.handle(event) }
     }
-    .onChange(of: controller.launcher.status) { _, status in
-      Task { await notifier.observe(status: status) }
-    }
-    .onChange(of: controller.launcher.progress) { _, progress in meter.update(progress) }
-    .onChange(of: controller.settings.gameDirectory) { _, _ in
-      if !drivenByAutoLaunch { Task { await controller.refresh() } }
-    }
+    .modifier(LauncherObservers(notifier: notifier, drivenByAutoLaunch: drivenByAutoLaunch))
     .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
       if !drivenByAutoLaunch { Task { await controller.refreshWhenIdle() } }
     }
+  }
+}
+
+/// The `onChange` handlers that follow the launcher. They live in their own modifier so that the progress
+/// ticks (several a second) invalidate this body only, not `MainView.body` with its background, capsule and sheet.
+private struct LauncherObservers: ViewModifier {
+  @Environment(MainController.self) private var controller
+  @Environment(ProgressMeter.self) private var meter
+  let notifier: EventNotifier
+  let drivenByAutoLaunch: Bool
+
+  func body(content: Content) -> some View {
+    content
+      .onChange(of: controller.launcher.status) { _, status in
+        Task { await notifier.observe(status: status) }
+      }
+      .onChange(of: controller.launcher.progress) { _, progress in meter.update(progress) }
+      .onChange(of: controller.settings.gameDirectory) { _, _ in
+        if !drivenByAutoLaunch { Task { await controller.refresh() } }
+      }
   }
 }
 
