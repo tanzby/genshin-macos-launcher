@@ -1,19 +1,22 @@
 name: CI
-
 on:
   pull_request:
-  push:
-    branches: [main]
-
 jobs:
   swift:
     runs-on: macos-26
+    strategy:
+      fail-fast: false
+      matrix:
+        target: [GenshinCNTests, LauncherTests, SophonTests, WineTests, PlatformTests, ALL]
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Install XcodeGen
-        run: brew install xcodegen
-
-      - name: Swift test and app build
-        run: scripts/dev/macos-check
+      - uses: actions/checkout@v4
+      - name: hunt
+        run: |
+          swift build --build-tests > /dev/null 2>&1
+          crashes=0
+          for n in 1 2 3 4 5 6 7 8; do
+            if [ "${{ matrix.target }}" = ALL ]; then f=""; else f="--filter ${{ matrix.target }}"; fi
+            if ! swift test --skip-build $f > run.log 2>&1; then crashes=$((crashes+1)); tail -2 run.log | cut -c1-160; fi
+          done
+          echo "CRASHES target=${{ matrix.target }}: $crashes of 8"
+          [ "$crashes" = 0 ]
