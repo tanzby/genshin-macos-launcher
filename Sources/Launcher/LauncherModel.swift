@@ -20,7 +20,6 @@ public final class LauncherModel {
   public private(set) var hasBootstrapped = false
   public private(set) var isRosettaMissing = false
   public private(set) var isOnline = false
-  public private(set) var isPreDownloading = false
   public private(set) var isPausing = false
   public private(set) var progress: JobProgress?
   public private(set) var pendingJob: PendingJob?
@@ -29,13 +28,10 @@ public final class LauncherModel {
   /// Snapshots the settings for a launch. The composition root replaces it with one that reads `SettingsModel`.
   public var makeLaunchOptions: @MainActor (URL) -> LaunchOptions = { LaunchOptions(gameDirectory: $0) }
 
-  /// The exclusive slot; pre-download has its own flag.
-  private var exclusive: LauncherPhase = .idle
+  private let jobs = JobCoordinator()
 
-  public var phase: LauncherPhase {
-    if exclusive != .idle { return exclusive }
-    return isPreDownloading ? .preDownloading : .idle
-  }
+  public var isPreDownloading: Bool { jobs.isPreDownloading }
+  public var phase: LauncherPhase { jobs.phase }
 
   public var primaryAction: PrimaryAction {
     isWineNotReady ? .prepareWine : PrimaryAction.derive(status)
@@ -58,18 +54,15 @@ public final class LauncherModel {
 
   public static let defaultLaunchTimeout: Duration = .seconds(120)
   /// Room for the chunk cache and files being assembled next to the finished ones.
-  public static let defaultChunkTempMargin: Int64 = 2 << 30
+  public static let defaultChunkTempMargin: Int64 = DiskSpaceCheck.defaultMargin
 
   private let client: any GameClient
   private let wine: (any WinePreparing)?
   private let startup: StartupSteps?
   private let launchTimeout: Duration
-  private let chunkTempMargin: Int64
-  private let availableDiskSpace: @Sendable (URL) -> Int64?
+  private let diskSpace: DiskSpaceCheck
   private let sleep: @Sendable (Duration) async throws -> Void
 
-  private var exclusiveTask: Task<Void, Never>?
-  private var preDownloadTask: Task<Void, Never>?
   private var launchGate: LaunchGate?
   private var isShuttingDown = false
   private var launchWork: Task<LaunchOutcome, Error>?
@@ -101,8 +94,7 @@ public final class LauncherModel {
     self.startup = startup
     self.gameDirectory = gameDirectory
     self.launchTimeout = launchTimeout
-    self.chunkTempMargin = chunkTempMargin
-    self.availableDiskSpace = availableDiskSpace
+    diskSpace = DiskSpaceCheck(margin: chunkTempMargin, availableSpace: availableDiskSpace)
     self.sleep = sleep
     (events, eventSink) = AsyncStream.makeStream()
   }
@@ -116,11 +108,7 @@ public final class LauncherModel {
 
   /// Free bytes on the volume holding `url`, or on its nearest existing ancestor when it does not exist yet.
   nonisolated public static func systemAvailableCapacity(at url: URL) -> Int64? {
-    var probe = url
-    while !FileManager.default.fileExists(atPath: probe.path), probe.pathComponents.count > 1 {
-      probe.deleteLastPathComponent()
-    }
-    return WineRuntime.volumeAvailableSpace(probe)
+    DiskSpaceCheck.systemAvailableCapacity(at: url)
   }
 
   // MARK: Status
@@ -130,7 +118,7 @@ public final class LauncherModel {
   /// A missing Wine is prepared here, so recovery and the game status only come once Wine is ready; if the
   /// preparation is paused or fails, `bootstrap()` returns without them (`lastError` and `events` say why).
   public func bootstrap() async {
-    guard exclusive == .idle, !isPausing, !isShuttingDown else { return }
+    guard jobs.exclusive == .idle, !isPausing, !isShuttingDown else { return }
     guard await rosettaIsAvailable() else { return }
     hasBootstrapped = true
     await refreshWine()
@@ -143,9 +131,9 @@ public final class LauncherModel {
       try await prepareWine()
     } catch {
       // Someone else (the user pressing "prepare Wine") got the slot while the status was being read.
-      guard exclusive == .preparingWine else { return }
+      guard jobs.exclusive == .preparingWine else { return }
     }
-    guard exclusive == .preparingWine, let task = exclusiveTask else { return }
+    guard jobs.exclusive == .preparingWine, let task = jobs.exclusiveTask else { return }
     await task.value  // the preparation reads the game status itself once Wine is ready
   }
 
@@ -233,18 +221,18 @@ public final class LauncherModel {
   }
 
   private func startExclusive(_ job: GameJob) async throws {
-    guard exclusive == .idle else { throw LauncherError.busy }
+    guard jobs.exclusive == .idle else { throw LauncherError.busy }
     guard !isWineNotReady else { throw LauncherError.wineNotReady }
     if job != .install {
       guard status?.localVersion != nil else { throw LauncherError.notInstalled }
     }
     if job == .repair, status?.canUpdate == true { throw LauncherError.updateRequired }
     guard let store else { throw LauncherError.noGameDirectory }
-    exclusive = job.exclusivePhase  // claim before any await so nothing else can slip in
+    jobs.claim(job.exclusivePhase)  // claim before any await so nothing else can slip in
     lastError = nil
     // One Task covers preflight and the job, so pause()/shutdown() always find a handle to cancel and await.
     let (ready, readySink) = AsyncThrowingStream<Void, Error>.makeStream()
-    exclusiveTask = Task {
+    jobs.exclusiveTask = Task {
       let stream: AsyncThrowingStream<JobProgress, Error>
       do {
         await stopPreDownload()
@@ -253,7 +241,7 @@ public final class LauncherModel {
         try Task.checkCancellation()
         stream = try begin(job, store: store)
       } catch {
-        releaseSlot(preDownload: false)
+        jobs.release(preDownload: false)
         readySink.finish(throwing: error)
         return
       }
@@ -264,28 +252,26 @@ public final class LauncherModel {
   }
 
   private func startPreDownload() async throws {
-    guard exclusive == .idle || exclusive == .launching || exclusive == .running,
-      !isPreDownloading
-    else { throw LauncherError.busy }
+    guard jobs.allowsPreDownload, !jobs.isPreDownloading else { throw LauncherError.busy }
     guard !isWineNotReady else { throw LauncherError.wineNotReady }
     guard status?.localVersion != nil else { throw LauncherError.notInstalled }
     guard status?.canPreDownload == true else { throw LauncherError.preDownloadUnavailable }
     guard let store else { throw LauncherError.noGameDirectory }
-    isPreDownloading = true
+    jobs.claimPreDownload()
     lastError = nil
     let (ready, readySink) = AsyncThrowingStream<Void, Error>.makeStream()
-    preDownloadTask = Task {
+    jobs.preDownloadTask = Task {
       let stream: AsyncThrowingStream<JobProgress, Error>
       do {
         try await checkDiskSpace(for: .preDownload, in: store.gameDirectory)
         try Task.checkCancellation()
         // Starting install/update/repair during the check would have claimed the slot first.
-        guard exclusive == .idle || exclusive == .launching || exclusive == .running else {
+        guard jobs.allowsPreDownload else {
           throw LauncherError.busy
         }
         stream = try begin(.preDownload, store: store)
       } catch {
-        releaseSlot(preDownload: true)
+        jobs.release(preDownload: true)
         readySink.finish(throwing: error)
         return
       }
@@ -344,7 +330,7 @@ public final class LauncherModel {
     }
     ProcessInfo.processInfo.endActivity(activity)
     progress = nil
-    releaseSlot(preDownload: job == .preDownload)
+    jobs.release(preDownload: job == .preDownload)
   }
 
   /// A pre-download running beside an unfinished install/update/repair neither writes nor clears its marker.
@@ -352,22 +338,9 @@ public final class LauncherModel {
     job == .preDownload && store.load()?.blocksLaunch == true
   }
 
-  /// Frees the pre-download slot, or the exclusive one that install/update/repair, Wine and launch share.
-  private func releaseSlot(preDownload: Bool) {
-    if preDownload {
-      isPreDownloading = false
-      preDownloadTask = nil
-    } else {
-      exclusive = .idle
-      exclusiveTask = nil
-    }
-  }
-
-  /// Cancels the chosen slots' Tasks and returns once all of them have stopped.
+  /// Cancels the chosen slots' Tasks, returns once all of them have stopped and the client is quiet.
   private func cancelAndWait(exclusive: Bool, preDownload: Bool) async {
-    let tasks = [exclusive ? exclusiveTask : nil, preDownload ? preDownloadTask : nil].compactMap { $0 }
-    for task in tasks { task.cancel() }
-    for task in tasks { await task.value }
+    await jobs.cancelAndWait(exclusive: exclusive, preDownload: preDownload)
     // The streams are over, but the work behind them may still be finishing a file.
     await client.quiesce()
   }
@@ -385,19 +358,15 @@ public final class LauncherModel {
       if Task.isCancelled || error is CancellationError { throw CancellationError() }
       throw LauncherError(error)
     }
-    guard bytes > 0 else { return }
-    let required = bytes + chunkTempMargin
-    if let available = availableDiskSpace(directory), available < required {
-      throw LauncherError.insufficientDiskSpace(required: required, available: available)
-    }
+    try diskSpace.verify(required: bytes, in: directory)
   }
 
   /// Cancels the running download job and waits until it has really stopped. `job.json` stays.
   public func pause() async {
     // Only download jobs are pausable; cancelling a launch Task alone would leave `await` hanging until the game exits.
     let pausable: Set<LauncherPhase> = [.preparingWine, .installing, .updating, .repairing]
-    let exclusivePause = pausable.contains(exclusive)
-    guard exclusivePause ? exclusiveTask != nil : preDownloadTask != nil else { return }
+    let exclusivePause = pausable.contains(jobs.exclusive)
+    guard exclusivePause ? jobs.exclusiveTask != nil : jobs.preDownloadTask != nil else { return }
     isPausing = true
     await cancelAndWait(exclusive: exclusivePause, preDownload: !exclusivePause)
     isPausing = false
@@ -444,13 +413,13 @@ public final class LauncherModel {
   public func prepareWine() async throws {
     // Pressed before `bootstrap()` got to the Rosetta check: do it here, the 2 GB download must not come first.
     if !hasBootstrapped, !(await rosettaIsAvailable()) { throw LauncherError.rosettaMissing }
-    guard !isPausing, !isShuttingDown, exclusive == .idle, recovery == nil else { throw LauncherError.busy }
+    guard !isPausing, !isShuttingDown, jobs.exclusive == .idle, recovery == nil else { throw LauncherError.busy }
     guard !isRosettaMissing else { throw LauncherError.rosettaMissing }
     guard let wine, wineStatus != .ready else { return }
-    exclusive = .preparingWine  // claim before any await so nothing else can slip in
+    jobs.claim(.preparingWine)  // claim before any await so nothing else can slip in
     lastError = nil
     progress = .preparing
-    exclusiveTask = Task {
+    jobs.exclusiveTask = Task {
       await stopPreDownload()  // shares the launcher's cancel-and-await rule with install/update/repair
       await self.runWinePreparation(wine)
     }
@@ -506,7 +475,7 @@ public final class LauncherModel {
     }
     ProcessInfo.processInfo.endActivity(activity)
     progress = nil
-    releaseSlot(preDownload: false)
+    jobs.release(preDownload: false)
   }
 
   // MARK: Launch
@@ -522,14 +491,14 @@ public final class LauncherModel {
 
   public func launch() async throws {
     client.setGameDirectory(gameDirectory)
-    guard exclusive == .idle, !isPausing, !isShuttingDown, recovery == nil else { throw LauncherError.busy }
+    guard jobs.exclusive == .idle, !isPausing, !isShuttingDown, recovery == nil else { throw LauncherError.busy }
     guard !isWineNotReady else { throw LauncherError.wineNotReady }
     guard let status, status.localVersion != nil else { throw LauncherError.notInstalled }
     guard let gameDirectory else { throw LauncherError.noGameDirectory }
     if let pending = store?.load(), pending.blocksLaunch { throw LauncherError.pendingJob(pending.kind) }
     guard isOnline else { throw LauncherError.offline }
     guard !status.canUpdate else { throw LauncherError.updateRequired }
-    exclusive = .launching
+    jobs.claim(.launching)
     lastError = nil
     let gate = LaunchGate()
     launchGate = gate
@@ -548,11 +517,11 @@ public final class LauncherModel {
       try? await sleep(timeout)
       if !Task.isCancelled, gate.expire() { work.cancel() }
     }
-    exclusiveTask = Task { await self.finishLaunch(work: work, watchdog: watchdog, gate: gate) }
+    jobs.exclusiveTask = Task { await self.finishLaunch(work: work, watchdog: watchdog, gate: gate) }
   }
 
   private func noteStarted(_ gate: LaunchGate) {
-    if launchGate === gate, exclusive == .launching { exclusive = .running }
+    if launchGate === gate { jobs.markRunning() }
   }
 
   private func finishLaunch(
@@ -580,13 +549,9 @@ public final class LauncherModel {
     }
     launchGate = nil
     launchWork = nil
-    releaseSlot(preDownload: false)
+    jobs.release(preDownload: false)
   }
 
   /// Test hook: returns once no job or launch Task is outstanding.
-  func waitUntilIdle() async {
-    while let task = exclusiveTask ?? preDownloadTask {
-      await task.value
-    }
-  }
+  func waitUntilIdle() async { await jobs.waitUntilIdle() }
 }
