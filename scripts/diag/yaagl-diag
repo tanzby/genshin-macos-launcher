@@ -407,7 +407,7 @@ def cmd_run(a):
                 if "launching" not in m and now - m["ready"] > a.hosts_grace:
                     waiting.add("hosts")
                     print("WAITING maintainer: hosts-password (admin password dialog for /etc/hosts)", flush=True)
-            if window_at and a.hold is None and "main_interface" not in m and time.monotonic() - window_at > a.login_grace \
+            if window_at and a.hold is None and not a.screen_check and "main_interface" not in m and time.monotonic() - window_at > a.login_grace \
                     and "login" not in waiting:
                 waiting.add("login")
                 print("WAITING maintainer: game-login (log in to the miHoYo account in the game window)", flush=True)
