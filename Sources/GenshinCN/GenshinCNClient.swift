@@ -99,6 +99,10 @@ public final class GenshinCNClient: GameClient {
   // MARK: - Status
 
   public func status() async throws -> GameStatus {
+    do { return try await loadStatus() } catch { throw Self.map(error) }
+  }
+
+  private func loadStatus() async throws -> GameStatus {
     let directory = gameDirectory
     // A broken or non-China install throws `brokenInstallation` (UPG-005) instead of reading as "no install".
     let installed = try directory.flatMap { try SophonInstallation.installedVersion(in: $0) }
@@ -179,6 +183,7 @@ public final class GenshinCNClient: GameClient {
       switch error {
       case .transport, .http: return GameClientError.network
       case .checksumMismatch, .verificationFailed: return GameClientError.verificationFailed
+      case .brokenInstallation: return GameClientError.brokenInstallation
       default: return error
       }
     case let error as CocoaError where error.code == .fileWriteOutOfSpace:

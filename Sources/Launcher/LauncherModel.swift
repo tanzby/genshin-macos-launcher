@@ -179,6 +179,9 @@ public final class LauncherModel {
       isOnline = !(fresh.remoteVersion ?? "").isEmpty
     } catch {
       isOnline = false
+      // Offline is a state of its own; anything else (a broken install) needs to be seen.
+      let failure = LauncherError(error)
+      if failure != .client(.network), failure != .client(.cancelled) { lastError = failure }
     }
     if let store = store { pendingJob = store.load() }
   }
@@ -190,7 +193,6 @@ public final class LauncherModel {
   // MARK: Jobs
 
   public func start(_ job: GameJob) async throws {
-    client.setGameDirectory(gameDirectory)
     guard !isPausing, !isShuttingDown else { throw LauncherError.busy }
     if job == .preDownload {
       try await startPreDownload()
@@ -265,6 +267,7 @@ public final class LauncherModel {
   }
 
   private func begin(_ job: GameJob, store: PendingJobStore) throws -> AsyncThrowingStream<JobProgress, Error> {
+    client.setGameDirectory(store.gameDirectory)
     let pending = PendingJob(kind: job, targetVersion: status?.remoteVersion)
     // A pre-download must not replace the marker of an unfinished install/update/repair: that one blocks launch.
     if job == .preDownload, let existing = store.load(), existing.kind != .preDownload {
@@ -339,6 +342,7 @@ public final class LauncherModel {
   private func checkDiskSpace(for job: GameJob, in directory: URL) async throws {
     let bytes: Int64
     do {
+      client.setGameDirectory(directory)
       bytes = try await client.requiredDiskSpace(for: job)
     } catch {
       if Task.isCancelled || error is CancellationError { throw CancellationError() }

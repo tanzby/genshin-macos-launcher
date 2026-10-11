@@ -94,6 +94,8 @@ public enum GameClientError: Error, Sendable, Equatable {
   case verificationFailed
   case cancelled
   case wineReinstallRequired
+  /// The game folder is damaged or not the China release (Bilibili); neither update nor repair can start from it.
+  case brokenInstallation
 }
 
 /// The seam between the launcher state machine and a concrete game.
@@ -108,7 +110,8 @@ public protocol GameClient: Sendable {
   func launch(_ options: LaunchOptions, onStarted: @escaping @Sendable () -> Void) async throws -> LaunchOutcome
   func backgroundImage() async -> BackgroundImage
   /// The launcher tells the client which folder `status()`, `run(_:)` and `requiredDiskSpace(for:)` work on
-  /// (they take no path). Called with the current folder, also `nil`, before every refresh, job start and launch.
+  /// (they take no path). Called with the current folder, also `nil`, right before every client call that reads it
+  /// (refresh, the disk-space check and `run` of a job, launch), never ahead of a check that may reject the call.
   func setGameDirectory(_ url: URL?)
 }
 

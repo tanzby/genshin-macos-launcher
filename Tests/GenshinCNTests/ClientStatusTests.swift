@@ -21,7 +21,7 @@ import Testing
     rig.install(.game("5.5.0"))
     rig.write("YuanShen_Data/Plugins/PCGameSDK.dll", Data("sdk".utf8))
 
-    await #expect(throws: SophonError.brokenInstallation) { try await rig.client.status() }
+    await #expect(throws: GameClientError.brokenInstallation) { try await rig.client.status() }
   }
 
   @Test func INS_014_anInstallAtTheLatestVersionOffersNothing() async throws {

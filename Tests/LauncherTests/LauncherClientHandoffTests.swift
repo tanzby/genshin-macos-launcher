@@ -56,4 +56,36 @@ private func waitForLaunch(_ fake: FakeGameClient) async {
     fake.finishLaunch(.exited)
     await model.waitUntilIdle()
   }
+
+  @MainActor
+  @Test func WIN_005_aRejectedStartDoesNotRepointTheClientAwayFromTheRunningJob() async throws {
+    let fake = FakeGameClient(status: GameStatus(localVersion: "4.9.0", remoteVersion: "5.0.0", canUpdate: true))
+    let running = FileManager.default.temporaryDirectory.appending(path: "handoff-\(UUID().uuidString)")
+    try FileManager.default.createDirectory(at: running, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: running) }
+    let model = LauncherModel(client: fake, gameDirectory: running)
+    await model.refresh()
+    try await model.start(.update)
+    let run = try await fake.nextRun()
+
+    model.gameDirectory = URL(filePath: "/Games/B")
+    await #expect(throws: LauncherError.busy) { try await model.start(.update) }
+
+    #expect(fake.gameDirectories.last == running)
+    fake.finish(run: run)
+    await model.waitUntilIdle()
+  }
+
+  @MainActor
+  @Test func UPG_005_refreshSurfacesABrokenInstallationButNotAnOfflineClient() async {
+    let fake = FakeGameClient(status: GameStatus(localVersion: "5.0.0", remoteVersion: "5.0.0"))
+    let model = LauncherModel(client: fake)
+    fake.setStatusFailure(GameClientError.network)
+    await model.refresh()
+    #expect(model.lastError == nil)
+
+    fake.setStatusFailure(GameClientError.brokenInstallation)
+    await model.refresh()
+    #expect(model.lastError == .client(.brokenInstallation))
+  }
 }
