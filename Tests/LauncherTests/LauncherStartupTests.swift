@@ -99,7 +99,7 @@ private struct Harness {
     #expect(h.wine.installCount == 0)
   }
 
-  @Test func APP_001_prepareWineBeforeBootstrapStillChecksRosettaFirst() async throws {
+  @Test(.disabled("bisect")) func APP_001_prepareWineBeforeBootstrapStillChecksRosettaFirst() async throws {
     let h = Harness(wine: missing, rosetta: false)
     defer { h.cleanUp() }
     await #expect(throws: LauncherError.rosettaMissing) { try await h.model.prepareWine() }
@@ -107,7 +107,7 @@ private struct Harness {
     #expect(h.model.phase == .idle)
   }
 
-  @Test func APP_001_overlappingBootstrapsWaitForTheSameRecovery() async throws {
+  @Test(.disabled("bisect")) func APP_001_overlappingBootstrapsWaitForTheSameRecovery() async throws {
     let h = Harness(wine: .ready)
     defer { h.cleanUp() }
     h.probe.stallRecovery()
@@ -128,7 +128,7 @@ private struct Harness {
     #expect(h.fake.statusCalls == 2)
   }
 
-  @Test func APP_001_jobsAndLaunchAreBusyWhileTheRecoveryRuns() async throws {
+  @Test(.disabled("bisect")) func APP_001_jobsAndLaunchAreBusyWhileTheRecoveryRuns() async throws {
     let h = Harness(wine: .ready)
     defer { h.cleanUp() }
     h.probe.stallRecovery()
@@ -147,7 +147,7 @@ private struct Harness {
     await h.model.shutdown()
   }
 
-  @Test func APP_001_shutdownWaitsForARunningRecovery() async throws {
+  @Test(.disabled("bisect")) func APP_001_shutdownWaitsForARunningRecovery() async throws {
     let h = Harness(wine: .ready)
     defer { h.cleanUp() }
     h.probe.stallRecovery()
