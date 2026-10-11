@@ -4,11 +4,11 @@
 
 本复盘涵盖 Claude Code 主会话“原生启动器 1.0.0”及其派发的 27 个 session，不含截图中相邻的“云端启动器功能完善”。主会话 desktop ID 为 `local_2a7eaab5-536c-40d5-9108-d65c8427a22c`，CLI transcript ID 为 `0dd47538-8f29-4bb2-afaf-1ae4be52e891`，时间为 `2026-10-08T17:34:22Z` 至 `2026-10-11T16:02:45Z`。本机 transcript 位于 `~/.claude/projects/-Users-zubingtan-Projects-genshin-macos-launcher/`；只记录可核对的 session ID 和事件位置，不复制原始日志。
 
-主会话记录了 27 个唯一派发 session、37 次启动/恢复调用和 3 个 sidechain。21 个派发 session 有完成 turn；最后的 #87、#75、#76、#74、#73、#85 因主 session 达到用量上限而被截断，没有完成 turn。它们的实现结果不在本复盘的结论范围内。
+主会话记录了 27 个唯一派发 session、37 次启动/恢复调用和 3 个 sidechain。通过 Claude session metadata 中 `spawnedFrom.sessionId` 等于主 desktop ID 识别直接派发项，再以各自的 `cliSessionId` 对应 transcript 文件名；本次检查共覆盖 31 份 JSONL（主会话、27 个派发 session、3 个 sidechain），23,550 条记录。21 个派发 session 有完成 turn；最后的 #87、#75、#76、#74、#73、#85 因主 session 达到用量上限而被截断，没有完成 turn。它们的实现结果不在本复盘的结论范围内。
 
 ## 发现与决定
 
-1. **合并门槛曾失守。** 2026-10-11，PR #43 合并时仍有两条 Codex P2 review 未处理（主 transcript 第 1840 行，`62981490-a137-480d-a0c4-2a970ceb1b12`）。随后 PR #40 和 #60 的会话再次要求 merge 前实际运行 `/simplify`、`/code-review` 并确认 CI（第 1941、2218 行，`51f7b61f-e006-4566-83bf-310dc5a13b31`、`ba2f6af2-393a-482e-90a9-5bae7d11bfa8`）。已把 review、未解决评论和 `swift` 检查写成可检查的 merge 门槛，见 [`development-workflow.md`](development-workflow.md)。
+1. **合并门槛曾失守。** 早期 PR #16 合并后仍有一条 Codex P1：Sparkle updater 从未启动（主 transcript 第 108、128 行，`885a3662-90e8-4528-8998-e3eebd163133`、`42dbd6f8-30a4-4c61-ad68-2aaaec0af360`）；后续 PR #18 启动条件改为正式构建且公钥存在，第 531、734 行记录本地 gate 通过并合并（`29ffec19-2247-41b3-9b5a-2d08b3441d64`、`dad5f906-22fa-4378-bb29-9a877bbeb639`）。PR #31 合并时还有两条 P2：启动前取消绕过进程 SIGKILL 兜底，以及 Wine shim 先移动再复制有丢失入口的风险（第 800、804 行，`f9d173a0-589e-4336-9648-27c2132fca23`、`a90f7cf3-a249-49c1-afc7-6df8fb126c95`）；后续 PR #32 修复并回复评论，第 940、950 行（`422c3199-4e26-4d95-908b-5bb305d22541`）。但到 2026-10-11，PR #43 又在两条 Codex P2 未处理时合并（第 1840 行，`62981490-a137-480d-a0c4-2a970ceb1b12`），说明门槛需要依赖显式检查。PR #40 和 #60 的会话也再次要求 merge 前实际运行 `/simplify`、`/code-review` 并确认 CI（第 1941、2218 行，`51f7b61f-e006-4566-83bf-310dc5a13b31`、`ba2f6af2-393a-482e-90a9-5bae7d11bfa8`）。当前流程已写入 [`development-workflow.md`](development-workflow.md)。
 
 2. **等待缺少边界。** 2026-10-09，PR #26 的会话被提醒保持活动并每 30 分钟检查 CI/review（第 412、443 行，`e47402f1-e6d6-40a9-8e37-645a3f22b326`、`9b5799b0-9618-4219-b66f-a5040e8eef31`）。2026-10-10，一条命令十几个小时没有进展，维护者中断后才从断点恢复（第 1313 行，`d8765059-a099-4cfc-ba5b-c60b4b125ec4`）。流程现要求等待不超过 30 分钟后重查、长命令保留任务专属临时日志，并在无进展时检查一次后安全恢复或报告阻塞。
 
@@ -25,6 +25,6 @@
 - 为每个 Git 跟踪的子目录添加 `AGENTS.md`，并添加单行 `CLAUDE.md`（`@AGENTS.md`），让 Claude Code 在读取该子目录时加载相同的局部规则。DXMT 子模块内容不纳入覆盖范围。
 - 新增 `scripts/dev/check-agent-instructions`，并接入 `scripts/dev/macos-check`。它以 `git ls-files` 的目录前缀为范围，要求每个受跟踪子目录有非空 `AGENTS.md` 和直接导入它的 `CLAUDE.md`；现有 CI 与 pre-push 因而自动覆盖此规则。
 - 新增 `scripts/dev/test-agent-instructions`，用临时 Git 仓库验证缺少嵌套指南时失败、补齐后通过。
-- 完整 gate 首次发现 XcodeGen 会把 `App/` 和 Proton 资源目录内的本地指南当作 app 资源，导致多个资源输出冲突；`project.yml` 现从这两个 source 中排除 `AGENTS.md` 和 `CLAUDE.md`。这是本次修改验证时发现的资源打包耦合，不是原会话结论。
+- 完整 gate 首次发现 XcodeGen 会把 `App/` 和 Proton 资源目录内的本地指南当作 app 资源，导致多个资源输出冲突；SwiftPM 也把 Swift target/test target 中的指南报告为未处理文件。`project.yml` 与 `Package.swift` 现分别排除这些指引文件，避免打进 app 或 test fixtures。这是本次修改验证时发现的打包耦合，不是原会话结论。
 - 新增 `scripts/dev/run-with-timeout` 和 `scripts/dev/test-run-with-timeout`，在 macOS 没有 GNU `timeout` 时使用 Python 标准库做有界等待，并验证 leader 退出时仍会终止忽略 `SIGTERM` 的 child。
 - 没有根据“27 个派发 session”这一数量单独添加并行策略；证据不足以判断派发次数本身导致了延误。六个 quota-cut session 只记为未完成，不推断其代码质量或任务结论。

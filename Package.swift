@@ -1,6 +1,8 @@
 // swift-tools-version: 6.2
 import PackageDescription
 
+let agentGuideFiles = ["AGENTS.md", "CLAUDE.md"]
+
 // Dependency direction (ADR 0002), each arrow points at a dependency:
 //   GenshinCN -> Launcher, Sophon, Wine, Platform
 //   Launcher  -> Platform, Wine
@@ -31,40 +33,53 @@ let package = Package(
     // facebook/zstd v1.5.7, decompressor only. Assembly is disabled so the target builds without .S files.
     .target(
       name: "CZstd",
-      exclude: ["LICENSE"],
+      exclude: ["LICENSE"] + agentGuideFiles + [
+        "common/AGENTS.md", "common/CLAUDE.md", "decompress/AGENTS.md", "decompress/CLAUDE.md",
+        "include/AGENTS.md", "include/CLAUDE.md",
+      ],
       cSettings: [.define("ZSTD_DISABLE_ASM", to: "1"), .headerSearchPath("common")]
     ),
     // sisong/HDiffPatch v4.5.2 (MIT), the patcher only (no diffing, no compression plugins), plus a small
     // file-descriptor front end. The CN ldiff files are uncompressed single-stream diffs.
-    .target(name: "CHDiffPatch", exclude: ["LICENSE"]),
+    .target(
+      name: "CHDiffPatch",
+      exclude: ["LICENSE"] + agentGuideFiles + [
+        "hpatch/AGENTS.md", "hpatch/CLAUDE.md", "include/AGENTS.md", "include/CLAUDE.md",
+      ]),
     .target(
       name: "Sophon",
       dependencies: ["CZstd", "CHDiffPatch", .product(name: "SwiftProtobuf", package: "swift-protobuf")],
-      exclude: ["Proto/manifest.proto", "Proto/manifest_ldiff.proto"]
+      exclude: agentGuideFiles + [
+        "Proto/manifest.proto", "Proto/manifest_ldiff.proto", "Proto/AGENTS.md", "Proto/CLAUDE.md",
+      ]
     ),
-    .target(name: "Platform"),
-    .target(name: "Wine", dependencies: ["Platform"]),
-    .target(name: "Launcher", dependencies: ["Platform", "Wine"]),
-    .target(name: "GenshinCN", dependencies: ["Launcher", "Sophon", "Wine", "Platform"]),
-    .target(name: "Updates", dependencies: [.product(name: "Sparkle", package: "Sparkle")]),
-    .target(name: "Diagnostics", dependencies: ["Launcher", "Platform"]),
+    .target(name: "Platform", exclude: agentGuideFiles),
+    .target(name: "Wine", dependencies: ["Platform"], exclude: agentGuideFiles),
+    .target(name: "Launcher", dependencies: ["Platform", "Wine"], exclude: agentGuideFiles),
+    .target(name: "GenshinCN", dependencies: ["Launcher", "Sophon", "Wine", "Platform"], exclude: agentGuideFiles),
+    .target(name: "Updates", dependencies: [.product(name: "Sparkle", package: "Sparkle")], exclude: agentGuideFiles),
+    .target(name: "Diagnostics", dependencies: ["Launcher", "Platform"], exclude: agentGuideFiles),
 
     // Shared by the test targets only: temporary directories and waiting helpers.
-    .target(name: "TestSupport", path: "Tests/TestSupport"),
+    .target(name: "TestSupport", path: "Tests/TestSupport", exclude: agentGuideFiles),
     .testTarget(
       name: "SophonTests",
       dependencies: ["Sophon", "TestSupport", .product(name: "SwiftProtobuf", package: "swift-protobuf")],
+      exclude: agentGuideFiles + [
+        "Fixtures/AGENTS.md", "Fixtures/CLAUDE.md", "Fixtures/ldiff/AGENTS.md", "Fixtures/ldiff/CLAUDE.md",
+      ],
       resources: [.copy("Fixtures")]
     ),
-    .testTarget(name: "PlatformTests", dependencies: ["Platform", "TestSupport"]),
-    .testTarget(name: "WineTests", dependencies: ["Wine", "TestSupport"]),
-    .testTarget(name: "LauncherTests", dependencies: ["Launcher", "Diagnostics", "TestSupport"]),
+    .testTarget(name: "PlatformTests", dependencies: ["Platform", "TestSupport"], exclude: agentGuideFiles),
+    .testTarget(name: "WineTests", dependencies: ["Wine", "TestSupport"], exclude: agentGuideFiles),
+    .testTarget(name: "LauncherTests", dependencies: ["Launcher", "Diagnostics", "TestSupport"], exclude: agentGuideFiles),
     .testTarget(
       name: "GenshinCNTests",
       dependencies: [
         "GenshinCN", "Launcher", "Wine", "Sophon", "Platform", "TestSupport",
         .product(name: "SwiftProtobuf", package: "swift-protobuf"),
-      ]),
+      ],
+      exclude: agentGuideFiles),
   ],
   swiftLanguageModes: [.v6]
 )
