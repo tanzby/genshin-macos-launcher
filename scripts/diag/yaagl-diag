@@ -326,7 +326,7 @@ def launch(app, data, a):
 
 def cmd_run(a):
     data = Data(a.data_dir)
-    if a.hold is not None and a.close_after is None:
+    if (a.hold is not None or a.screen_check) and a.close_after is None:
         a.close_after = 0
     app = Path(a.app).resolve()
     if not (app / "Contents/MacOS").is_dir():
@@ -342,6 +342,8 @@ def cmd_run(a):
     first_run = not (data.root / ".yaagl-native").exists()
     if first_run:
         seed(data)
+    # The game host appends to gamehost.log across runs; stale lines would satisfy this run's checks.
+    data.gamehost_log.unlink(missing_ok=True)
     work = prepare_app(a)
     reg_before = reg_values(data, [HDR] + RESOLUTION)
     hosts_before = HOSTS.read_text(errors="replace") if HOSTS.exists() else ""
@@ -389,8 +391,12 @@ def cmd_run(a):
                 m.setdefault("fullscreen", now)
             if "isIdentifiedGame=1" in hostlog and "isGameFullscreen=1" in hostlog:
                 m.setdefault("gamemode", now)
-            if "autoplay: idle phase" in hostlog or "screen: step=" in hostlog:
+            if "autoplay: idle phase" in hostlog:
                 m.setdefault("main_interface", now)
+            # The screen check works on whatever screen is up (the login screen too): it says nothing about the
+            # main interface, but marks when the run may end.
+            if "screen: done" in hostlog:
+                m.setdefault("screen_done", now)
             if s["game"] and "game_sample" not in mid:
                 mid["game_sample"] = s["game"]
                 mid["procs"] = list(s["procs"])
@@ -407,8 +413,8 @@ def cmd_run(a):
                 print("WAITING maintainer: game-login (log in to the miHoYo account in the game window)", flush=True)
             # Close once the main interface was reached, or (--hold) once the game window has been up that long:
             # without a logged-in account the login screen is as far as an unattended run gets.
-            reached = m.get("main_interface")
-            if reached is None and a.hold is not None and window_at:
+            reached = m.get("main_interface") or m.get("screen_done")
+            if reached is None and a.hold is not None and window_at and not a.screen_check:
                 reached = (window_at - T0) + a.hold
             if a.close_after is not None and closed_at is None and reached is not None \
                     and now - reached >= a.close_after and s["game"]:
@@ -416,14 +422,14 @@ def cmd_run(a):
                     env={**os.environ, "WINEPREFIX": str(data.prefix), "WINEDEBUG": "-all"})
                 closed_at = time.monotonic()
                 say("closing the game window (taskkill, like the window's close button)")
-            # The login screen does not react to a polite close. --hold only wants the run to end, so force it;
+            # The login screen ignores a polite close. --hold and --screen-check only want the run to end, so force it;
             # the exit checks then need an attended run (a player closing the game from the main interface).
-            if a.hold is not None and closed_at and forced_at is None and s["game"] \
+            if (a.hold is not None or a.screen_check) and closed_at and forced_at is None and s["game"] \
                     and time.monotonic() - closed_at > 20:
                 run([str(data.wine / "bin/wine"), "taskkill", "/f", "/im", exe_name(s["game"])],
                     env={**os.environ, "WINEPREFIX": str(data.prefix), "WINEDEBUG": "-all"})
                 forced_at = time.monotonic()
-                say("the game ignored the close request, forced it (--hold)")
+                say("the game ignored the close request, forced it (unattended run)")
             if closed_at and exited_at is None and not s["game"]:
                 exited_at = time.monotonic()
             if closed_at and wine_gone_at is None and not s["procs"]:
@@ -551,7 +557,7 @@ def evaluate(a, data, work, m, mid, verdict_line, reg_before, hosts_before, left
     else:
         check("LCH-029", None, "full-screen picture covers the notch strip", "run with --screen-check")
 
-    if a.hold is not None:
+    if a.hold is not None or a.screen_check:
         check("MAIN", "window" in m and "fullscreen" in m, "game window up and in native full screen (login screen)",
               f"window@{m.get('window', -1):.0f}s fullscreen@{m.get('fullscreen', -1):.0f}s")
     else:

@@ -227,7 +227,7 @@
 | WIN-014 | 安装完成后写入状态 | 改写 | [#28](https://github.com/tanzby/yet-another-anime-game-launcher/issues/28) B20：删除 wine_netbiosname、wine_update_url 等死数据；状态由 Wine 目录版本戳推导（ADR 0002） | 单元 | WineInstallTests（版本戳最后写入） |
 | WIN-015 | NetBIOS 名称 | 改写 | [#28](https://github.com/tanzby/yet-another-anime-game-launcher/issues/28) B20 删死数据 / ADR 0002 启动顺序 | 单元 | WineInstallTests（负面：不写 NetBIOS） |
 | WIN-016 | 选择 Wine 可执行文件与基础环境 | 改写 | [#28](https://github.com/tanzby/yet-another-anime-game-launcher/issues/28) C 负面用例 | diag | LoaderSelectionTests；diag：`yaagl-diag` |
-| WIN-017 | 路径转换与 copy 特例 | 照搬 | Wine 运行时行为不变 | 单元 | GameSessionLaunchTests（Z: 路径） |
+| WIN-017 | 路径转换与 copy 特例 | 照搬 | Wine 运行时行为不变；copy 特例（驱动副本）随 config.bat 取消，见 LCH-010 | 单元 | GameSessionLaunchTests（Z: 路径） |
 | WIN-018 | Wine 关停与强杀 | 照搬 | Wine 运行时行为不变 | diag | GameSessionMutationTests、ProcessTableTests（prefix 清扫；真机仍走 diag）；diag：`yaagl-diag` |
 | WIN-019 | DXMT 版本检查与下载 | 改写 | [#28](https://github.com/tanzby/yet-another-anime-game-launcher/issues/28) C 负面用例 | 单元 | WineStatusTests（DXMT 版本不符即重装） |
 | WIN-020 | 把 DXMT 注入 Wine 运行时 | 改写 | [#28](https://github.com/tanzby/yet-another-anime-game-launcher/issues/28) B12：DXMT 装 Wine 时一次装好，不再注入（ADR 0002 已修订） | 单元 | WineInstallTests（DXMT 随 Wine 一次装好） |
