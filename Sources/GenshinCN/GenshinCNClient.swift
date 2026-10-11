@@ -79,7 +79,7 @@ public final class GenshinCNClient: GameClient {
 
   /// The composition for the app: helpers and protonextras come from `bundle` (`Contents/Helpers`, `Resources`).
   public static func bundled(
-    wine: WineRuntime, dataDirectory: DataDirectory, bundle: Bundle = .main
+    wine: WineRuntime, dataDirectory: DataDirectory, bundle: Bundle
   ) -> GenshinCNClient {
     live(
       wine: wine, dataDirectory: dataDirectory, helpers: helpers(in: bundle.bundleURL),
