@@ -1,51 +1,7 @@
 import Foundation
 import Observation
 import Platform
-import Synchronization
 import Wine
-
-/// What the launcher is doing right now. Pre-download is only reported while nothing exclusive runs;
-/// `LauncherModel.isPreDownloading` tells whether it overlaps with launching or running.
-public enum LauncherPhase: Sendable, Equatable {
-  case idle, preparingWine, installing, updating, preDownloading, repairing, launching, running
-}
-
-public enum LauncherError: Error, Sendable, Equatable {
-  case busy
-  /// Wine is missing or damaged; prepare it first.
-  case wineNotReady
-  /// Wine preparation failed for a reason other than network, verification or disk space.
-  case wineInstall(WineInstallError)
-  /// Rosetta 2 is not installed, so Wine cannot run. Install it, then reopen the window.
-  case rosettaMissing
-  case noGameDirectory
-  case notInstalled
-  case offline
-  case updateRequired
-  case pendingJob(GameJob)
-  case preDownloadUnavailable
-  case insufficientDiskSpace(required: Int64, available: Int64)
-  case launchTimeout
-  case gameExited(code: Int32, logPath: URL)
-  case failedToLaunch
-  case client(GameClientError)
-  case unexpected(String)
-
-  /// Bytes still missing for `insufficientDiskSpace`.
-  public var shortfall: Int64? {
-    if case .insufficientDiskSpace(let required, let available) = self { return max(0, required - available) }
-    return nil
-  }
-}
-
-/// Discrete events for system notifications. `@Observable` coalesces states, so it cannot drive them.
-public enum JobEvent: Sendable, Equatable {
-  case finished(GameJob)
-  case failed(GameJob, LauncherError)
-  case launchFailed(LauncherError)
-  case wineReady
-  case wineFailed(LauncherError)
-}
 
 /// Single source of truth for the main window, and the job coordinator (ADR 0002).
 ///
@@ -632,67 +588,4 @@ public final class LauncherModel {
       await task.value
     }
   }
-}
-
-extension GameJob {
-  fileprivate var exclusivePhase: LauncherPhase {
-    switch self {
-    case .install: .installing
-    case .update: .updating
-    case .repair: .repairing
-    case .preDownload: .preDownloading
-    }
-  }
-}
-
-extension LauncherError {
-  fileprivate init(_ error: Error) {
-    if let error = error as? LauncherError {
-      self = error
-    } else if let error = error as? GameClientError {
-      self = .client(error)
-    } else if let error = error as? WineInstallError {
-      if case .insufficientDiskSpace(let required, let available) = error {
-        self = .insufficientDiskSpace(required: required, available: available)
-      } else {
-        self = .wineInstall(error)
-      }
-    } else if let error = error as? DownloadError {
-      switch error {
-      case .httpStatus: self = .client(.network)
-      case .checksumMismatch: self = .client(.verificationFailed)
-      }
-    } else if let error = error as? URLError {
-      self = error.code == .cancelled ? .client(.cancelled) : .client(.network)
-    } else if error is CancellationError {
-      self = .client(.cancelled)
-    } else {
-      self = .unexpected(String(describing: error))
-    }
-  }
-}
-
-/// Decides atomically between "game process appeared" and "launch timeout expired".
-private final class LaunchGate: Sendable {
-  private enum State { case waiting, started, expired }
-  private let state = Mutex(State.waiting)
-
-  /// True when the game process won the race against the timeout.
-  func markStarted() -> Bool {
-    state.withLock {
-      if $0 == .waiting { $0 = .started }
-      return $0 == .started
-    }
-  }
-
-  /// True when the timeout won the race.
-  func expire() -> Bool {
-    state.withLock {
-      guard $0 == .waiting else { return false }
-      $0 = .expired
-      return true
-    }
-  }
-
-  var timedOut: Bool { state.withLock { $0 == .expired } }
 }
