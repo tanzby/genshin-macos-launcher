@@ -51,7 +51,7 @@ extension WineRuntime {
       path: "wine-\(distribution.sha256.prefix(16)).archive", directoryHint: .notDirectory)
 
     // 0. DXMT comes with the app. Without it nothing is downloaded or deleted.
-    let dxmtFiles = try bundledDXMTFiles()
+    let dxmtBundle = try validatedDXMT()
 
     // 1. Free space, before anything is downloaded or deleted (WIN-006). An unreadable volume does not block.
     //    On the data volume at the same time: the archive, the unpacked runtime and the new prefix `wineboot`
@@ -108,7 +108,7 @@ extension WineRuntime {
 
     // 6. DXMT, once, after the prefix exists (WIN-020). No .bak: nothing is restored at launch.
     progress(.installingDXMT)
-    try installDXMT(from: dxmtFiles)
+    try installDXMT(from: dxmtBundle)
 
     // 7. Stamp last.
     progress(.finalizing)
@@ -129,7 +129,7 @@ extension WineRuntime {
   }
 
   /// The files to install, checked up front so a broken app fails before anything is deleted.
-  private func bundledDXMTFiles() throws -> DXMTBundle {
+  private func validatedDXMT() throws -> DXMTBundle {
     guard let dxmt else { throw WineInstallError.dxmtBundleInvalid }
     let fileManager = FileManager.default
     guard
@@ -143,10 +143,10 @@ extension WineRuntime {
 
   /// A newer DXMT arrived with an app update: replace its files and the stamp, keep Wine and the prefix.
   func refreshDXMT(progress: @escaping @Sendable (WineInstallProgress) -> Void) async throws {
-    let files = try bundledDXMTFiles()
+    let bundle = try validatedDXMT()
     // A running game holds the old winemetal.so; the launcher only refreshes while nothing runs.
     progress(.installingDXMT)
-    try installDXMT(from: files)
+    try installDXMT(from: bundle)
     progress(.finalizing)
     try writeStamp()
   }
@@ -172,17 +172,17 @@ extension WineRuntime {
     }
   }
 
-  private func installDXMT(from files: DXMTBundle) throws {
+  private func installDXMT(from bundle: DXMTBundle) throws {
     let fileManager = FileManager.default
     try fileManager.createDirectory(at: layout.windowsLibraryDirectory, withIntermediateDirectories: true)
     try fileManager.createDirectory(at: layout.unixLibraryDirectory, withIntermediateDirectories: true)
     try fileManager.createDirectory(at: layout.prefixSystem32, withIntermediateDirectories: true)
     for name in WineLayout.dxmtWindowsFiles {
-      try replace(files.windowsDirectory.appending(path: name), with: layout.windowsLibraryDirectory.appending(path: name))
+      try replace(bundle.windowsDirectory.appending(path: name), with: layout.windowsLibraryDirectory.appending(path: name))
     }
-    try replace(files.unixDirectory.appending(path: "winemetal.so"), with: layout.unixLibraryDirectory.appending(path: "winemetal.so"))
+    try replace(bundle.unixDirectory.appending(path: "winemetal.so"), with: layout.unixLibraryDirectory.appending(path: "winemetal.so"))
     try replace(
-      files.windowsDirectory.appending(path: "winemetal.dll"), with: layout.prefixSystem32.appending(path: "winemetal.dll"))
+      bundle.windowsDirectory.appending(path: "winemetal.dll"), with: layout.prefixSystem32.appending(path: "winemetal.dll"))
   }
 
   private func replace(_ source: URL, with destination: URL) throws {

@@ -374,7 +374,7 @@ public struct GameSession: Sendable {
 
   // MARK: - Process helpers
 
-  /// `baseEnvironment` plus the game's own variables; empty values are dropped (LCH-035).
+  /// `layout.wineEnvironment` plus the game's own variables; empty values are dropped (LCH-035).
   private func launchEnvironment(for recipe: LaunchRecipe) -> [String: String] {
     layout.wineEnvironment.merging(recipe.environment.filter { !$0.value.isEmpty }) { _, new in new }
   }
@@ -407,4 +407,3 @@ public struct GameSession: Sendable {
 enum LaunchError: Error, Equatable {
   case registryWriteFailed(key: String, name: String)
 }
-
