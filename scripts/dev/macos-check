@@ -3,10 +3,13 @@
 # swift test, then generate the Xcode project and build the app from the command line.
 set -eu
 cd "$(dirname "$0")/../.."
+# SwiftPM and Xcode must agree on Package.resolved (#87): neither swift test nor the app build may rewrite it.
+resolved=$(git hash-object Package.resolved)
 scripts/dev/parity-coverage --strict
 swift test
 xcodegen generate
 xcodebuild -project Yaagl.xcodeproj -scheme Yaagl -configuration Debug \
   -destination 'platform=macOS,arch=arm64' -derivedDataPath build/DerivedData build
+[ "$(git hash-object Package.resolved)" = "$resolved" ] || { git diff Package.resolved; echo "Package.resolved was rewritten (#87)"; exit 1; }
 
 scripts/dev/check-bundle

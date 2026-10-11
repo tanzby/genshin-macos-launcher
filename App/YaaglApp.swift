@@ -2,7 +2,7 @@ import AppKit
 import GenshinCN
 import Launcher
 import Platform
-import Sparkle
+import Updates
 import SwiftUI
 import Wine
 
