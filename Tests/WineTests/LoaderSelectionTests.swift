@@ -17,7 +17,7 @@ import Testing
   }
 
   @Test func WIN_016_launchEnvironmentIsExactlyPrefixDebugRecipeAndHostVariables() {
-    #expect(GameSession.wineDebug == "fixme-all,err-unwind,+timestamp")
+    #expect(WineLayout.wineDebug == "fixme-all,err-unwind,+timestamp")
     #expect(GameSession.gameHostBundleIdentifier == "io.github.tanzby.yaagl.game")
   }
 }

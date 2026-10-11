@@ -8,7 +8,6 @@ private let log = Logger(subsystem: "io.github.tanzby.yaagl", category: "wine")
 public struct GameSession: Sendable {
   /// Bundle id of `YaaglGame.app` (UPD-017). `codesign -i` must use the same id.
   public static let gameHostBundleIdentifier = "io.github.tanzby.yaagl.game"
-  static let wineDebug = "fixme-all,err-unwind,+timestamp"
   static let keptGameLogs = 20
 
   let layout: WineLayout
@@ -37,21 +36,21 @@ public struct GameSession: Sendable {
   /// Runs the game and restores everything afterwards. Never throws: the outcome is the result.
   /// `onStarted` is called at most once, from the startup watchdog, when the game process is first seen.
   public func launch(_ recipe: LaunchRecipe, onStarted: @escaping @Sendable () -> Void = {}) async -> LaunchResult {
-    let flags = LaunchFlags()
+    let timedOut = OSAllocatedUnfairLock(initialState: false)
     let work = Task { await run(recipe) }
-    let watchdog = Task { await watchStartup(recipe, flags: flags, work: work, onStarted: onStarted) }
+    let watchdog = Task { await watchStartup(recipe, timedOut: timedOut, work: work, onStarted: onStarted) }
     let result = await withTaskCancellationHandler {
       await work.value
     } onCancel: {
       work.cancel()
     }
     watchdog.cancel()
-    let timedOut = flags.timedOut
+    let didTimeOut = timedOut.withLock { $0 }
     let cancelled = Task.isCancelled
     // Cleanup is async (wineserver, reg) and must also run when this task is cancelled. A new unstructured
     // Task does not inherit the cancellation, so its child awaits are not cut short.
-    await Task { await finish(killNow: timedOut || cancelled || result == .cancelled) }.value
-    if timedOut { return .startupTimedOut }
+    await Task { await finish(killNow: didTimeOut || cancelled || result == .cancelled) }.value
+    if didTimeOut { return .startupTimedOut }
     if cancelled { return .cancelled }
     return result
   }
@@ -70,10 +69,8 @@ public struct GameSession: Sendable {
   /// `WINEDEBUG` and recipe environment as a launch, plus `WINEPATH` pointing at the game directory.
   /// Touches neither the registry nor the journal. Returns the exit code once the prompt is
   /// closed, or `nil` if Wine could not be started.
-
   public func openCommandPrompt(_ recipe: LaunchRecipe, gameDirectory: URL?) async -> Int32? {
-    var environment = baseEnvironment
-    for (name, value) in recipe.environment where !value.isEmpty { environment[name] = value }
+    var environment = launchEnvironment(for: recipe)
     if let gameDirectory { environment["WINEPATH"] = Self.windowsPath(gameDirectory) }
     do {
       return try await runner.run(
@@ -124,9 +121,7 @@ public struct GameSession: Sendable {
         path: "game_\(Int(Date().timeIntervalSince1970 * 1000)).log", directoryHint: .notDirectory)
       pruneGameLogs(keeping: logFile)
 
-      var environment = baseEnvironment
-      for (name, value) in recipe.environment where !value.isEmpty { environment[name] = value }  // LCH-035
-      environment.merge(hostEnvironment) { _, new in new }
+      let environment = launchEnvironment(for: recipe).merging(hostEnvironment) { _, new in new }
       let code = try await runner.runLogging(
         layout.loader, arguments: recipe.command, environment: environment,
         workingDirectory: layout.root, logFile: logFile)
@@ -144,7 +139,7 @@ public struct GameSession: Sendable {
   /// Counts poll intervals instead of reading a clock, so tests run in milliseconds. The clock starts with
   /// the launch, which also bounds preparation (`wineserver -w` has no timeout of its own, LCH-009).
   private func watchStartup(
-    _ recipe: LaunchRecipe, flags: LaunchFlags, work: Task<LaunchResult, Never>, onStarted: @Sendable () -> Void
+    _ recipe: LaunchRecipe, timedOut: OSAllocatedUnfairLock<Bool>, work: Task<LaunchResult, Never>, onStarted: @Sendable () -> Void
   ) async {
     var elapsed = Duration.zero
     while !Task.isCancelled {
@@ -155,7 +150,7 @@ public struct GameSession: Sendable {
         return
       }
       if elapsed >= timing.startupTimeout {
-        flags.markTimedOut()
+        timedOut.withLock { $0 = true }
         work.cancel()
         // A loader that ignores SIGTERM must not hold the timeout hostage: close the prefix from here too.
         await shutdownPrefix()
@@ -312,14 +307,13 @@ public struct GameSession: Sendable {
       }
     }
     for entry in journal.registry {
-      var restored = false
-      if let original = entry.original {
-        let result = try? await reg(["add", entry.key, "/v", entry.name] + Self.registryArguments(original) + ["/f"])
-        restored = result?.exitCode == 0
-      } else {
-        // Deleting a value that is not there exits non-zero; only a launch failure counts as not restored.
-        restored = (try? await reg(["delete", entry.key, "/v", entry.name, "/f"])) != nil
-      }
+      let restored =
+        if let original = entry.original {
+          (try? await regSet(entry.key, entry.name, original))?.exitCode == 0
+        } else {
+          // Deleting a value that is not there exits non-zero; only a launch failure counts as not restored.
+          (try? await regDelete(entry.key, entry.name)) != nil
+        }
       if !restored { remaining.registry.append(entry) }
     }
     if !journal.registry.isEmpty { _ = try? await wineserver("-w") }
@@ -333,15 +327,13 @@ public struct GameSession: Sendable {
   // MARK: - Registry
 
   private func apply(_ edit: RegistryEdit) async throws {
-    let result: ProcessResult
     switch edit.action {
     case .set(let value):
-      result = try await reg(["add", edit.key, "/v", edit.name] + Self.registryArguments(value) + ["/f"])
+      let result = try await regSet(edit.key, edit.name, value)
+      guard result.exitCode == 0 else { throw LaunchError.registryWriteFailed(key: edit.key, name: edit.name) }
     case .delete:
-      result = try await reg(["delete", edit.key, "/v", edit.name, "/f"])
-      return  // deleting a value that is not there exits non-zero and is fine
+      _ = try await regDelete(edit.key, edit.name)  // deleting a value that is not there exits non-zero and is fine
     }
-    guard result.exitCode == 0 else { throw LaunchError.registryWriteFailed(key: edit.key, name: edit.name) }
   }
 
   static func registryArguments(_ value: RegistryValue) -> [String] {
@@ -382,13 +374,22 @@ public struct GameSession: Sendable {
 
   // MARK: - Process helpers
 
-  private var baseEnvironment: [String: String] {
-    ["WINEPREFIX": layout.prefixDirectory.path, "WINEDEBUG": Self.wineDebug]
+  /// `layout.wineEnvironment` plus the game's own variables; empty values are dropped (LCH-035).
+  private func launchEnvironment(for recipe: LaunchRecipe) -> [String: String] {
+    layout.wineEnvironment.merging(recipe.environment.filter { !$0.value.isEmpty }) { _, new in new }
+  }
+
+  private func regSet(_ key: String, _ name: String, _ value: RegistryValue) async throws -> ProcessResult {
+    try await reg(["add", key, "/v", name] + Self.registryArguments(value) + ["/f"])
+  }
+
+  private func regDelete(_ key: String, _ name: String) async throws -> ProcessResult {
+    try await reg(["delete", key, "/v", name, "/f"])
   }
 
   private func reg(_ arguments: [String]) async throws -> ProcessResult {
     try await runner.run(
-      layout.loader, arguments: ["reg"] + arguments, environment: baseEnvironment, workingDirectory: layout.root)
+      layout.loader, arguments: ["reg"] + arguments, environment: layout.wineEnvironment, workingDirectory: layout.root)
   }
 
   private func wineserver(_ flag: String) async throws -> ProcessResult {
@@ -405,13 +406,4 @@ public struct GameSession: Sendable {
 
 enum LaunchError: Error, Equatable {
   case registryWriteFailed(key: String, name: String)
-}
-
-/// Set by the startup watchdog, read after the launch task returns.
-private final class LaunchFlags: @unchecked Sendable {
-  private let lock = NSLock()
-  private var _timedOut = false
-
-  var timedOut: Bool { lock.withLock { _timedOut } }
-  func markTimedOut() { lock.withLock { _timedOut = true } }
 }
