@@ -100,6 +100,16 @@ final class ClientRig: @unchecked Sendable {
 
   var configText: String? { read("config.ini").map { String(decoding: $0, as: UTF8.self) } }
 
+  /// Polls until `config.ini` says `version`, so a test does not depend on how fast a loaded runner gets there.
+  func waitForConfig(version: String, timeout: Duration = .seconds(10)) async -> Bool {
+    let deadline = ContinuousClock.now + timeout
+    while ContinuousClock.now < deadline {
+      if configText?.contains("game_version=\(version)") == true { return true }
+      try? await Task.sleep(for: .milliseconds(5))
+    }
+    return false
+  }
+
   /// Puts `release` on disk as a finished install, with `config.ini` saying `version` (default: its tag).
   func install(_ release: FakeRelease, configVersion: String? = nil) {
     for (path, content) in release.files { write(path, content) }
