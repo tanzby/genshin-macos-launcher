@@ -130,7 +130,7 @@ public final class LauncherModel {
     launchTimeout: Duration = LauncherModel.defaultLaunchTimeout,
     chunkTempMargin: Int64 = LauncherModel.defaultChunkTempMargin,
     availableDiskSpace: @escaping @Sendable (URL) -> Int64? = LauncherModel.systemAvailableCapacity,
-    sleep: @escaping @Sendable (Duration) async throws -> Void = { try await Task.sleep(for: $0) }
+    sleep: @escaping @Sendable (Duration) async throws -> Void = LauncherModel.defaultSleep
   ) {
     self.client = client
     self.wine = wine
@@ -141,6 +141,13 @@ public final class LauncherModel {
     self.availableDiskSpace = availableDiskSpace
     self.sleep = sleep
     (events, eventSink) = AsyncStream.makeStream()
+  }
+
+  /// A named function, not a closure literal in the default argument: with a closure literal there,
+  /// Xcode 26.6's runtime trapped ("freed pointer was not the last allocation") in suites that build a
+  /// `LauncherModel` without passing `sleep` (issue #48).
+  nonisolated public static func defaultSleep(_ duration: Duration) async throws {
+    try await Task.sleep(for: duration)
   }
 
   /// Free bytes on the volume holding `url`, or on its nearest existing ancestor when it does not exist yet.

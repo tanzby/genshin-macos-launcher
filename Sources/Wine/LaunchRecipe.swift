@@ -99,12 +99,17 @@ public struct LaunchTiming: Sendable {
     startupTimeout: Duration = .seconds(120),
     pollInterval: Duration = .seconds(1),
     exitGrace: Duration = .seconds(15),
-    sleep: @escaping @Sendable (Duration) async throws -> Void = { try await Task.sleep(for: $0) }
+    sleep: @escaping @Sendable (Duration) async throws -> Void = LaunchTiming.defaultSleep
   ) {
     self.startupTimeout = startupTimeout
     self.pollInterval = pollInterval
     self.exitGrace = exitGrace
     self.sleep = sleep
+  }
+
+  /// Named, not a closure literal in the default argument: see `LauncherModel.defaultSleep` (issue #48).
+  public static func defaultSleep(_ duration: Duration) async throws {
+    try await Task.sleep(for: duration)
   }
 }
 
