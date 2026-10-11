@@ -52,7 +52,8 @@ public final class MainController {
 
   private func reload() async {
     syncGameDirectory()
-    if hasLoaded {
+    // Until the startup sequence has got past the Rosetta check, every reload runs it again.
+    if launcher.hasBootstrapped {
       await launcher.refreshWine()
       await launcher.refresh()
     } else {

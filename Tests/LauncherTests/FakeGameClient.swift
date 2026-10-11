@@ -20,7 +20,6 @@ final class FakeGameClient: GameClient, Sendable {
     var events: [String] = []
     var launchOptions: [LaunchOptions] = []
     var gameDirectories: [URL?] = []
-    var recoveries = 0
     var quiesces = 0
     var launchContinuation: CheckedContinuation<LaunchOutcome, Error>?
     var launchCancelled = false
@@ -50,7 +49,6 @@ final class FakeGameClient: GameClient, Sendable {
   var events: [String] { state.withLock { $0.events } }
   var launchOptions: [LaunchOptions] { state.withLock { $0.launchOptions } }
   var gameDirectories: [URL?] { state.withLock { $0.gameDirectories } }
-  var recoveries: Int { state.withLock { $0.recoveries } }
   var quiesces: Int { state.withLock { $0.quiesces } }
   func isTerminated(run index: Int) -> Bool { state.withLock { $0.runs[index].terminated } }
 
@@ -198,5 +196,4 @@ final class FakeGameClient: GameClient, Sendable {
 
   func setGameDirectory(_ url: URL?) { state.withLock { $0.gameDirectories.append(url) } }
   func quiesce() async { state.withLock { $0.quiesces += 1 } }
-  func recover() async { state.withLock { $0.recoveries += 1; $0.events.append("recover") } }
 }

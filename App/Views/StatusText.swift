@@ -40,6 +40,7 @@ extension LauncherError {
     switch self {
     case .busy: "Another task is still running."
     case .wineNotReady: "Wine has to be set up first."
+    case .rosettaMissing: "Rosetta 2 is not installed. Install it, then reopen Yaagl."
     case .wineInstall: "Wine could not be set up."
     case .noGameDirectory: "Choose a game folder first."
     case .notInstalled: "The game is not installed."

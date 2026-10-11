@@ -2211,6 +2211,23 @@
         }
       }
     },
+    "Rosetta 2 is not installed. Install it, then reopen Yaagl.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rosetta 2 is not installed. Install it, then reopen Yaagl."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "尚未安装 Rosetta 2。请先安装，再重新打开 Yaagl。"
+          }
+        }
+      }
+    },
     "Wine has to be set up first": {
       "extractionState": "manual",
       "localizations": {

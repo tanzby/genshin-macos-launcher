@@ -104,18 +104,6 @@ private func waitForLaunch(_ fake: FakeGameClient) async {
   }
 
   @MainActor
-  @Test func APP_019_bootstrapRecoversACrashedSessionBeforeReadingTheGameStatus() async {
-    let fake = FakeGameClient(status: GameStatus(localVersion: "5.0.0", remoteVersion: "5.0.0"))
-    let model = LauncherModel(client: fake)
-
-    await model.bootstrap()
-
-    #expect(fake.events.first == "recover")
-    #expect(fake.recoveries == 1)
-    #expect(fake.statusCalls == 1)
-  }
-
-  @MainActor
   @Test func PRG_006_pauseWaitsForTheClientToQuiesceAfterTheJobStream() async throws {
     let fake = FakeGameClient(status: GameStatus(localVersion: "4.9.0", remoteVersion: "5.0.0", canUpdate: true))
     let directory = FileManager.default.temporaryDirectory.appending(path: "handoff-\(UUID().uuidString)")

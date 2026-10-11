@@ -54,6 +54,8 @@ struct YaaglApp: App {
     // A diagnostic run names its own game folder; it must not touch the one saved in the real preferences.
     let launcher = LauncherModel(
       client: client, wine: wine,
+      startup: StartupSteps(
+        rosettaInstalled: { StartupSteps.isRosettaInstalled() }, recoverSession: { await client.recover() }),
       gameDirectory: AutoLaunchOptions.current.enabled ? AutoLaunchOptions.current.gameDirectory : settings.gameDirectory)
     launcher.makeLaunchOptions = { settings.launchOptions(gameDirectory: $0) }
     let controller = MainController(launcher: launcher, settings: settings, onboarding: onboarding)

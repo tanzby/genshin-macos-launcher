@@ -116,9 +116,6 @@ public protocol GameClient: Sendable {
   /// (they take no path). Called with the current folder, also `nil`, right before every client call that reads it
   /// (refresh, the disk-space check and `run` of a job, launch), never ahead of a check that may reject the call.
   func setGameDirectory(_ url: URL?)
-  /// Kills what a crashed launcher left of the game session and restores the files it had changed (ADR 0002).
-  /// Called once at startup, after Wine is ready and before the game status is read; never while a game runs.
-  func recover() async
   /// Returns once nothing the client started is still running. A job's stream ends as soon as its consumer is
   /// cancelled; this is how the launcher learns the work behind it has really stopped (pause, shutdown).
   func quiesce() async
@@ -126,7 +123,6 @@ public protocol GameClient: Sendable {
 
 extension GameClient {
   public func setGameDirectory(_ url: URL?) {}
-  public func recover() async {}
   public func quiesce() async {}
 }
 
@@ -138,6 +134,32 @@ public protocol WinePreparing: Sendable {
   /// Installs Wine, DXMT and the prefix when `status()` is not `.ready`. Must stop when its Task is
   /// cancelled; downloads resume from their `.part` files on the next call.
   func ensureInstalled(progress: @escaping @Sendable (WineInstallProgress) -> Void) async throws
+  /// Installs unconditionally, replacing a Wine that `status()` still calls ready (used when launching found it broken).
+  func reinstall(progress: @escaping @Sendable (WineInstallProgress) -> Void) async throws
+}
+
+/// The environment steps of ADR 0002's startup order that sit around Wine, behind a seam so the state machine
+/// is testable. (Wiping old data and the hosts check happen before the model exists / in `OnboardingModel`.)
+public struct StartupSteps: Sendable {
+  /// Whether Rosetta 2 is installed. Checked before the 2 GB Wine download.
+  public var rosettaInstalled: @Sendable () async -> Bool
+  /// `GameSession.recover()`: kill what is left of the prefix, replay the journal of a crashed launch.
+  public var recoverSession: @Sendable () async -> Void
+
+  public init(
+    rosettaInstalled: @escaping @Sendable () async -> Bool,
+    recoverSession: @escaping @Sendable () async -> Void
+  ) {
+    self.rosettaInstalled = rosettaInstalled
+    self.recoverSession = recoverSession
+  }
+
+  /// Rosetta's runtime, present once `softwareupdate --install-rosetta` has run.
+  public static let rosettaRuntime = URL(filePath: "/Library/Apple/usr/share/rosetta/rosetta")
+
+  public static func isRosettaInstalled(at runtime: URL = rosettaRuntime) -> Bool {
+    FileManager.default.isExecutableFile(atPath: runtime.path)
+  }
 }
 
 extension WineRuntime: WinePreparing {}
