@@ -398,7 +398,7 @@ public struct GameSession: Sendable {
   }
 
   /// A Unix path as Wine sees it on the `Z:` drive.
-  static func windowsPath(_ url: URL) -> String {
+  public static func windowsPath(_ url: URL) -> String {
     "Z:" + url.path.replacingOccurrences(of: "/", with: "\\")
   }
 }

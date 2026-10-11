@@ -139,9 +139,8 @@ public enum GenshinLaunchRecipe {
   /// did. Never through `cmd`: with `cmd.exe` as the parent the game loads `HoYoKProtect.sys`, which this Wine cannot
   /// load (#57). No driver copy and no cloud arguments either, like the TS Steam-patch path that worked.
   static func command(gameDirectory: URL) -> [String] {
-    let path = gameDirectory.appending(path: GenshinCN.executableName).path
-    let executable = "Z:" + path.replacingOccurrences(of: "/", with: "\\")
-    return [#"C:\windows\system32\steam.exe"#, executable]
+    let game = gameDirectory.appending(path: GenshinCN.executableName)
+    return [#"C:\windows\system32\steam.exe"#, GameSession.windowsPath(game)]
   }
 }
 
