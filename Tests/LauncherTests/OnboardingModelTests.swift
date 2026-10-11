@@ -40,6 +40,18 @@ private func tempDirectory() -> URL {
 }
 
 @MainActor @Suite struct OnboardingModelTests {
+  @Test func APP_020_autoLaunchNeverOffersTheGameFolderPickerButStillOffersHosts() {
+    let model = OnboardingModel(hosts: FakeHosts(.current), settings: settings())
+    model.refresh()
+    #expect(model.step == .gameDirectory)
+    #expect(model.showsSheet(drivenByAutoLaunch: false))
+    #expect(!model.showsSheet(drivenByAutoLaunch: true))
+
+    let blocked = OnboardingModel(hosts: FakeHosts(.missing), settings: settings())
+    blocked.refresh()
+    #expect(blocked.showsSheet(drivenByAutoLaunch: true))
+  }
+
   @Test func WIN_011_hostsBlockIsTheFirstRequiredStep() {
     let model = OnboardingModel(hosts: FakeHosts(.missing), settings: settings())
     model.refresh()
