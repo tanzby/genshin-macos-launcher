@@ -1973,6 +1973,23 @@
         }
       }
     },
+    "Verification paused": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Verification paused"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "校验已暂停"
+          }
+        }
+      }
+    },
     "Verifying files": {
       "extractionState": "manual",
       "localizations": {

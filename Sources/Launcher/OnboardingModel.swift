@@ -33,9 +33,12 @@ public final class OnboardingModel {
 
   public var allowsLaunch: Bool { hostsStatus?.allowsLaunch ?? false }
 
+  /// A game folder is chosen and still exists.
+  public var hasUsableGameDirectory: Bool { settings.gameDirectory != nil && gameDirectoryUsable }
+
   public var step: Step {
     if !allowsLaunch { return .hosts }
-    return settings.gameDirectory == nil || !gameDirectoryUsable ? .gameDirectory : .done
+    return hasUsableGameDirectory ? .done : .gameDirectory
   }
 
   public var isComplete: Bool { step == .done }

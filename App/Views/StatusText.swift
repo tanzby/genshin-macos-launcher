@@ -29,7 +29,8 @@ extension GameJob {
     case (.update, true): "Update paused"
     case (.preDownload, false): "Pre-downloading"
     case (.preDownload, true): "Pre-download paused"
-    case (.repair, _): "Verifying files"
+    case (.repair, false): "Verifying files"
+    case (.repair, true): "Verification paused"
     }
   }
 }

@@ -31,7 +31,7 @@ struct OnboardingView: View {
       StepRow(
         number: 2, title: "Choose the game folder",
         detail: "Pick an empty folder to install into, or the folder of an existing installation. It can be on an external drive.",
-        isDone: controller.settings.gameDirectory != nil && onboarding.gameDirectoryUsable
+        isDone: onboarding.hasUsableGameDirectory
       ) {
         if onboarding.step == .gameDirectory {
           Button("Choose Folder…") { _ = GameFolderPicker.choose(into: controller) }

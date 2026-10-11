@@ -104,9 +104,9 @@ public struct MainPresentation: Sendable, Equatable {
       return make(pauseButton.0, pauseButton.1, .wine(s.progress))
     case .running: return make(.running, false, .running)
     case .launching: return make(.launching, false, .launching)
-    case .installing, .updating, .repairing:
-      let job: GameJob = s.phase == .installing ? .install : s.phase == .updating ? .update : .repair
-      return make(pauseButton.0, pauseButton.1, .job(job, s.progress, paused: false))
+    case .installing: return make(pauseButton.0, pauseButton.1, .job(.install, s.progress, paused: false))
+    case .updating: return make(pauseButton.0, pauseButton.1, .job(.update, s.progress, paused: false))
+    case .repairing: return make(pauseButton.0, pauseButton.1, .job(.repair, s.progress, paused: false))
     case .idle, .preDownloading:
       break
     }
