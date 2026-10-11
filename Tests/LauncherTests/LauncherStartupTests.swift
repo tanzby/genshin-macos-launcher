@@ -147,6 +147,29 @@ private struct Harness {
     await h.model.shutdown()
   }
 
+  @Test func APP_001_shutdownWaitsForARunningRecovery() async throws {
+    let h = Harness(wine: .ready)
+    defer { h.cleanUp() }
+    h.probe.stallRecovery()
+    let model = h.model
+    let boot = Task { @MainActor in await model.bootstrap() }
+    try await h.probe.recoveryStarted.pop("the recovery to begin")
+    let done = AsyncQueue<Void>()
+    let returned = Mutex(false)
+    let shutdown = Task { @MainActor in
+      await model.shutdown()
+      returned.withLock { $0 = true }
+      done.push(())
+    }
+    for _ in 0..<20 { await Task.yield() }
+    #expect(!returned.withLock { $0 }, "shutdown must wait while the recovery runs")
+    h.probe.recoveryGate.push(())
+    try await done.pop("shutdown to return")
+    #expect(h.probe.recoveries.count == 1, "shutdown returned only after the recovery had finished")
+    await boot.value
+    await shutdown.value
+  }
+
   @Test func APP_001_bootstrapContinuesOnceRosettaIsInstalled() async throws {
     let h = Harness(wine: .ready, rosetta: false)
     defer { h.cleanUp() }

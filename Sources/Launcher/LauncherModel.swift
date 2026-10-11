@@ -417,6 +417,8 @@ public final class LauncherModel {
     launchWork?.cancel()
     statusRead?.cancel()
     await cancelAndWait(exclusive: true, preDownload: true)
+    // The recovery is cleanup (kills the prefix, replays the journal): never cancel it, but do not quit mid-way.
+    await recovery?.value
   }
 
   // MARK: Wine
