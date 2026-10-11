@@ -46,12 +46,14 @@ public struct AutoLaunchOptions: Sendable, Equatable {
       guard let raw, !raw.isEmpty else { return nil }
       return URL(filePath: (raw as NSString).expandingTildeInPath, directoryHint: .isDirectory)
     }
-    let enabled = arguments.contains("--autolaunch") || ["1", "true"].contains(environment["YAAGL_AUTOLAUNCH"] ?? "")
+    func isSet(_ flag: String, _ variable: String) -> Bool {
+      arguments.contains(flag) || ["1", "true"].contains(environment[variable] ?? "")
+    }
     return AutoLaunchOptions(
-      enabled: enabled,
+      enabled: isSet("--autolaunch", "YAAGL_AUTOLAUNCH"),
       dataRoot: value("--data-dir", "YAAGL_DATA_DIR"),
       gameDirectory: value("--game-dir", "YAAGL_GAME_DIR"),
-      allowDownload: arguments.contains("--allow-download") || ["1", "true"].contains(environment["YAAGL_ALLOW_DOWNLOAD"] ?? ""))
+      allowDownload: isSet("--allow-download", "YAAGL_ALLOW_DOWNLOAD"))
   }
 }
 
