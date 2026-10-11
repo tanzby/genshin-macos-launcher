@@ -40,8 +40,9 @@ private final class Harness {
     return false
   }
 
-  func autoLaunch() -> AutoLaunch {
-    AutoLaunch(model: model, log: log, pollInterval: .milliseconds(5), progressInterval: .milliseconds(5))
+  func autoLaunch(allowDownload: Bool = true) -> AutoLaunch {
+    AutoLaunch(
+      model: model, log: log, pollInterval: .milliseconds(5), progressInterval: .milliseconds(5), allowDownload: allowDownload)
   }
 }
 
@@ -56,8 +57,9 @@ private final class Harness {
 
   @Test func APP_020_parsesFlagsAndEnvironment() {
     let flags = AutoLaunchOptions.parse(
-      arguments: ["App", "--autolaunch", "--data-dir", "/tmp/data", "--game-dir", "/tmp/game"], environment: [:])
+      arguments: ["App", "--autolaunch", "--data-dir", "/tmp/data", "--game-dir", "/tmp/game", "--allow-download"], environment: [:])
     #expect(flags.enabled)
+    #expect(flags.allowDownload)
     #expect(flags.dataRoot?.path == "/tmp/data")
     #expect(flags.gameDirectory?.path == "/tmp/game")
 
@@ -95,7 +97,7 @@ private final class Harness {
     }
     await AutoLaunch.runIfRequested(
       AutoLaunchOptions(enabled: true, dataRoot: root, gameDirectory: game), model: h.model, log: h.log
-    ) { terminated += 1 }
+    ) { terminated += 1 } forceExit: {}
     try await failer.value
     #expect(terminated == 1)
     #expect(h.model.gameDirectory == game)
@@ -153,6 +155,13 @@ private final class Harness {
     #expect(h.lines.last?.hasPrefix("autolaunch: result=failed") == true)
   }
 
+  @Test func APP_020_withoutAllowDownloadAMissingGameFailsInsteadOfDownloading() async {
+    let h = Harness(game: GameStatus(localVersion: nil, remoteVersion: "5.0.0"))
+    let result = await h.autoLaunch(allowDownload: false).run()
+    #expect(result == .failed("needs install (pass --allow-download)"))
+    #expect(h.fake.runs.isEmpty)
+  }
+
   @Test func APP_020_installsAMissingGameFirst() async throws {
     let h = Harness(game: GameStatus(localVersion: nil, remoteVersion: "5.0.0"))
     let driver = h.autoLaunch()
@@ -165,5 +174,15 @@ private final class Harness {
     h.fake.finishLaunch(.exited)
     #expect(await run.value == .ok)
     #expect(h.fake.runs == [.install])
+  }
+}
+
+@Suite struct RosettaDetectionTests {
+  @Test func APP_001_rosettaIsDetectedByItsRuntimeLibraryNotAnExecutableFlag() throws {
+    let file = FileManager.default.temporaryDirectory.appending(path: "libRosettaRuntime-\(UUID().uuidString)")
+    #expect(!StartupSteps.isRosettaInstalled(at: file))
+    try Data("x".utf8).write(to: file)  // not executable, like the real library
+    defer { try? FileManager.default.removeItem(at: file) }
+    #expect(StartupSteps.isRosettaInstalled(at: file))
   }
 }
