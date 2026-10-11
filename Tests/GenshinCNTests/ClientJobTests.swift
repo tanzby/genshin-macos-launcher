@@ -267,6 +267,15 @@ private func isError(_ error: (any Error)?, _ expected: SophonError) -> Bool {
     #expect((result.error as? GenshinCNClientError) == .noUpdate)
   }
 
+  @Test func UPG_006_updateWhenAlreadyCurrentFetchesNoManifest() async throws {
+    let rig = ClientRig(main: .game("5.6.0"))
+    rig.install(.game("5.6.0"))
+
+    _ = await rig.run(.update)
+
+    #expect(!rig.cdn.requests.contains { $0.contains("/manifests/") })
+  }
+
   @Test func INS_013_aVersionThePatchBuildDoesNotKnowIsSyncedFromTheChunkManifestInstead() async throws {
     let new = FakeRelease.game("5.6.0", extra: ["fresh.bin": Data("fresh".utf8)], diffTags: ["5.5.0"])
     let rig = ClientRig(main: new)

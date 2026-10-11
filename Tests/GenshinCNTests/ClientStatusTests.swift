@@ -185,6 +185,17 @@ import Testing
     #expect(try await rig.client.requiredDiskSpace(for: .update) == Int64(main.compressedSize + main.uncompressedSize))
   }
 
+  @Test func INS_004_aPatchableUpdateDiskCheckReadsOnlyThePatchBuild() async throws {
+    let main = FakeRelease.game("5.6.0", diffTags: ["5.5.0"])
+    let rig = ClientRig(main: main)
+    rig.install(.game("5.5.0"))
+
+    _ = try await rig.client.requiredDiskSpace(for: .update)
+
+    #expect(rig.cdn.requests.contains { $0.contains("getPatchBuild") })
+    #expect(!rig.cdn.requests.contains { $0.contains("getBuild") })
+  }
+
   @Test func INS_004_updateOfAnUnpatchableVersionNeedsAFullInstall() async throws {
     let main = FakeRelease.game("5.6.0", diffTags: ["5.5.0"])
     let rig = ClientRig(main: main)
