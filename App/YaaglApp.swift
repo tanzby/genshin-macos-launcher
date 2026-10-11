@@ -7,11 +7,20 @@ import Wine
 
 @main
 struct YaaglApp: App {
-  @State private var launcher = LauncherModel(client: Self.makeClient())
+  @State private var launcher = Self.makeLauncher()
 
-  private static func makeClient() -> GenshinCNClient {
-    let data = DataDirectory(root: DataDirectory.defaultRoot)
-    return GenshinCNClient.bundled(wine: WineRuntime(dataDirectory: data), dataDirectory: data)
+  /// One `WineRuntime` shared by the client (which launches the game with it) and the model (which
+  /// prepares it). `prepare()` migrates a TS-launcher data directory before anything reads it; if it
+  /// fails the app stops rather than run on a directory it could not migrate.
+  private static func makeLauncher() -> LauncherModel {
+    let data: DataDirectory
+    do {
+      data = try DataDirectory.prepare()
+    } catch {
+      fatalError("Cannot prepare the data directory: \(error)")
+    }
+    let wine = WineRuntime(dataDirectory: data)
+    return LauncherModel(client: GenshinCNClient.bundled(wine: wine, dataDirectory: data), wine: wine)
   }
 
   // Sparkle refuses to start without an EdDSA public key, so builds made before

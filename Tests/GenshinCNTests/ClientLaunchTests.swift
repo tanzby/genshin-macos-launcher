@@ -229,9 +229,9 @@ actor Log {
     #expect(GenshinCNClient.helpers(in: app) == nil)
     try Data("shim".utf8).write(to: helpers.appending(path: "yaagl-wine-shim"))
     #expect(GenshinCNClient.helpers(in: app) == nil)
-    try Data("dylib".utf8).write(to: helpers.appending(path: "yaagl-gamehost"))
+    try Data("dylib".utf8).write(to: helpers.appending(path: "yaagl-gamehost.dylib"))
     #expect(
       GenshinCNClient.helpers(in: app)
-        == GameHostHelpers(shim: helpers.appending(path: "yaagl-wine-shim"), dylib: helpers.appending(path: "yaagl-gamehost")))
+        == GameHostHelpers(shim: helpers.appending(path: "yaagl-wine-shim"), dylib: helpers.appending(path: "yaagl-gamehost.dylib")))
   }
 }

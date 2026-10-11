@@ -79,7 +79,7 @@ public final class GenshinCNClient: GameClient {
   static func helpers(in appBundle: URL) -> GameHostHelpers? {
     let directory = appBundle.appending(path: "Contents/Helpers", directoryHint: .isDirectory)
     let shim = directory.appending(path: "yaagl-wine-shim")
-    let dylib = directory.appending(path: "yaagl-gamehost")
+    let dylib = directory.appending(path: "yaagl-gamehost.dylib")
     let fileManager = FileManager.default
     guard fileManager.fileExists(atPath: shim.path), fileManager.fileExists(atPath: dylib.path) else { return nil }
     return GameHostHelpers(shim: shim, dylib: dylib)
