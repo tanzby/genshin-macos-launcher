@@ -17,7 +17,7 @@ extension SophonDownloader {
     tempDirectory: URL,
     reporter: ProgressReporter
   ) async throws {
-    let (chunkBase, targets) = try Self.validate(files, using: ref, into: gameDirectory)
+    let (chunkBase, targets) = try SophonManifestValidator.validate(files, using: ref, into: gameDirectory)
     let worker = FileWorker(
       session: session, chunkBase: chunkBase, chunkSuffix: ref.chunkURLSuffix,
       gameDirectory: gameDirectory, tempDirectory: tempDirectory)
@@ -25,7 +25,7 @@ extension SophonDownloader {
     let config = configuration
     try await runBounded(targets, limit: configuration.concurrency) { item in
       if try await Offload.run({ try Self.isIntact(item.file, at: item.destination, cancelled: $0) }) {
-        reporter.add(Self.compressedSize(of: item.file))
+        reporter.add(SophonManifestValidator.compressedSize(of: item.file))
         return
       }
       let key = SophonDownloaderLayout.fileKey(for: item.file.path)
@@ -37,7 +37,7 @@ extension SophonDownloader {
         let url = try SophonDownloaderLayout.resourceURL(
           base: chunkBase, name: chunk.id, suffix: ref.chunkURLSuffix)
         let cached = directory.appending(path: chunk.id)
-        try await Self.retrying(config) {
+        try await SophonRetry.run(config) {
           try await fetcher.fetch(
             name: chunk.id, url: url, expected: Int64(chunk.compressedSize), to: cached, reporter: progress)
           // The fetcher only checks the length. A pre-download is marked complete for good, so a chunk of
@@ -73,7 +73,7 @@ extension SophonDownloader {
     try await runBounded(ldiffs, limit: configuration.concurrency) { ldiff in
       let url = try SophonDownloaderLayout.resourceURL(base: base, name: ldiff.id, suffix: suffix)
       let progress = ChunkProgress(reporter: reporter)  // one per ldiff: it is not thread-safe
-      try await Self.retrying(config) {
+      try await SophonRetry.run(config) {
         try await fetcher.fetch(
           name: ldiff.id, url: url, expected: ldiff.size, to: directory.appending(path: ldiff.id),
           reporter: progress)
