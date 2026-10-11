@@ -51,8 +51,9 @@ public struct LaunchRecipe: Sendable, Equatable {
   /// Files renamed to `<name>.bak` before the game and renamed back afterwards (LCH-014).
   public var moveAside: [URL]
   public var prefixCopies: [PrefixCopy]
-  /// Contents of `config.bat`, run as `wine cmd /c config.bat` (LCH-010).
-  public var batchScript: String
+  /// The Wine arguments that start the game: `wine <command>` (LCH-010). Deliberately not a `cmd /c` batch file:
+  /// with `cmd.exe` as the parent the game loads its anti-cheat driver, which fails on this Wine (#57).
+  public var command: [String]
   /// File name of the game process, e.g. `YuanShen.exe`. Used for Game Mode and to see the game start.
   public var gameExecutableName: String
   public var gameDisplayName: String
@@ -62,7 +63,7 @@ public struct LaunchRecipe: Sendable, Equatable {
     registry: [RegistryEdit] = [],
     moveAside: [URL] = [],
     prefixCopies: [PrefixCopy] = [],
-    batchScript: String = "",
+    command: [String] = [],
     gameExecutableName: String = "",
     gameDisplayName: String = ""
   ) {
@@ -70,7 +71,7 @@ public struct LaunchRecipe: Sendable, Equatable {
     self.registry = registry
     self.moveAside = moveAside
     self.prefixCopies = prefixCopies
-    self.batchScript = batchScript
+    self.command = command
     self.gameExecutableName = gameExecutableName
     self.gameDisplayName = gameDisplayName
   }

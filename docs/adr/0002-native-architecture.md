@@ -22,7 +22,7 @@ x86_64 helper（XcodeGen target，放进 Contents/Helpers/）: YaaglWineShim、Y
 - 不设 `Core`（会变成杂物堆）、`Patch`（见术语）、`Updater`（Sparkle 的 `SPUStandardUpdaterController` 本身就是深模块，在 `YaaglApp` 里直接用，appcast 和公钥写在 Info.plist）。
 - `Launcher` 与 `YaaglApp` 分开，是因为 App target 无法 `swift test`；业务编排和状态机必须能脱离 UI 测试。
 - 游戏无关的东西（数据目录、hosts、Wine 运行时、启动会话的执行）归 `Platform` / `Wine`，由 `Launcher` 直接使用；游戏相关的东西（端点、game_id、可执行文件名、`removed` 列表、hosts 域名、`HoYoKProtect.sys`、`-is_cloud` 参数、HDR 注册表键）归 `GenshinCN`。
-- **LaunchRecipe**：`GenshinCN` 把设置快照（`LaunchOptions`）翻译成一个值类型 `LaunchRecipe`：注册表项、`config.bat` 内容、环境变量表、要改动的文件列表、要复制进 prefix 的资源。`Wine.GameSession` 只执行它，因此 `Wine` 完全游戏无关。`.reg`、`.bat`、环境变量表都是纯函数的产物。
+- **LaunchRecipe**：`GenshinCN` 把设置快照（`LaunchOptions`）翻译成一个值类型 `LaunchRecipe`：注册表项、Wine 启动命令（`steam.exe <游戏>`，不经 `cmd`，见 #57）、环境变量表、要改动的文件列表、要复制进 prefix 的资源。`Wine.GameSession` 只执行它，因此 `Wine` 完全游戏无关。`.reg`、启动命令、环境变量表都是纯函数的产物。
 
 ## GameClient
 
@@ -77,13 +77,13 @@ protocol GameClient: Sendable {
 
 ## Wine 与启动会话
 
-- `Wine` 对外两个东西。`WineRuntime`（actor）：确保已安装固定版本（Wine 与 DXMT 在同一次安装里一起装好）、重装、prefix 初始化、shutdown。`GameSession`：`launch(recipe:game:)` 一次调用里执行 `LaunchRecipe`：写注册表、`config.bat`、Launch Mutations、启动、等待退出、清理。**清理不放 `defer`**：它是异步的（`wineserver -w`、15 秒竞速、`reg delete`），已取消的 Task 里子 await 会立即抛错，所以清理跑在不受取消影响、不抛错的独立上下文里，错误只记日志。
+- `Wine` 对外两个东西。`WineRuntime`（actor）：确保已安装固定版本（Wine 与 DXMT 在同一次安装里一起装好）、重装、prefix 初始化、shutdown。`GameSession`：`launch(recipe:game:)` 一次调用里执行 `LaunchRecipe`：写注册表、Launch Mutations、启动、等待退出、清理。**清理不放 `defer`**：它是异步的（`wineserver -w`、15 秒竞速、`reg delete`），已取消的 Task 里子 await 会立即抛错，所以清理跑在不受取消影响、不抛错的独立上下文里，错误只记日志。
 - **崩溃恢复**：改动前先写 mutations journal（数据目录里的小文件，记录要还原的文件改名和注册表原值），正常还原后删除。`Launcher` 启动时调用 `GameSession.recover()`（见启动顺序）重放 journal，取代 TS 的 `patched` 标记。重放按磁盘的实际状态逐项幂等；`.bak` 已存在时拒绝覆盖，避免干净备份被覆盖；DXMT 不在其中：它在安装 Wine 时一次装好，运行时不注入、不还原，所以没有「崩溃丢原版 DLL」；注册表项记录原值，或「原本不存在」。这样「异常退出时是否撤销 HDR / 分辨率注册表」只是 #28 可以直接选的策略，不再是架构问题。
 - Game Mode、全屏、刘海区域全在注入 Wine 的 x86_64 shim 与 dylib 里，Swift 不重写；`Wine` 只负责准备 `YaaglGame.app`、`codesign`、`LSRegisterURL` 和传四个 `YAAGL_GAME_HOST*` 环境变量。
 
 ## 测试缝
 
-只设两个端口（各有生产实现和测试替身）：`ProcessRunning`（Wine 调用和白名单系统工具都走它，测试记录参数、环境变量、工作目录）和 `AdminPrivilege`。HTTP 不设端口，测试用 `URLProtocol` 打桩，喂录制的 getBuild、manifest、chunk 夹具。文件系统用真实临时目录。节流和速度计算注入 `Clock`。`GameClient` 是第三条缝（见上）。`ProcessRunning` 同时承担白名单系统工具（`codesign`、`tar`、`ditto`）的执行，白名单在生产实现里强制。测不到真实的 Wine 注册表，所以断言的是生成的 `.reg` 文本、`config.bat`、环境变量表（golden file）、命令 argv、文件改动，以及还原后磁盘回到原状。
+只设两个端口（各有生产实现和测试替身）：`ProcessRunning`（Wine 调用和白名单系统工具都走它，测试记录参数、环境变量、工作目录）和 `AdminPrivilege`。HTTP 不设端口，测试用 `URLProtocol` 打桩，喂录制的 getBuild、manifest、chunk 夹具。文件系统用真实临时目录。节流和速度计算注入 `Clock`。`GameClient` 是第三条缝（见上）。`ProcessRunning` 同时承担白名单系统工具（`codesign`、`tar`、`ditto`）的执行，白名单在生产实现里强制。测不到真实的 Wine 注册表，所以断言的是生成的 `.reg` 文本、启动命令、环境变量表（golden file）、命令 argv、文件改动，以及还原后磁盘回到原状。
 
 ## 其他行为的位置
 

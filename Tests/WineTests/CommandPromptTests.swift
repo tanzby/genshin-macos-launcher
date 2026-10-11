@@ -35,11 +35,10 @@ import Testing
     }
   }
 
-  @Test func WIN_022_doesNotTouchRegistryJournalOrConfigBatch() async throws {
+  @Test func WIN_022_doesNotTouchRegistryOrJournal() async throws {
     try await withLaunchFixture { f in
       _ = await f.session.openCommandPrompt(makeLaunchRecipe(registry: [LaunchRegistry.widthEdit(2560)]), gameDirectory: nil)
       #expect(!FileManager.default.fileExists(atPath: f.layout.launchJournal.path))
-      #expect(!FileManager.default.fileExists(atPath: f.layout.configBatch.path))
       #expect(f.runner.calls.allSatisfy { $0.arguments == ["start", "/wait", "cmd"] })
     }
   }
