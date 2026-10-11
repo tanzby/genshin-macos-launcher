@@ -66,6 +66,7 @@ private struct MoreMenu: View {
     }
     .menuStyle(.button)
     .buttonStyle(.glass)
+    .buttonBorderShape(.circle)
     .controlSize(.extraLarge)
     .menuIndicator(.hidden)
     .accessibilityLabel("More")

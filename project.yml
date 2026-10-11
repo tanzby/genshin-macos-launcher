@@ -57,6 +57,7 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: io.github.tanzby.yaagl
         PRODUCT_NAME: Yaagl
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         ARCHS: arm64
         ENABLE_HARDENED_RUNTIME: NO
         ENABLE_USER_SCRIPT_SANDBOXING: NO

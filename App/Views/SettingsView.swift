@@ -36,7 +36,8 @@ struct SettingsView: View {
       List(Page.allCases, id: \.self, selection: $page) { page in
         Label(page.title, systemImage: page.symbol)
       }
-      .navigationSplitViewColumnWidth(min: 150, ideal: 170, max: 200)
+      .navigationSplitViewColumnWidth(170)
+      .toolbar(removing: .sidebarToggle)
     } detail: {
       switch page ?? .general {
       case .general: GeneralPage(updater: updater)
@@ -45,6 +46,7 @@ struct SettingsView: View {
       case .advanced: AdvancedPage(dataDirectory: dataDirectory)
       }
     }
+    .toolbarBackgroundVisibility(.hidden, for: .windowToolbar)
     .frame(width: 720, height: 460)
   }
 }
