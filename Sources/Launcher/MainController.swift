@@ -83,6 +83,14 @@ public final class MainController {
     }
   }
 
+  public var canOpenWineCommandPrompt: Bool { launcher.canOpenWineCommandPrompt }
+
+  /// Returns once the prompt window is closed, so callers run it in a `Task`.
+  public func openWineCommandPrompt() async {
+    syncGameDirectory()
+    await launcher.openWineCommandPrompt()
+  }
+
   public func preDownload() async {
     await run { try await self.launcher.start(.preDownload) }
   }

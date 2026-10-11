@@ -107,7 +107,7 @@
 | CFG-029 | MetalFX 超分 | 照搬 | [#28](https://github.com/tanzby/yet-another-anime-game-launcher/issues/28) A9 保留的用户偏好 | 组件 |`CFG_029_*`（SettingsModelTests） |
 | CFG-030 | "游戏"标签页的内容顺序 | 改写 | [#21](https://github.com/tanzby/yet-another-anime-game-launcher/issues/21) SwiftUI 主界面 / 设置窗口重新设计 | 组件 |  |
 | CFG-031 | 应用推荐设置 | 作废 | [#28](https://github.com/tanzby/yet-another-anime-game-launcher/issues/28) A8 删推荐设置按钮 | — |  |
-| CFG-032 | 打开 Wine 命令行、游戏目录、数据目录 | 改写 | [#21](https://github.com/tanzby/yet-another-anime-game-launcher/issues/21) SwiftUI 主界面 / 设置窗口重新设计 | 组件 |  |
+| CFG-032 | 打开 Wine 命令行、游戏目录、数据目录 | 改写 | [#21](https://github.com/tanzby/yet-another-anime-game-launcher/issues/21) SwiftUI 主界面 / 设置窗口重新设计 | 组件 | LauncherCommandPromptTests、StringCatalogTests |
 | CFG-033 | 检查 YAAGL 更新 | 作废 | [#19](https://github.com/tanzby/yet-another-anime-game-launcher/issues/19) Sparkle | — |  |
 | CFG-034 | Licenses 标签页 | 改写 | [#21](https://github.com/tanzby/yet-another-anime-game-launcher/issues/21) SwiftUI 主界面 / 设置窗口重新设计 | 组件 |  |
 | INS-001 | 安装目录选择的校验 | 照搬 | TS 行为不变，但依 ADR 0002 在 Sophon/Launcher 重做 | 组件 |  |
@@ -232,5 +232,5 @@
 | WIN-019 | DXMT 版本检查与下载 | 改写 | [#28](https://github.com/tanzby/yet-another-anime-game-launcher/issues/28) C 负面用例 | 单元 | WineStatusTests（DXMT 版本不符即重装） |
 | WIN-020 | 把 DXMT 注入 Wine 运行时 | 改写 | [#28](https://github.com/tanzby/yet-another-anime-game-launcher/issues/28) B12：DXMT 装 Wine 时一次装好，不再注入（ADR 0002 已修订） | 单元 | WineInstallTests（DXMT 随 Wine 一次装好） |
 | WIN-021 | 还原 DXMT 注入 | 改写 | [#28](https://github.com/tanzby/yet-another-anime-game-launcher/issues/28) B12：DXMT 不再注入，因此无需还原（ADR 0002 已修订） | 单元 | WineInstallTests（无 .bak，无需还原） |
-| WIN-022 | 打开 Wine 命令行窗口 | 改写 | [#21](https://github.com/tanzby/yet-another-anime-game-launcher/issues/21) 设置窗口重新设计；保留为开发便利入口（CFG-032） | 组件 |  |
+| WIN-022 | 打开 Wine 命令行窗口 | 改写 | [#21](https://github.com/tanzby/yet-another-anime-game-launcher/issues/21) 设置窗口重新设计；保留为开发便利入口（CFG-032） | 组件 | CommandPromptTests |
 | WIN-023 | 当前版本不在清单中时的下拉框 | 作废 | 死/开发便利/无版本选择 UI/空列表 | — |  |

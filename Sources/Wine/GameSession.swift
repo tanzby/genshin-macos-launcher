@@ -63,6 +63,29 @@ public struct GameSession: Sendable {
     try? FileManager.default.removeItem(at: layout.configBatch)
   }
 
+  /// `start /wait` gives `cmd` its own console window: the runner hands Wine `/dev/null` as stdin, so a bare
+  /// `wine cmd` would read EOF and exit at once. Needs a check on a real Mac (#15 diag).
+  static let commandPromptArguments = ["start", "/wait", "cmd"]
+
+  /// Opens an interactive `wine cmd` in the game's prefix (CFG-032, WIN-022): same loader, `WINEPREFIX`,
+  /// `WINEDEBUG` and recipe environment as a launch, plus `WINEPATH` pointing at the game directory.
+  /// Touches neither the registry, the journal nor `config.bat`. Returns the exit code once the prompt is
+  /// closed, or `nil` if Wine could not be started.
+
+  public func openCommandPrompt(_ recipe: LaunchRecipe, gameDirectory: URL?) async -> Int32? {
+    var environment = baseEnvironment
+    for (name, value) in recipe.environment where !value.isEmpty { environment[name] = value }
+    if let gameDirectory { environment["WINEPATH"] = Self.windowsPath(gameDirectory) }
+    do {
+      return try await runner.run(
+        layout.loader, arguments: Self.commandPromptArguments, environment: environment, workingDirectory: layout.root
+      ).exitCode
+    } catch {
+      log.error("wine cmd failed: \(String(describing: error), privacy: .public)")
+      return nil
+    }
+  }
+
   // MARK: - Launch
 
   private func run(_ recipe: LaunchRecipe) async -> LaunchResult {

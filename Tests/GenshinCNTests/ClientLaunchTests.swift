@@ -32,6 +32,18 @@ private let noop: @Sendable () -> Void = {}
     #expect(rig.launcher.recoveries.withLock { $0 } == 1)
   }
 
+  @Test func WIN_022_commandPromptGetsTheLaunchEnvironmentAndTheGameDirectory() async throws {
+    let rig = installedRig()
+
+    await rig.client.openWineCommandPrompt(LaunchOptions(gameDirectory: rig.game, metalHUD: true))
+
+    let prompt = try #require(rig.launcher.prompts.withLock { $0 }.first)
+    #expect(prompt.gameDirectory == rig.game)
+    #expect(prompt.recipe.environment["MTL_HUD_ENABLED"] == "1")
+    #expect(prompt.recipe.environment["DXMT_LOG_PATH"] == rig.data.path)
+    #expect(rig.launcher.recipes.isEmpty, "opening a prompt must not launch the game")
+  }
+
   private func installedRig() -> ClientRig {
     let release = FakeRelease.game("5.6.0")
     let rig = ClientRig(main: release)

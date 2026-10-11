@@ -21,6 +21,7 @@ public enum GenshinCNClientError: Error, Sendable, Equatable {
 public protocol GameLaunching: Sendable {
   func launch(_ recipe: LaunchRecipe, onStarted: @escaping @Sendable () -> Void) async -> LaunchResult
   func recover() async
+  func openCommandPrompt(_ recipe: LaunchRecipe, gameDirectory: URL?) async -> Int32?
 }
 
 extension GameSession: GameLaunching {}
@@ -160,9 +161,7 @@ public final class GenshinCNClient: GameClient {
     // The game is not running (the launcher holds the exclusive slot), so leftovers can be put back.
     GenshinGameFiles.healBackups(in: directory)
 
-    let recipe = GenshinLaunchRecipe.make(
-      settings: GenshinLaunchSettings(options), gameDirectory: directory, dataDirectory: dataDirectory,
-      protonExtras: protonExtras)
+    let recipe = recipe(for: options)
     // The session restores everything itself, also when this Task is cancelled, and returns only afterwards.
     switch await launcher.launch(recipe, onStarted: onStarted) {
     case .exited: return .exited
@@ -170,6 +169,16 @@ public final class GenshinCNClient: GameClient {
     case .startupTimedOut, .failedToLaunch: return .failedToLaunch
     case .cancelled: throw CancellationError()
     }
+  }
+
+  public func openWineCommandPrompt(_ options: LaunchOptions) async {
+    _ = await launcher.openCommandPrompt(recipe(for: options), gameDirectory: options.gameDirectory)
+  }
+
+  private func recipe(for options: LaunchOptions) -> LaunchRecipe {
+    GenshinLaunchRecipe.make(
+      settings: GenshinLaunchSettings(options), gameDirectory: options.gameDirectory, dataDirectory: dataDirectory,
+      protonExtras: protonExtras)
   }
 
   /// The official launcher picture (APP-021); without a provider (tests) the bundled one.

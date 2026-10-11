@@ -119,9 +119,13 @@ public protocol GameClient: Sendable {
   /// Returns once nothing the client started is still running. A job's stream ends as soon as its consumer is
   /// cancelled; this is how the launcher learns the work behind it has really stopped (pause, shutdown).
   func quiesce() async
+  /// Opens an interactive Wine command prompt with the environment of a launch with `options` (CFG-032).
+  /// Returns when the prompt is closed.
+  func openWineCommandPrompt(_ options: LaunchOptions) async
 }
 
 extension GameClient {
+  public func openWineCommandPrompt(_ options: LaunchOptions) async {}
   public func setGameDirectory(_ url: URL?) {}
   public func quiesce() async {}
 }
