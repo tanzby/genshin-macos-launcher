@@ -75,14 +75,7 @@ enum ProxyAddress {
 /// read it: the app composition root snapshots the values it needs.
 @MainActor @Observable
 public final class SettingsModel {
-  public struct Resolution: Sendable, Equatable {
-    public var width: Int
-    public var height: Int
-    public init(width: Int, height: Int) {
-      self.width = width
-      self.height = height
-    }
-  }
+  public typealias Resolution = LaunchOptions.Resolution
 
   enum Key {
     static let gameDirectory = "gameDirectory"
@@ -165,7 +158,7 @@ public final class SettingsModel {
     LaunchOptions(
       gameDirectory: gameDirectory, retina: retina, leftCommandIsControl: leftCommandIsControl, metalHUD: metalHUD,
       hdr: hdr, metalFX: metalFX,
-      customResolution: customResolution.map { LaunchOptions.Resolution(width: $0.width, height: $0.height) },
+      customResolution: customResolution,
       proxyHost: effectiveProxy)
   }
 
