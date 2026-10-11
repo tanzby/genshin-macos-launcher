@@ -89,7 +89,7 @@ protocol GameClient: Sendable {
 
 - **通知**：`JobCoordinator` 除了更新 `@Observable` 状态，还发出离散的 `JobEvent` 流（更新发布、可预下载、失败）。`@Observable` 会合并中间状态，不适合触发通知。通知代码只在 `YaaglApp`。
 - **ReShade**：删除（旧仓库 #28 A7）。不下载、不注入、不复制 DLL，`LaunchRecipe` 里没有对应项；「高级」设置页放什么由设置 UI 票决定，不再有解锁手势。
-- **yaagl-diag 与自动启动（TS 的 `YAAGL_AUTOLAUNCH`）**：本票只保证架构上有位置（`Launcher` 暴露可由命令行参数驱动的入口，日志写数据目录 `logs/`），具体方案留给 diag 适配票。
+- **yaagl-diag 与自动启动（TS 的 `YAAGL_AUTOLAUNCH`）**：本票只保证架构上有位置（`Launcher` 暴露可由命令行参数驱动的入口，日志写数据目录 `logs/`），具体方案见 `docs/genshin-macos.md` 的 Verification：`--autolaunch`、`--data-dir`、`--game-dir`（或对应环境变量），由 `Launcher` 的 `AutoLaunch` 驱动，日志是 `logs/launcher.log`。
 - **HTTP 重试与退避**：`Sophon` 与 `Platform` 各有一份，是十几行的值类型。为保持 `Sophon` 不依赖 `Platform`，接受这点重复。
 - **Wine 孤儿进程**：启动器被强杀后 Wine 会残留。`recover()` 在重放 journal 之前先 `wineserver -k` 并清理，避免游戏还在跑时还原游戏文件。
 
@@ -116,4 +116,6 @@ protocol GameClient: Sendable {
 
 ## 未验证
 
-- ad-hoc 签名、未公证的 App 能否拿到 `UNUserNotificationCenter` 授权（地图 Not yet specified 已记录）。通知相关代码只放在 `YaaglApp`，不影响本架构。
+（票 #14 已验证，结论如下；留作记录。）
+
+- ad-hoc 签名、未公证的 App 能否拿到 `UNUserNotificationCenter` 授权：**拿不到**。实测（2026-10-10，macOS 27 开发版）一个 ad-hoc 签名、独立 bundle id 的最小 App，经 `open` 启动、已激活，`notificationSettings()` 为 `notDetermined`，`requestAuthorization` 立即抛 `UNErrorDomain Code=1`（"Notifications are not allowed for this application"），没有弹授权框。所以 `EventNotifier` 把"授权失败"当作 `false`：不发通知也不报错，持久状态仍在底部胶囊里。1.0.0 的发布包同样是 ad-hoc 签名（codesign 与公证在范围外），所以通知在正式版里也不会出现，除非以后改用 Developer ID 签名；不要为此增加应用内卡片。

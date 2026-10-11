@@ -1,0 +1,242 @@
+import Foundation
+import Synchronization
+import Testing
+import Wine
+
+@testable import Launcher
+
+// ADR 0002 startup order, as far as `LauncherModel` owns it (ticket #37): Rosetta check before any Wine work,
+// `GameSession.recover()` once Wine is ready and before the game status is read. The hosts check lives in
+// `OnboardingModel`. Also the "launch says Wine is broken" path back to Wine preparation.
+
+private let installed = GameStatus(localVersion: "5.0.0", remoteVersion: "5.0.0")
+private let missing = WineStatus.needsInstall(.notInstalled)
+
+/// Scriptable `StartupSteps`; records what the game client and Wine had seen when `recover` ran.
+private final class StepsProbe: Sendable {
+  private struct State {
+    var rosetta = true
+    var rosettaChecks = 0
+    var recoveries: [Int] = []  // game-status reads seen when each recovery finished
+    var stallsRecovery = false
+  }
+  /// One element each time a stalled recovery has begun; push to `recoveryGate` to let it finish.
+  let recoveryStarted = AsyncQueue<Void>()
+  let recoveryGate = AsyncQueue<Void>()
+  private let state = Mutex(State())
+  private let fake: FakeGameClient
+
+  init(fake: FakeGameClient, rosetta: Bool = true) {
+    self.fake = fake
+    state.withLock { $0.rosetta = rosetta }
+  }
+
+  func stallRecovery() { state.withLock { $0.stallsRecovery = true } }
+  func setRosetta(_ installed: Bool) { state.withLock { $0.rosetta = installed } }
+  var rosettaChecks: Int { state.withLock { $0.rosettaChecks } }
+  var recoveries: [Int] { state.withLock { $0.recoveries } }
+
+  var steps: StartupSteps {
+    StartupSteps(
+      rosettaInstalled: { [self] in
+        state.withLock {
+          $0.rosettaChecks += 1
+          return $0.rosetta
+        }
+      },
+      recoverSession: { [self] in
+        if state.withLock({ $0.stallsRecovery }) {
+          recoveryStarted.push(())
+          _ = await recoveryGate.pop()
+        }
+        let reads = fake.statusCalls
+        state.withLock { $0.recoveries.append(reads) }
+      })
+  }
+}
+
+@MainActor
+private struct Harness {
+  let wine: FakeWinePreparer
+  let fake: FakeGameClient
+  let probe: StepsProbe
+  let model: LauncherModel
+  let directory: URL
+  /// The launch watchdog sleeps on this instead of the real clock, like the other launch tests.
+  let sleeper = ManualSleeper()
+  /// Drains `model.events` the way every other launcher test does; an unread stream crashed the CI toolchain.
+  let log: EventLog
+
+  init(wine wineStatus: WineStatus, rosetta: Bool = true) {
+    wine = FakeWinePreparer(status: wineStatus)
+    fake = FakeGameClient(status: installed)
+    probe = StepsProbe(fake: fake, rosetta: rosetta)
+    directory = FileManager.default.temporaryDirectory.appending(path: "LauncherStartupTests-\(UUID().uuidString)")
+    try! FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    let sleeper = sleeper
+    model = LauncherModel(
+      client: fake, wine: wine, startup: probe.steps, gameDirectory: directory, chunkTempMargin: 0,
+      sleep: { try await sleeper.sleep($0) })
+    log = EventLog(model.events)
+  }
+
+  func cleanUp() { try? FileManager.default.removeItem(at: directory) }
+
+  func bootstrapUntilPreparing() async throws -> (task: Task<Void, Never>, install: Int) {
+    let model = model
+    let task = Task { @MainActor in await model.bootstrap() }
+    return (task, try await wine.nextInstall())
+  }
+}
+
+@MainActor @Suite struct APP_001_StartupOrderTests {
+  @Test func APP_001_missingRosettaStopsBeforeAnyWineWork() async throws {
+    let h = Harness(wine: missing, rosetta: false)
+    defer { h.cleanUp() }
+    await h.model.bootstrap()
+    #expect(h.wine.statusCalls == 0)
+    #expect(h.wine.installCount == 0)
+    #expect(h.fake.statusCalls == 0)
+    #expect(h.probe.recoveries.isEmpty)
+    #expect(h.model.isRosettaMissing)
+    #expect(!h.model.hasBootstrapped)
+    #expect(h.model.lastError == .rosettaMissing)
+    #expect(h.model.phase == .idle)
+    await #expect(throws: LauncherError.rosettaMissing) { try await h.model.prepareWine() }
+    #expect(h.wine.installCount == 0)
+  }
+
+  @Test func APP_001_prepareWineBeforeBootstrapStillChecksRosettaFirst() async throws {
+    let h = Harness(wine: missing, rosetta: false)
+    defer { h.cleanUp() }
+    await #expect(throws: LauncherError.rosettaMissing) { try await h.model.prepareWine() }
+    #expect(h.wine.installCount == 0)
+    #expect(h.model.phase == .idle)
+  }
+
+  @Test func APP_001_overlappingBootstrapsWaitForTheSameRecovery() async throws {
+    let h = Harness(wine: .ready)
+    defer { h.cleanUp() }
+    h.probe.stallRecovery()
+    let model = h.model
+    let first = Task { @MainActor in await model.bootstrap() }
+    try await h.probe.recoveryStarted.pop("the recovery to begin")
+    let second = Task { @MainActor in await model.bootstrap() }
+    h.wine.stallsStatus.withLock { $0 = true }
+    try await h.wine.statusQueries.pop("the second bootstrap's Wine status read")
+    h.wine.stallsStatus.withLock { $0 = false }
+    h.wine.statusGate.push(())
+    for _ in 0..<20 { await Task.yield() }
+    #expect(h.fake.statusCalls == 0, "no game status read while the recovery is still running")
+    h.probe.recoveryGate.push(())
+    await first.value
+    await second.value
+    #expect(h.probe.recoveries == [0], "one recovery, finished before any game status read")
+    #expect(h.fake.statusCalls == 2)
+  }
+
+  @Test func APP_001_jobsAndLaunchAreBusyWhileTheRecoveryRuns() async throws {
+    let h = Harness(wine: .ready)
+    defer { h.cleanUp() }
+    h.probe.stallRecovery()
+    let model = h.model
+    let boot = Task { @MainActor in await model.bootstrap() }
+    try await h.probe.recoveryStarted.pop("the recovery to begin")
+    for job in [GameJob.install, .update, .repair, .preDownload] {
+      await #expect(throws: LauncherError.busy, "\(job)") { try await h.model.start(job) }
+    }
+    await #expect(throws: LauncherError.busy) { try await h.model.launch() }
+    await #expect(throws: LauncherError.busy) { try await h.model.prepareWine() }
+    h.probe.recoveryGate.push(())
+    await boot.value
+    #expect(h.fake.runs.isEmpty)
+    try await h.model.start(.install)
+    await h.model.shutdown()
+  }
+
+  @Test func APP_001_shutdownWaitsForARunningRecovery() async throws {
+    let h = Harness(wine: .ready)
+    defer { h.cleanUp() }
+    h.probe.stallRecovery()
+    let model = h.model
+    let boot = Task { @MainActor in await model.bootstrap() }
+    try await h.probe.recoveryStarted.pop("the recovery to begin")
+    let done = AsyncQueue<Void>()
+    let returned = Mutex(false)
+    let shutdown = Task { @MainActor in
+      await model.shutdown()
+      returned.withLock { $0 = true }
+      done.push(())
+    }
+    for _ in 0..<20 { await Task.yield() }
+    #expect(!returned.withLock { $0 }, "shutdown must wait while the recovery runs")
+    h.probe.recoveryGate.push(())
+    try await done.pop("shutdown to return")
+    #expect(h.probe.recoveries.count == 1, "shutdown returned only after the recovery had finished")
+    await boot.value
+    await shutdown.value
+  }
+
+  @Test func APP_001_bootstrapContinuesOnceRosettaIsInstalled() async throws {
+    let h = Harness(wine: .ready, rosetta: false)
+    defer { h.cleanUp() }
+    await h.model.bootstrap()
+    h.probe.setRosetta(true)
+    await h.model.bootstrap()
+    #expect(!h.model.isRosettaMissing)
+    #expect(h.model.hasBootstrapped)
+    #expect(h.model.lastError == nil)
+    #expect(h.model.status == installed)
+    #expect(h.probe.recoveries == [0])
+  }
+
+  @Test func APP_001_recoverRunsAfterWineIsReadyAndBeforeTheGameStatusRead() async throws {
+    let h = Harness(wine: .ready)
+    defer { h.cleanUp() }
+    await h.model.bootstrap()
+    #expect(h.probe.recoveries == [0], "recover must have run before the first game status read")
+    #expect(h.fake.statusCalls == 1)
+    #expect(h.model.hasBootstrapped)
+  }
+
+  @Test func APP_001_recoverRunsAfterAWinePreparationToo() async throws {
+    let h = Harness(wine: missing)
+    defer { h.cleanUp() }
+    let (task, install) = try await h.bootstrapUntilPreparing()
+    #expect(h.probe.recoveries.isEmpty, "no recovery while Wine is missing: there is no wineserver yet")
+    h.wine.finish(install: install)
+    await task.value
+    #expect(h.probe.recoveries == [0])
+    #expect(h.fake.statusCalls == 1)
+  }
+
+  @Test func APP_001_failedPreparationRecoversNothing() async throws {
+    let h = Harness(wine: missing)
+    defer { h.cleanUp() }
+    let (task, install) = try await h.bootstrapUntilPreparing()
+    h.wine.fail(install: install, throwing: WineInstallError.dxmtArchiveInvalid)
+    await task.value
+    #expect(h.probe.recoveries.isEmpty)
+  }
+
+  @Test func APP_001_recoverRunsOncePerRun() async throws {
+    let h = Harness(wine: .ready)
+    defer { h.cleanUp() }
+    await h.model.bootstrap()
+    h.wine.setStatus(missing)
+    await h.model.refreshWine()
+    try await h.model.prepareWine()
+    let install = try await h.wine.nextInstall()
+    h.wine.finish(install: install)
+    await h.model.waitUntilIdle()
+    await h.model.bootstrap()
+    #expect(h.probe.recoveries == [0], "a later preparation must not replay the journal of a game that may run")
+  }
+
+  @Test func APP_001_launcherWithoutStartupStepsSkipsThem() async throws {
+    let model = LauncherModel(client: FakeGameClient(status: installed), wine: FakeWinePreparer(status: .ready))
+    await model.bootstrap()
+    #expect(model.hasBootstrapped)
+    #expect(!model.isRosettaMissing)
+  }
+}

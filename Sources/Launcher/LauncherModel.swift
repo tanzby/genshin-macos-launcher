@@ -16,6 +16,8 @@ public enum LauncherError: Error, Sendable, Equatable {
   case wineNotReady
   /// Wine preparation failed for a reason other than network, verification or disk space.
   case wineInstall(WineInstallError)
+  /// Rosetta 2 is not installed, so Wine cannot run. Install it, then reopen the window.
+  case rosettaMissing
   case noGameDirectory
   case notInstalled
   case offline
@@ -58,6 +60,9 @@ public enum JobEvent: Sendable, Equatable {
 public final class LauncherModel {
   public private(set) var status: GameStatus?
   public private(set) var wineStatus: WineStatus?
+  /// `bootstrap()` got past the Rosetta check. The window runs it again until this is true.
+  public private(set) var hasBootstrapped = false
+  public private(set) var isRosettaMissing = false
   public private(set) var isOnline = false
   public private(set) var isPreDownloading = false
   public private(set) var isPausing = false
@@ -65,6 +70,8 @@ public final class LauncherModel {
   public private(set) var pendingJob: PendingJob?
   public private(set) var lastError: LauncherError?
   public var gameDirectory: URL?
+  /// Snapshots the settings for a launch. The composition root replaces it with one that reads `SettingsModel`.
+  public var makeLaunchOptions: @MainActor (URL) -> LaunchOptions = { LaunchOptions(gameDirectory: $0) }
 
   /// The exclusive slot; pre-download has its own flag.
   private var exclusive: LauncherPhase = .idle
@@ -99,6 +106,7 @@ public final class LauncherModel {
 
   private let client: any GameClient
   private let wine: (any WinePreparing)?
+  private let startup: StartupSteps?
   private let launchTimeout: Duration
   private let chunkTempMargin: Int64
   private let availableDiskSpace: @Sendable (URL) -> Int64?
@@ -110,24 +118,40 @@ public final class LauncherModel {
   private var isShuttingDown = false
   private var launchWork: Task<LaunchOutcome, Error>?
   private var statusRead: Task<Void, Never>?
+  /// The error the last `refresh()` put into `lastError`, so a later good refresh can take it away again.
+  private var refreshFailure: LauncherError?
+  /// `GameSession.recover()` has run in this process; it must not run again while a game may be running.
+  private var hasRecovered = false
+  private var recovery: Task<Void, Never>?
+  /// The game launch found Wine broken although the stamp says ready; only a reinstall clears it.
+  private var needsForcedReinstall = false
 
   public init(
     client: any GameClient,
     wine: (any WinePreparing)? = nil,
+    startup: StartupSteps? = nil,
     gameDirectory: URL? = nil,
     launchTimeout: Duration = LauncherModel.defaultLaunchTimeout,
     chunkTempMargin: Int64 = LauncherModel.defaultChunkTempMargin,
     availableDiskSpace: @escaping @Sendable (URL) -> Int64? = LauncherModel.systemAvailableCapacity,
-    sleep: @escaping @Sendable (Duration) async throws -> Void = { try await Task.sleep(for: $0) }
+    sleep: @escaping @Sendable (Duration) async throws -> Void = LauncherModel.defaultSleep
   ) {
     self.client = client
     self.wine = wine
+    self.startup = startup
     self.gameDirectory = gameDirectory
     self.launchTimeout = launchTimeout
     self.chunkTempMargin = chunkTempMargin
     self.availableDiskSpace = availableDiskSpace
     self.sleep = sleep
     (events, eventSink) = AsyncStream.makeStream()
+  }
+
+  /// A named function, not a closure literal in the default argument: with a closure literal there,
+  /// Xcode 26.6's runtime trapped ("freed pointer was not the last allocation") in suites that build a
+  /// `LauncherModel` without passing `sleep` (issue #48).
+  nonisolated public static func defaultSleep(_ duration: Duration) async throws {
+    try await Task.sleep(for: duration)
   }
 
   /// Free bytes on the volume holding `url`, or on its nearest existing ancestor when it does not exist yet.
@@ -142,13 +166,17 @@ public final class LauncherModel {
 
   // MARK: Status
 
-  /// The startup sequence from ADR 0002, as far as this module owns it: Wine first, then the game status.
-  /// A missing Wine is prepared here, so the game status is only read once Wine is ready; if the preparation
-  /// is paused or fails, `bootstrap()` returns without reading it (`lastError` and `events` say why).
+  /// The startup sequence from ADR 0002, as far as this module owns it: Rosetta, Wine, recovery, game status.
+  /// Without Rosetta it stops before any Wine work (`lastError == .rosettaMissing`); call it again to retry.
+  /// A missing Wine is prepared here, so recovery and the game status only come once Wine is ready; if the
+  /// preparation is paused or fails, `bootstrap()` returns without them (`lastError` and `events` say why).
   public func bootstrap() async {
     guard exclusive == .idle, !isPausing, !isShuttingDown else { return }
+    guard await rosettaIsAvailable() else { return }
+    hasBootstrapped = true
     await refreshWine()
     guard isWineMissing else {
+      await recoverOnce()
       await refresh()
       return
     }
@@ -165,17 +193,61 @@ public final class LauncherModel {
   /// Re-reads the Wine state from the disk. Without a `WinePreparing` the launcher assumes Wine is fine.
   public func refreshWine() async {
     guard let wine else { return }
-    wineStatus = await wine.status()
+    let status = await wine.status()
+    // A launch that found Wine broken outranks the stamp: only a successful reinstall clears the request.
+    wineStatus = needsForcedReinstall && status == .ready ? Self.reportedByLaunch : status
+  }
+
+  /// Re-checks Rosetta (when there is a check to make) and records the result. False: `lastError` says why.
+  private func rosettaIsAvailable() async -> Bool {
+    guard let startup else { return true }
+    isRosettaMissing = !(await startup.rosettaInstalled())
+    if isRosettaMissing {
+      lastError = .rosettaMissing
+    } else if lastError == .rosettaMissing {
+      lastError = nil
+    }
+    return !isRosettaMissing
+  }
+
+  /// The game launch found Wine broken although the stamp says ready: Wine counts as missing until a
+  /// reinstall succeeds, and the main button goes back to "prepare Wine".
+  func requireWineReinstall() {
+    needsForcedReinstall = true
+    wineStatus = Self.reportedByLaunch
+  }
+
+  private static let reportedByLaunch = WineStatus.needsInstall(.corrupt(missing: "reported by the game launch"))
+
+  /// Runs `recover()` once per process. Overlapping callers share the one running recovery and all wait for
+  /// it; it counts as done only after it has returned, so nothing reads the game state before. While it runs
+  /// every job and launch entry answers `busy` (it kills the prefix and rewrites game files).
+  private func recoverOnce() async {
+    guard !hasRecovered, let startup else { return }
+    let task = recovery ?? Task { await startup.recoverSession() }
+    recovery = task
+    await task.value
+    hasRecovered = true
+    recovery = nil
   }
 
   /// A failed query keeps the previous status: offline must not turn an installed game into "install".
   public func refresh() async {
+    client.setGameDirectory(gameDirectory)
     do {
       let fresh = try await client.status()
       status = fresh
       isOnline = !(fresh.remoteVersion ?? "").isEmpty
+      if refreshFailure != nil, lastError == refreshFailure { lastError = nil }
+      refreshFailure = nil
     } catch {
       isOnline = false
+      // Offline is a state of its own; anything else (a broken install) needs to be seen.
+      let failure = LauncherError(error)
+      if failure != .client(.network), failure != .client(.cancelled) {
+        lastError = failure
+        refreshFailure = failure
+      }
     }
     if let store = store { pendingJob = store.load() }
   }
@@ -187,7 +259,7 @@ public final class LauncherModel {
   // MARK: Jobs
 
   public func start(_ job: GameJob) async throws {
-    guard !isPausing, !isShuttingDown else { throw LauncherError.busy }
+    guard !isPausing, !isShuttingDown, recovery == nil else { throw LauncherError.busy }
     if job == .preDownload {
       try await startPreDownload()
     } else {
@@ -261,7 +333,8 @@ public final class LauncherModel {
   }
 
   private func begin(_ job: GameJob, store: PendingJobStore) throws -> AsyncThrowingStream<JobProgress, Error> {
-    let pending = PendingJob(kind: job, targetVersion: status?.remoteVersion)
+    client.setGameDirectory(store.gameDirectory)
+    let pending = PendingJob(kind: job, targetVersion: job == .preDownload ? status?.preDownloadTarget : status?.remoteVersion)
     // A pre-download must not replace the marker of an unfinished install/update/repair: that one blocks launch.
     if job == .preDownload, let existing = store.load(), existing.kind != .preDownload {
       progress = .preparing
@@ -326,6 +399,8 @@ public final class LauncherModel {
     if preDownload { tasks += [preDownloadTask].compactMap { $0 } }
     for task in tasks { task.cancel() }
     for task in tasks { await task.value }
+    // The streams are over, but the work behind them may still be finishing a file.
+    await client.quiesce()
   }
 
   private func stopPreDownload() async {
@@ -335,6 +410,7 @@ public final class LauncherModel {
   private func checkDiskSpace(for job: GameJob, in directory: URL) async throws {
     let bytes: Int64
     do {
+      client.setGameDirectory(directory)
       bytes = try await client.requiredDiskSpace(for: job)
     } catch {
       if Task.isCancelled || error is CancellationError { throw CancellationError() }
@@ -370,6 +446,8 @@ public final class LauncherModel {
     launchWork?.cancel()
     statusRead?.cancel()
     await cancelAndWait(exclusive: true, preDownload: true)
+    // The recovery is cleanup (kills the prefix, replays the journal): never cancel it, but do not quit mid-way.
+    await recovery?.value
   }
 
   // MARK: Wine
@@ -377,7 +455,10 @@ public final class LauncherModel {
   /// Prepares Wine in the exclusive slot. Returns once the Task is running; a no-op when Wine is ready.
   /// Pause is cancel-and-await. The downloads keep their `.part` files, so calling this again resumes.
   public func prepareWine() async throws {
-    guard !isPausing, !isShuttingDown, exclusive == .idle else { throw LauncherError.busy }
+    // Pressed before `bootstrap()` got to the Rosetta check: do it here, the 2 GB download must not come first.
+    if !hasBootstrapped, !(await rosettaIsAvailable()) { throw LauncherError.rosettaMissing }
+    guard !isPausing, !isShuttingDown, exclusive == .idle, recovery == nil else { throw LauncherError.busy }
+    guard !isRosettaMissing else { throw LauncherError.rosettaMissing }
     guard let wine, wineStatus != .ready else { return }
     exclusive = .preparingWine  // claim before any await so nothing else can slip in
     lastError = nil
@@ -393,13 +474,18 @@ public final class LauncherModel {
       options: [.userInitiated, .idleSystemSleepDisabled], reason: "Yaagl Wine preparation")
     let (updates, sink) = AsyncStream<WineInstallProgress>.makeStream(bufferingPolicy: .bufferingNewest(1))  // only the latest progress matters
     var failure: Error?
+    let forced = needsForcedReinstall
     // A task group, so cancelling this Task cancels the install; `updates` ends when the install returns.
     await withTaskGroup(of: (any Error)?.self) { group in
       group.addTask {
         defer { sink.finish() }
         do {
           try Task.checkCancellation()  // paused while waiting for a pre-download: do not begin the install
-          try await wine.ensureInstalled { sink.yield($0) }
+          if forced {
+            try await wine.reinstall { sink.yield($0) }
+          } else {
+            try await wine.ensureInstalled { sink.yield($0) }
+          }
           return nil
         } catch {
           return error
@@ -410,20 +496,16 @@ public final class LauncherModel {
     }
     let error = failure.map(LauncherError.init)
     let paused = Task.isCancelled || failure is CancellationError || error == .client(.cancelled)
-    if paused {
-      await refreshWine()  // not ready: the next attempt starts from the stamp and the `.part` files
-    } else if let error {
-      lastError = error
-      await refreshWine()
-      eventSink.yield(.wineFailed(error))
-    } else {
-      await refreshWine()
-      if isWineMissing {
-        let error = LauncherError.unexpected("Wine is still not ready after installation")
-        lastError = error
-        eventSink.yield(.wineFailed(error))
+    if failure == nil { needsForcedReinstall = false }
+    await refreshWine()  // after a pause or failure still not ready: the next attempt starts from the stamp and the `.part` files
+    if !paused {
+      let failed = error ?? (isWineMissing ? .unexpected("Wine is still not ready after installation") : nil)
+      if let failed {
+        lastError = failed
+        eventSink.yield(.wineFailed(failed))
       } else {
         progress = .preparing
+        await recoverOnce()
         // The game status is only read once Wine is ready. Wine is installed by now, so a pause must not
         // cancel this read (it would leave `status` nil and offer "install"); only shutdown does.
         if !isShuttingDown {
@@ -444,7 +526,8 @@ public final class LauncherModel {
   // MARK: Launch
 
   public func launch() async throws {
-    guard exclusive == .idle, !isPausing, !isShuttingDown else { throw LauncherError.busy }
+    client.setGameDirectory(gameDirectory)
+    guard exclusive == .idle, !isPausing, !isShuttingDown, recovery == nil else { throw LauncherError.busy }
     guard !isWineNotReady else { throw LauncherError.wineNotReady }
     guard let status, status.localVersion != nil else { throw LauncherError.notInstalled }
     guard let gameDirectory else { throw LauncherError.noGameDirectory }
@@ -456,7 +539,7 @@ public final class LauncherModel {
     let gate = LaunchGate()
     launchGate = gate
     let client = client
-    let options = LaunchOptions(gameDirectory: gameDirectory)
+    let options = makeLaunchOptions(gameDirectory)
     let onStarted: @Sendable () -> Void = { [weak self] in
       // Only the callback that beats the timeout may switch the phase to running.
       guard gate.markStarted() else { return }
@@ -498,6 +581,7 @@ public final class LauncherModel {
     if let failure {
       lastError = failure
       eventSink.yield(.launchFailed(failure))
+      if failure == .client(.wineReinstallRequired) { requireWineReinstall() }
     }
     launchGate = nil
     launchWork = nil

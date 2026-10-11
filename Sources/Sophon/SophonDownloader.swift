@@ -25,8 +25,8 @@ public struct SophonDownloadConfiguration: Sendable, Equatable {
 /// Downloads, verifies and assembles the files of a chunk manifest. Every call is idempotent:
 /// cancelling it (pause) and calling again with the same arguments continues from what is on disk.
 public struct SophonDownloader: Sendable {
-  private let session: URLSession
-  private let configuration: SophonDownloadConfiguration
+  let session: URLSession
+  let configuration: SophonDownloadConfiguration
 
   public init(session: URLSession = .shared, configuration: SophonDownloadConfiguration = .init()) {
     self.session = session
@@ -45,6 +45,51 @@ public struct SophonDownloader: Sendable {
     progress: @escaping @Sendable (SophonProgress) -> Void
   ) async throws {
     // Validate everything first: a hostile manifest must fail before the first request.
+    let (chunkBase, targets) = try Self.validate(files, using: ref, into: gameDirectory)
+    for file in files where file.isDirectory {
+      let directory = try SophonPathPolicy.resolve(file.path, in: gameDirectory)
+      try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    }
+
+    let total = targets.reduce(Int64(0)) { $0 + Self.compressedSize(of: $1.file) }
+    let reporter = ProgressReporter(total: total, interval: configuration.progressInterval, report: progress)
+    progress(.preparing)
+
+    // INS-007: manifest files first so an interrupted install is still recognisable.
+    let ordered = targets.enumerated().sorted { lhs, rhs in
+      let l = Self.priority(lhs.element.file.path)
+      let r = Self.priority(rhs.element.file.path)
+      return l != r ? l < r : lhs.offset < rhs.offset
+    }.map(\.element)
+
+    let worker = FileWorker(
+      session: session, chunkBase: chunkBase, chunkSuffix: ref.chunkURLSuffix,
+      gameDirectory: gameDirectory, tempDirectory: tempDirectory)
+    let limit = max(1, configuration.concurrency)
+    let config = configuration
+
+    try await withThrowingTaskGroup(of: Void.self) { group in
+      var iterator = ordered.makeIterator()
+      func submit() -> Bool {
+        guard let item = iterator.next() else { return false }
+        group.addTask {
+          try await Self.process(item.file, to: item.destination, worker: worker, reporter: reporter, config: config)
+        }
+        return true
+      }
+      for _ in 0..<limit { if !submit() { break } }
+      while try await group.next() != nil { _ = submit() }
+    }
+    reporter.finish(.downloading(done: total, total: total))
+    // Only the empty cache folder goes: chunks of other files may be a pre-download waiting for its update.
+    rmdir(worker.chunkRoot.path)
+    try? FileManager.default.removeItem(at: worker.assemblyRoot)
+  }
+
+  /// Checks every entry (paths, chunk ids and sizes, aliases) and returns the files to download.
+  static func validate(_ files: [SophonFile], using ref: SophonManifestRef, into gameDirectory: URL) throws
+    -> (chunkBase: String, targets: [(file: SophonFile, destination: URL)])
+  {
     let chunkBase = try Self.chunkBase(of: ref)
     var targets: [(file: SophonFile, destination: URL)] = []
     var seen: [String: String] = [:]  // standardised destination -> file MD5
@@ -87,43 +132,7 @@ public struct SophonDownloader: Sendable {
         ancestor = (ancestor as NSString).deletingLastPathComponent
       }
     }
-    for file in files where file.isDirectory {
-      let directory = try SophonPathPolicy.resolve(file.path, in: gameDirectory)
-      try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-    }
-
-    let total = targets.reduce(Int64(0)) { $0 + Self.compressedSize(of: $1.file) }
-    let reporter = ProgressReporter(total: total, interval: configuration.progressInterval, report: progress)
-    progress(.preparing)
-
-    // INS-007: manifest files first so an interrupted install is still recognisable.
-    let ordered = targets.enumerated().sorted { lhs, rhs in
-      let l = Self.priority(lhs.element.file.path)
-      let r = Self.priority(rhs.element.file.path)
-      return l != r ? l < r : lhs.offset < rhs.offset
-    }.map(\.element)
-
-    let worker = FileWorker(
-      session: session, chunkBase: chunkBase, chunkSuffix: ref.chunkURLSuffix,
-      gameDirectory: gameDirectory, tempDirectory: tempDirectory)
-    let limit = max(1, configuration.concurrency)
-    let config = configuration
-
-    try await withThrowingTaskGroup(of: Void.self) { group in
-      var iterator = ordered.makeIterator()
-      func submit() -> Bool {
-        guard let item = iterator.next() else { return false }
-        group.addTask {
-          try await Self.process(item.file, to: item.destination, worker: worker, reporter: reporter, config: config)
-        }
-        return true
-      }
-      for _ in 0..<limit { if !submit() { break } }
-      while try await group.next() != nil { _ = submit() }
-    }
-    reporter.finish(.downloading(done: total, total: total))
-    try? FileManager.default.removeItem(at: worker.chunkRoot)
-    try? FileManager.default.removeItem(at: worker.assemblyRoot)
+    return (chunkBase, targets)
   }
 
   /// The files that are missing, have the wrong size or the wrong MD5 (REP-003).
@@ -167,14 +176,14 @@ public struct SophonDownloader: Sendable {
 
   // MARK: - Internals
 
-  private static func chunkBase(of ref: SophonManifestRef) throws -> String {
+  static func chunkBase(of ref: SophonManifestRef) throws -> String {
     guard var prefix = ref.chunkURLPrefix else { throw SophonError.malformedResponse }
     while prefix.hasSuffix("/") { prefix.removeLast() }
     guard URL(string: prefix)?.scheme == "https" else { throw SophonError.malformedResponse }
     return prefix
   }
 
-  private static func compressedSize(of file: SophonFile) -> Int64 {
+  static func compressedSize(of file: SophonFile) -> Int64 {
     file.chunks.reduce(Int64(0)) { $0 + Int64($1.compressedSize) }
   }
 
@@ -199,15 +208,26 @@ public struct SophonDownloader: Sendable {
   ) async throws {
     if try await Offload.run({ try isIntact(file, at: destination, cancelled: $0) }) {
       reporter.add(compressedSize(of: file))
+      // Chunks a pre-download left for this file are not needed any more.
+      try? FileManager.default.removeItem(
+        at: worker.chunkRoot.appending(path: SophonDownloaderLayout.fileKey(for: file.path), directoryHint: .isDirectory))
       return
     }
+    let chunkProgress = reporter.progress(forFile: file)
+    try await retrying(config) {
+      try await worker.fetch(file, to: destination, reporter: chunkProgress)
+    }
+  }
+
+  /// Runs `operation` up to `maxAttempts` times with exponential backoff (INS-010). Cancellation and
+  /// errors that asking again cannot fix end it at once.
+  static func retrying(_ config: SophonDownloadConfiguration, _ operation: () async throws -> Void) async throws {
     var delay = config.retryDelay
     var attempt = 1
-    let chunkProgress = reporter.progress(forFile: file)
     while true {
       try Task.checkCancellation()
       do {
-        try await worker.fetch(file, to: destination, reporter: chunkProgress)
+        try await operation()
         return
       } catch {
         if error is CancellationError || (error as? URLError)?.code == .cancelled {
@@ -222,7 +242,7 @@ public struct SophonDownloader: Sendable {
   }
 
   /// 4xx other than "slow down" will not change by asking again; path and manifest errors neither.
-  private static func isRetryable(_ error: any Error) -> Bool {
+  static func isRetryable(_ error: any Error) -> Bool {
     switch error {
     case SophonError.http(let status): return status >= 500 || status == 408 || status == 416 || status == 429
     case SophonError.unsafePath, SophonError.invalidManifest, SophonError.noMatchingCategory,
@@ -236,7 +256,7 @@ public struct SophonDownloader: Sendable {
 /// Downloads the chunks of one file into the cache, decompresses them into an assembly file and
 /// moves the verified result into place. Paths in the temp directory come from a digest of the
 /// relative path, so equal basenames in different folders never collide.
-private struct FileWorker: Sendable {
+struct FileWorker: Sendable {
   let session: URLSession
   let chunkBase: String
   let chunkSuffix: String
@@ -309,28 +329,38 @@ private struct FileWorker: Sendable {
 
   /// Makes `cached` hold the complete compressed chunk, resuming with `Range` when part of it is there.
   private func downloadChunk(_ chunk: SophonChunk, to cached: URL, reporter: ChunkProgress) async throws -> Data {
+    try await ResourceFetcher(session: session).fetch(
+      name: chunk.id, url: try SophonDownloaderLayout.resourceURL(base: chunkBase, name: chunk.id, suffix: chunkSuffix),
+      expected: Int64(chunk.compressedSize), to: cached, reporter: reporter)
+    return try Data(contentsOf: cached)
+  }
+
+}
+
+/// Downloads one resource (a chunk or an ldiff file) into `cached`, resuming with `Range` when part of
+/// it is already there. On return the file holds exactly `expected` bytes.
+struct ResourceFetcher: Sendable {
+  let session: URLSession
+
+  func fetch(name: String, url: URL, expected: Int64, to cached: URL, reporter: ChunkProgress) async throws {
     let fileManager = FileManager.default
-    let expected = Int64(chunk.compressedSize)
     var have = Self.size(of: cached)
     if have > expected {
       try? fileManager.removeItem(at: cached)
       have = 0
     }
     if have == expected {
-      reporter.set(chunk.id, expected)
-      return try Data(contentsOf: cached)
+      reporter.set(name, expected)
+      return
     }
 
-    guard let id = chunk.id.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed),
-      let url = URL(string: "\(chunkBase)/\(id)\(chunkSuffix)")
-    else { throw SophonError.malformedResponse }
     var request = URLRequest(url: url)
     request.timeoutInterval = 30
     if have > 0 { request.setValue("bytes=\(have)-", forHTTPHeaderField: "Range") }
 
     // Cached bytes count as done from the start, so the corrections below stay consistent.
-    reporter.set(chunk.id, have)
-    let stream = ChunkStream(session: session, request: request, expected: expected, have: have, name: chunk.id)
+    reporter.set(name, have)
+    let stream = ChunkStream(session: session, request: request, expected: expected, have: have, name: name)
     defer { stream.cancel() }
     var handle: FileHandle?
     var written: Int64 = 0
@@ -343,11 +373,11 @@ private struct FileWorker: Sendable {
           case 206 where have > 0: break
           case 200:
             // The server ignored Range (or we asked for everything): start over.
-            reporter.set(chunk.id, 0)
+            reporter.set(name, 0)
             have = 0
           case 416:
             try? fileManager.removeItem(at: cached)
-            reporter.set(chunk.id, 0)
+            reporter.set(name, 0)
             throw SophonError.http(status: 416)
           default:
             throw SophonError.http(status: http.statusCode)
@@ -365,12 +395,12 @@ private struct FileWorker: Sendable {
             try? handle?.close()
             handle = nil
             try? fileManager.removeItem(at: cached)
-            reporter.set(chunk.id, 0)
-            throw SophonError.checksumMismatch(path: chunk.id)
+            reporter.set(name, 0)
+            throw SophonError.checksumMismatch(path: name)
           }
           // Written as it arrives: after a broken connection the next attempt resumes from here.
           try handle?.write(contentsOf: block)
-          reporter.set(chunk.id, written)
+          reporter.set(name, written)
         }
       }
     } catch let error as URLError {
@@ -386,14 +416,12 @@ private struct FileWorker: Sendable {
     try handle?.close()
     handle = nil
 
-    let data = try Data(contentsOf: cached)
-    guard Int64(data.count) == expected else {
+    guard Self.size(of: cached) == expected else {
       // Short or long body: drop it so the next attempt starts clean.
       try? fileManager.removeItem(at: cached)
-      reporter.set(chunk.id, 0)
-      throw SophonError.checksumMismatch(path: chunk.id)
+      reporter.set(name, 0)
+      throw SophonError.checksumMismatch(path: name)
     }
-    return data
   }
 
   private static func size(of url: URL) -> Int64 {
@@ -403,7 +431,7 @@ private struct FileWorker: Sendable {
 
 /// One streaming GET. A delegate hands over each network block; `bytes(for:)` would cost an async
 /// hop per byte. Cancelling the consuming task cancels the request.
-private final class ChunkStream: NSObject, URLSessionDataDelegate, @unchecked Sendable {
+final class ChunkStream: NSObject, URLSessionDataDelegate, @unchecked Sendable {
   enum Event: Sendable {
     case response(HTTPURLResponse)
     case data(Data)
@@ -473,7 +501,7 @@ private final class ChunkStream: NSObject, URLSessionDataDelegate, @unchecked Se
 /// What each chunk of one file has contributed to the overall count. It outlives a failed attempt:
 /// the retry sets the same chunk's value again, so cached bytes are never counted twice and the
 /// total only goes down when data is really thrown away.
-private final class ChunkProgress: @unchecked Sendable {
+final class ChunkProgress: @unchecked Sendable {
   private let reporter: ProgressReporter
   private var counted: [String: Int64] = [:]
 
@@ -487,7 +515,7 @@ private final class ChunkProgress: @unchecked Sendable {
 }
 
 /// Counts compressed bytes and forwards `.downloading` at most once per interval.
-private final class ProgressReporter: @unchecked Sendable {
+final class ProgressReporter: @unchecked Sendable {
   private let total: Int64
   private let interval: Duration
   private let report: @Sendable (SophonProgress) -> Void
@@ -519,7 +547,7 @@ private final class ProgressReporter: @unchecked Sendable {
 }
 
 /// Thread-safe, throttled `.verifying` reporter.
-private final class VerifyCounter: @unchecked Sendable {
+final class VerifyCounter: @unchecked Sendable {
   private let total: Int64
   private let interval: Duration
   private let report: @Sendable (SophonProgress) -> Void
@@ -549,6 +577,14 @@ enum SophonDownloaderLayout {
   static func fileKey(for path: String) -> String { MD5Hasher.hex(of: Data(path.utf8)) }
 
   static let maxChunkSize: UInt32 = 64 << 20
+
+  /// `<base>/<name><suffix>` with the name percent-encoded; `base` has no trailing slash.
+  static func resourceURL(base: String, name: String, suffix: String) throws -> URL {
+    guard let id = name.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed),
+      let url = URL(string: "\(base)/\(id)\(suffix)")
+    else { throw SophonError.malformedResponse }
+    return url
+  }
 
   static func isSafeName(_ name: String) -> Bool {
     !name.isEmpty && !name.contains("/") && !name.contains("\\") && !name.contains("..")

@@ -27,7 +27,21 @@ Implementation (setting "Native full screen + Game Mode", on by default, `config
 
 `Wine.shutdown()` runs `wineserver -k`, then kills every process of the prefix. A process belongs to the prefix if it maps files from `/tmp/.wine-<uid>/server-<dev>-<inode of prefix>`, or if its working directory is inside the prefix. The second rule catches orphans whose wineserver died, such as `winedevice.exe`. Shutdown runs before each launch. After the game exits, the launcher waits at most 15 s for Wine to exit on its own before forcing shutdown.
 
-## Verification
+## Verification (native app)
+
+`scripts/diag/yaagl-diag` prints text only. It drives one built `Yaagl.app` black-box and never touches `~/Library/Application Support/Yaagl`: the app is started with `--autolaunch --data-dir <isolated dir>` (also `YAAGL_AUTOLAUNCH=1`, `YAAGL_DATA_DIR`, `YAAGL_GAME_DIR` / `--game-dir`). The app prepares Wine, installs or takes over the game, launches it, quits when the game exits and writes `logs/launcher.log` in the data dir (`autolaunch: result=ok|failed reason=…`). The Python tool then checks, per parity rule ID (`docs/parity/hk4e-cn.md`), the Wine processes, windows, `gamehost.log`, the prefix registry and `/etc/hosts`, and prints `CHECK <rule> PASS|FAIL|SKIP` lines and `DIAG verdict=…`.
+
+```bash
+xcodebuild -project Yaagl.xcodeproj -scheme Yaagl -configuration Debug -derivedDataPath build/DerivedData build
+scripts/diag/yaagl-diag run --app build/DerivedData/Build/Products/Debug/Yaagl.app --autoplay --close-after 30 --timeout 7200
+scripts/diag/yaagl-diag run --app … --screen-check     # notch: needs Screen Recording for the calling terminal
+scripts/diag/yaagl-diag ps; scripts/diag/yaagl-diag kill
+```
+
+Only one game may run at a time: the tool refuses to start when any Wine process exists. It prints `WAITING maintainer: hosts-password | game-login` when a step needs the maintainer (the admin password dialog for `/etc/hosts`, the miHoYo login). `--autoplay` and `--screen-check` load the development companion (`Helpers/build.sh --dev`) into a copy of the app. The sections below describe the old tool's modes and results; the checks keep the same meaning.
+
+## Verification (old TS tool)
+
 
 `scripts/dev/yaagl-diag` prints text only. With `--launch`, it starts Yaagl using `YAAGL_AUTOLAUNCH=1` (no clicks). Yaagl then quits after the game exits and its patches are reverted. The tool always cleans up the prefix when it finishes.
 

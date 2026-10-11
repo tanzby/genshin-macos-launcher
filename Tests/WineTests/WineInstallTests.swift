@@ -130,10 +130,13 @@ private let thumbprint = "F09065E2D57F005BBD975DDCF9EB63F570764F17"
       var options = WineHarnessOptions()
       options.downloadDelay = .milliseconds(200)
       let h = try makeWineHarness(in: dir, options: options)
-      async let a: Void = h.runtime.ensureInstalled()
-      async let b: Void = h.runtime.ensureInstalled()
-      try await a
-      try await b
+      // Plain Tasks, not `async let`: Xcode 26.6's runtime intermittently traps ("freed pointer was not the
+      // last allocation") on the stack-allocated child tasks of an `async let`.
+      let runtime = h.runtime
+      let a = Task { try await runtime.ensureInstalled() }
+      let b = Task { try await runtime.ensureInstalled() }
+      try await a.value
+      try await b.value
       #expect(h.downloader.count(of: h.fixtures.distribution.url) == 1)
       #expect(h.downloader.count(of: h.fixtures.dxmt.zipURL) == 1)
       #expect(h.runner.wineCalls.filter { $0.arguments.first == "wineboot" }.count == 1)
