@@ -229,26 +229,12 @@ public final class LauncherModel {
     if job == .repair, status?.canUpdate == true { throw LauncherError.updateRequired }
     guard let store else { throw LauncherError.noGameDirectory }
     jobs.claim(job.exclusivePhase)  // claim before any await so nothing else can slip in
-    lastError = nil
-    // One Task covers preflight and the job, so pause()/shutdown() always find a handle to cancel and await.
-    let (ready, readySink) = AsyncThrowingStream<Void, Error>.makeStream()
-    jobs.exclusiveTask = Task {
-      let stream: AsyncThrowingStream<JobProgress, Error>
-      do {
-        await stopPreDownload()
-        try Task.checkCancellation()
-        try await checkDiskSpace(for: job, in: store.gameDirectory)
-        try Task.checkCancellation()
-        stream = try begin(job, store: store)
-      } catch {
-        jobs.release(preDownload: false)
-        readySink.finish(throwing: error)
-        return
-      }
-      readySink.finish()
-      await drive(job, stream: stream, store: store)
+    try await spawn(job, store: store, preDownload: false) {
+      await self.stopPreDownload()
+      try Task.checkCancellation()
+      try await self.checkDiskSpace(for: job, in: store.gameDirectory)
+      try Task.checkCancellation()
     }
-    do { for try await _ in ready {} } catch is CancellationError { return }  // paused before the job began
   }
 
   private func startPreDownload() async throws {
@@ -258,27 +244,36 @@ public final class LauncherModel {
     guard status?.canPreDownload == true else { throw LauncherError.preDownloadUnavailable }
     guard let store else { throw LauncherError.noGameDirectory }
     jobs.claimPreDownload()
+    try await spawn(.preDownload, store: store, preDownload: true) {
+      try await self.checkDiskSpace(for: .preDownload, in: store.gameDirectory)
+      try Task.checkCancellation()
+      // Starting install/update/repair during the check would have claimed the slot first.
+      guard self.jobs.allowsPreDownload else { throw LauncherError.busy }
+    }
+  }
+
+  /// Runs `preflight`, then the job, in one Task, so pause()/shutdown() always find a handle to cancel and
+  /// await. Returns once the job has begun; a failed preflight releases the slot and throws.
+  private func spawn(
+    _ job: GameJob, store: PendingJobStore, preDownload: Bool, preflight: @escaping () async throws -> Void
+  ) async throws {
     lastError = nil
     let (ready, readySink) = AsyncThrowingStream<Void, Error>.makeStream()
-    jobs.preDownloadTask = Task {
+    let task = Task {
       let stream: AsyncThrowingStream<JobProgress, Error>
       do {
-        try await checkDiskSpace(for: .preDownload, in: store.gameDirectory)
-        try Task.checkCancellation()
-        // Starting install/update/repair during the check would have claimed the slot first.
-        guard jobs.allowsPreDownload else {
-          throw LauncherError.busy
-        }
-        stream = try begin(.preDownload, store: store)
+        try await preflight()
+        stream = try self.begin(job, store: store)
       } catch {
-        jobs.release(preDownload: true)
+        self.jobs.release(preDownload: preDownload)
         readySink.finish(throwing: error)
         return
       }
       readySink.finish()
-      await drive(.preDownload, stream: stream, store: store)
+      await self.drive(job, stream: stream, store: store)
     }
-    do { for try await _ in ready {} } catch is CancellationError { return }
+    if preDownload { jobs.preDownloadTask = task } else { jobs.exclusiveTask = task }
+    do { for try await _ in ready {} } catch is CancellationError { return }  // paused before the job began
   }
 
   private func begin(_ job: GameJob, store: PendingJobStore) throws -> AsyncThrowingStream<JobProgress, Error> {
@@ -420,7 +415,7 @@ public final class LauncherModel {
     lastError = nil
     progress = .preparing
     jobs.exclusiveTask = Task {
-      await stopPreDownload()  // shares the launcher's cancel-and-await rule with install/update/repair
+      await self.stopPreDownload()  // shares the launcher's cancel-and-await rule with install/update/repair
       await self.runWinePreparation(wine)
     }
   }
