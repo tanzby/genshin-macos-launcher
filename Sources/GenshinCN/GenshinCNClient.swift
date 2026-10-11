@@ -214,6 +214,7 @@ public final class GenshinCNClient: GameClient {
       case .http(let status) where status >= 500: return GameClientError.network  // a 4xx is a contract break
       case .checksumMismatch, .verificationFailed: return GameClientError.verificationFailed
       case .brokenInstallation: return GameClientError.brokenInstallation
+      case .installDirectoryNotEmpty: return GameClientError.installDirectoryNotEmpty
       default: return error
       }
     case let error as CocoaError where error.code == .fileWriteOutOfSpace:

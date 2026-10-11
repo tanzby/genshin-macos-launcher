@@ -142,6 +142,26 @@ private func iniWith(_ version: String) -> String {
     #expect(!FileManager.default.fileExists(atPath: stranger.appending(path: "config.ini").path))
   }
 
+  @Test func INS_005_validateJudgesLikePrepareButTouchesNothing() throws {
+    let installed = try makeGame(config: iniWith("5.6.0"))
+    let half = try makeGame(config: iniWith("0.0.0"))
+    let stranger = FileManager.default.temporaryDirectory.appending(path: "yaagl-inst-\(UUID().uuidString)")
+    let missing = FileManager.default.temporaryDirectory.appending(path: "yaagl-inst-\(UUID().uuidString)")
+    try FileManager.default.createDirectory(at: stranger, withIntermediateDirectories: true)
+    try Data("x".utf8).write(to: stranger.appending(path: "photos.zip"))
+    defer { for url in [installed, half, stranger] { try? FileManager.default.removeItem(at: url) } }
+
+    #expect(throws: SophonError.installDirectoryNotEmpty) { try SophonInstallation.validateInstallDirectory(installed) }
+    #expect(throws: SophonError.installDirectoryNotEmpty) { try SophonInstallation.validateInstallDirectory(stranger) }
+    try SophonInstallation.validateInstallDirectory(half)
+    try SophonInstallation.validateInstallDirectory(missing)
+
+    #expect(!FileManager.default.fileExists(atPath: missing.path))
+    #expect(!FileManager.default.fileExists(atPath: stranger.appending(path: ".yaagl-tmp").path))
+    #expect(!FileManager.default.fileExists(atPath: half.appending(path: ".yaagl-tmp").path))
+    #expect(try String(contentsOf: installed.appending(path: "config.ini"), encoding: .utf8) == iniWith("5.6.0"))
+  }
+
   @Test func UPG_011_writeVersionReplacesExactlyTheGameVersionLine() throws {
     let game = try makeGame(config: iniWith("5.5.0"))
     defer { try? FileManager.default.removeItem(at: game) }

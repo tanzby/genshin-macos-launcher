@@ -99,6 +99,8 @@ public enum GameClientError: Error, Sendable, Equatable {
   case wineReinstallRequired
   /// The game folder is damaged or not the China release (Bilibili); neither update nor repair can start from it.
   case brokenInstallation
+  /// The folder chosen for an install holds something else than an interrupted install.
+  case installDirectoryNotEmpty
 }
 
 /// The seam between the launcher state machine and a concrete game.
@@ -107,6 +109,8 @@ public protocol GameClient: Sendable {
   func run(_ job: GameJob) -> AsyncThrowingStream<JobProgress, Error>
   /// Bytes the job will write after decompression, excluding the chunk-cache margin the launcher adds.
   /// Install: unpacked total. Update and pre-download: download size plus new files. 0 when nothing is written.
+  /// This is the launcher's preflight, run before it writes anything, so it also refuses a folder the job could
+  /// not use (an install into a folder with other content throws `installDirectoryNotEmpty`) and touches nothing.
   func requiredDiskSpace(for job: GameJob) async throws -> Int64
   /// `onStarted` fires once the game process exists; without it within the launch timeout the launcher cancels.
   /// Cancellation must restore Launch Mutations and kill the prefix before returning.

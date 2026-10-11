@@ -1667,6 +1667,23 @@
         }
       }
     },
+    "The folder is not empty. Choose an empty folder to install into.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The folder is not empty. Choose an empty folder to install into."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "该文件夹不是空的，请选择一个空文件夹来安装。"
+          }
+        }
+      }
+    },
     "The folder path contains a quotation mark or a line break.": {
       "extractionState": "manual",
       "localizations": {

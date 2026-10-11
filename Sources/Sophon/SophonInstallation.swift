@@ -64,17 +64,24 @@ public enum SophonInstallation {
     return matches.count == 1 ? String(matches[0].output.1) : nil
   }
 
+  /// INS-005: the check `prepareForInstall` makes, without writing anything (not even a missing directory), so
+  /// a folder that is refused is left exactly as it was.
+  public static func validateInstallDirectory(_ gameDirectory: URL) throws {
+    guard FileManager.default.fileExists(atPath: gameDirectory.path) else { return }
+    let names = try FileManager.default.contentsOfDirectory(atPath: gameDirectory.path)
+    let others = names.filter { $0 != ".DS_Store" && $0 != tempDirectoryName }
+    if !others.isEmpty {
+      guard configVersion(in: gameDirectory) == emptyVersion else { throw SophonError.installDirectoryNotEmpty }
+    }
+  }
+
   /// INS-005: a fresh install needs an empty directory, or one an interrupted install left behind (its
   /// `config.ini` still says `0.0.0`). Finder's `.DS_Store` and the temp folder do not count. Writes the
   /// template and creates the temp folder; nothing is touched when the directory is refused.
   public static func prepareForInstall(in gameDirectory: URL) throws {
     let fileManager = FileManager.default
+    try validateInstallDirectory(gameDirectory)
     try fileManager.createDirectory(at: gameDirectory, withIntermediateDirectories: true)
-    let names = try fileManager.contentsOfDirectory(atPath: gameDirectory.path)
-    let others = names.filter { $0 != ".DS_Store" && $0 != tempDirectoryName }
-    if !others.isEmpty {
-      guard configVersion(in: gameDirectory) == emptyVersion else { throw SophonError.installDirectoryNotEmpty }
-    }
     try fileManager.createDirectory(at: tempDirectory(in: gameDirectory), withIntermediateDirectories: true)
     try Data(template.utf8).write(to: gameDirectory.appending(path: configFileName), options: .atomic)
   }

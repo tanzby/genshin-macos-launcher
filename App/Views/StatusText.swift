@@ -59,6 +59,7 @@ extension LauncherError {
     case .client(.cancelled): "Cancelled."
     case .client(.wineReinstallRequired): "Wine has to be reinstalled."
     case .client(.brokenInstallation): "The game folder is damaged or is not the China release."
+    case .client(.installDirectoryNotEmpty): "The folder is not empty. Choose an empty folder to install into."
     case .unexpected(let detail): "Unexpected error: \(detail)"
     }
   }

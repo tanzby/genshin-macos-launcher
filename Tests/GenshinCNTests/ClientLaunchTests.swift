@@ -221,7 +221,7 @@ final class Counter: @unchecked Sendable {
   @Test func APP_013_cancellationStaysCancellationAndOtherErrorsPassThrough() {
     #expect(GenshinCNClient.map(CancellationError()) is CancellationError)
     #expect(GenshinCNClient.map(URLError(.cancelled)) is CancellationError)
-    #expect(GenshinCNClient.map(SophonError.installDirectoryNotEmpty) as? SophonError == .installDirectoryNotEmpty)
+    #expect(GenshinCNClient.map(SophonError.installDirectoryNotEmpty) as? GameClientError == .installDirectoryNotEmpty)
     #expect(GenshinCNClient.map(GenshinCNClientError.noUpdate) as? GenshinCNClientError == .noUpdate)
   }
 }
