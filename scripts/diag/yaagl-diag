@@ -345,7 +345,6 @@ def cmd_run(a):
             if s["game"] and "game_sample" not in mid:
                 mid["game_sample"] = s["game"]
                 mid["procs"] = list(s["procs"])
-                mid["regs"] = reg_values(data, MAC_DRIVER)
                 mid["steam"] = (data.prefix / "drive_c/windows/system32/steam.exe").exists()
                 mid["moved"] = sorted(str(p) for p in Path(a.game_dir or "/nonexistent").glob("YuanShen_Data/**/*.bak")) if a.game_dir else []
             # Hand-offs to the maintainer. Hosts: /etc/hosts still has no section after Wine is ready.
@@ -434,8 +433,10 @@ def evaluate(a, data, work, m, mid, verdict_line, reg_before, hosts_before, left
     check("LCH-028", ("fullscreen" in m and "toggled native full screen" in hostlog) if game else None,
           "game window in a native full-screen Space")
     # Registry and files.
-    check("LCH-005", all(v is not None for v in mid.get("regs", {"x": None}).values()) if game else None,
-          "Mac Driver registry values written", str(mid.get("regs", "")))
+    # Read after exit: wineserver flushes user.reg on shutdown, and these values are not restored.
+    mac = reg_values(data, MAC_DRIVER)
+    check("LCH-005", all(v is not None for v in mac.values()) if game else None,
+          "Mac Driver registry values written", str(mac))
     after = reg_values(data, [HDR] + RESOLUTION)
     check("LCH-006", after[HDR] is None, "HDR value absent after exit")
     check("LCH-007", all(after[k] == reg_before[k] for k in RESOLUTION) if reg_before else None,

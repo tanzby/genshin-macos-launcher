@@ -91,6 +91,8 @@ public struct AutoLaunch {
     case failed(String)
   }
 
+  private static var started = false
+
   let model: LauncherModel
   let log: DiagLog
   let pollInterval: Duration
@@ -170,7 +172,8 @@ public struct AutoLaunch {
   public static func runIfRequested(
     _ options: AutoLaunchOptions, model: LauncherModel, log: DiagLog, terminate: @MainActor () -> Void
   ) async {
-    guard options.enabled else { return }
+    guard options.enabled, !started else { return }
+    started = true  // the window's `.task` runs again when the window is recreated
     _ = await AutoLaunch(model: model, log: log).run()
     await model.shutdown()
     log.say("autolaunch: exit")
