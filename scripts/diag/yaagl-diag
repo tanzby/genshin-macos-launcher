@@ -390,7 +390,7 @@ def cmd_run(a):
                 print("WAITING maintainer: game-login (log in to the miHoYo account in the game window)", flush=True)
             if a.close_after is not None and closed_at is None and "main_interface" in m \
                     and now - m["main_interface"] >= a.close_after and s["game"]:
-                run([str(data.wine / "bin/wine"), "taskkill", "/im", s["game"]["cmd"].split("\\")[-1]],
+                run([str(data.wine / "bin/wine"), "taskkill", "/im", exe_name(s["game"])],
                     env={**os.environ, "WINEPREFIX": str(data.prefix), "WINEDEBUG": "-all"})
                 closed_at = time.monotonic()
                 say("closing the game window (taskkill, like the window's close button)")
@@ -402,7 +402,7 @@ def cmd_run(a):
             if result and not app_pids(work):
                 verdict_line = result
                 break
-            time.sleep(2)
+            time.sleep(1)  # the camera turn must start within ~1 s of the turn phase (the phase is 12 s)
         else:
             say("timeout")
     finally:
@@ -553,7 +553,7 @@ def main():
     r.add_argument("--close-after", type=float, help="close the game window N seconds after the main interface")
     r.add_argument("--hosts-grace", type=float, default=30)
     r.add_argument("--login-grace", type=float, default=90)
-    r.add_argument("--turn", type=float, default=3, help="camera-turn phase length (s) with --autoplay")
+    r.add_argument("--turn", type=float, default=12, help="camera-turn phase length (s) with --autoplay")
     r.add_argument("--autoplay", action="store_true", help="enter the world with the dev companion (main-interface verdict)")
     r.add_argument("--screen-check", action="store_true", help="compare the screen with the game picture (needs Screen Recording)")
     r.set_defaults(fn=cmd_run)
