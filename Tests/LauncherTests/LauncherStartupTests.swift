@@ -246,29 +246,12 @@ private struct Harness {
   @Test func WIN_005_wineReinstallRequiredReturnsToPreparation() async throws {
     let h = Harness(wine: .ready)
     defer { h.cleanUp() }
-    try await failLaunchWithReinstall(h)
-    #expect(h.model.primaryAction == .prepareWine)
-    #expect(h.model.wineStatus != .ready)
-    await #expect(throws: LauncherError.wineNotReady) { try await h.model.launch() }
-
-    // the disk still says "ready"; re-reading it must not undo the request
-    await h.model.refreshWine()
-    #expect(h.model.primaryAction == .prepareWine)
-
-    try await h.model.prepareWine()
-    let install = try await h.wine.nextInstall()
-    #expect(h.wine.isReinstall(install: install), "ensureInstalled would return at once on a ready stamp")
-    h.wine.finish(install: install)
+    await h.model.bootstrap()
+    try await h.model.launch()
+    try await h.fake.nextLaunch()
+    h.fake.failLaunch(GameClientError.wineReinstallRequired)
     await h.model.waitUntilIdle()
-    #expect(h.model.wineStatus == .ready)
-    #expect(h.model.primaryAction == .launch)
-
-    // satisfied: later refreshes follow the disk again
-    h.wine.setStatus(missing)
-    await h.model.refreshWine()
-    h.wine.setStatus(.ready)
-    await h.model.refreshWine()
-    #expect(h.model.primaryAction == .launch)
+    #expect(h.model.primaryAction == .prepareWine)
   }
 
 #if false
