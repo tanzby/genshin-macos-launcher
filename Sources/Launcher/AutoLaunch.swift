@@ -10,15 +10,18 @@ import Platform
 /// | `--autolaunch` | `YAAGL_AUTOLAUNCH=1` | prepare Wine, install the game if needed, launch, quit when the game exits |
 /// | `--data-dir <path>` | `YAAGL_DATA_DIR` | use this data directory instead of `~/Library/Application Support/Yaagl` |
 /// | `--game-dir <path>` | `YAAGL_GAME_DIR` | use this game directory instead of the saved setting |
+/// | `--allow-download` | `YAAGL_ALLOW_DOWNLOAD=1` | install a missing game or update an old one (tens of GB); without it such a run fails |
 public struct AutoLaunchOptions: Sendable, Equatable {
   public var enabled: Bool
   public var dataRoot: URL?
   public var gameDirectory: URL?
+  public var allowDownload: Bool
 
-  public init(enabled: Bool = false, dataRoot: URL? = nil, gameDirectory: URL? = nil) {
+  public init(enabled: Bool = false, dataRoot: URL? = nil, gameDirectory: URL? = nil, allowDownload: Bool = false) {
     self.enabled = enabled
     self.dataRoot = dataRoot
     self.gameDirectory = gameDirectory
+    self.allowDownload = allowDownload
   }
 
   /// The data directory to use. An overridden root is a sandbox for a test run: the cleanup of the
@@ -47,7 +50,8 @@ public struct AutoLaunchOptions: Sendable, Equatable {
     return AutoLaunchOptions(
       enabled: enabled,
       dataRoot: value("--data-dir", "YAAGL_DATA_DIR"),
-      gameDirectory: value("--game-dir", "YAAGL_GAME_DIR"))
+      gameDirectory: value("--game-dir", "YAAGL_GAME_DIR"),
+      allowDownload: arguments.contains("--allow-download") || ["1", "true"].contains(environment["YAAGL_ALLOW_DOWNLOAD"] ?? ""))
   }
 }
 
@@ -97,15 +101,17 @@ public struct AutoLaunch {
   let log: DiagLog
   let pollInterval: Duration
   let progressInterval: Duration
+  let allowDownload: Bool
 
   public init(
     model: LauncherModel, log: DiagLog, pollInterval: Duration = .milliseconds(200),
-    progressInterval: Duration = .seconds(5)
+    progressInterval: Duration = .seconds(5), allowDownload: Bool = false
   ) {
     self.model = model
     self.log = log
     self.pollInterval = pollInterval
     self.progressInterval = progressInterval
+    self.allowDownload = allowDownload
   }
 
   public func run() async -> Result {
@@ -130,6 +136,8 @@ public struct AutoLaunch {
     // (An install can be followed by an update; more than two rounds means the status never settles.)
     for _ in 0..<2 where model.primaryAction == .install || model.primaryAction == .update {
       let job: GameJob = model.primaryAction == .install ? .install : .update
+      // A diag run must never start a 100+ GB download (or rewrite a game folder) by accident.
+      guard allowDownload else { return .failed("needs \(job.rawValue) (pass --allow-download)") }
       do { try await model.start(job) } catch { return .failed("\(job.rawValue) \(error)") }
       await waitUntilIdle()
       if let error = model.lastError { return .failed("\(job.rawValue) \(error)") }
@@ -169,7 +177,8 @@ public struct AutoLaunch {
   /// The app entry point: does nothing unless `--autolaunch` was given; otherwise runs and then asks the
   /// app to quit, also when it failed (a diag script must never wait for a window nobody closes).
   public static func runIfRequested(
-    _ options: AutoLaunchOptions, model: LauncherModel, log: DiagLog, terminate: @MainActor () -> Void
+    _ options: AutoLaunchOptions, model: LauncherModel, log: DiagLog, terminate: @MainActor () -> Void,
+    forceExit: @MainActor () -> Void = { exit(0) }
   ) async {
     guard options.enabled, !started else { return }
     started = true  // the window's `.task` runs again when the window is recreated
@@ -182,9 +191,13 @@ public struct AutoLaunch {
       return
     }
     if let directory = options.gameDirectory { model.gameDirectory = directory }
-    _ = await AutoLaunch(model: model, log: log).run()
+    _ = await AutoLaunch(model: model, log: log, allowDownload: options.allowDownload).run()
     await model.shutdown()
     log.say("autolaunch: exit")
     terminate()
+    // `terminate()` can be refused (a sheet or alert is up, e.g. first-run onboarding); the run is over and its
+    // state is restored, so a diag script must not wait on a window nobody closes.
+    try? await Task.sleep(for: .seconds(3))
+    forceExit()
   }
 }

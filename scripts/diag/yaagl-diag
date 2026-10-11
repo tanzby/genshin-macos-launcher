@@ -298,6 +298,8 @@ def launch(app, data, a):
     env = ["YAAGL_AUTOLAUNCH=1", f"YAAGL_DATA_DIR={data.root}"]
     if a.game_dir:
         env.append(f"YAAGL_GAME_DIR={a.game_dir}")
+    if a.allow_download:
+        env.append("YAAGL_ALLOW_DOWNLOAD=1")
     shots = None
     if a.screen_check or a.autoplay:
         shots = CACHE / "shots" / str(int(time.time()))
@@ -312,6 +314,8 @@ def launch(app, data, a):
 
 def cmd_run(a):
     data = Data(a.data_dir)
+    if a.hold is not None and a.close_after is None:
+        a.close_after = 0
     app = Path(a.app).resolve()
     if not (app / "Contents/MacOS").is_dir():
         sys.exit(f"--app is not a built Yaagl.app: {app}")
@@ -385,12 +389,17 @@ def cmd_run(a):
                 if "launching" not in m and now - m["ready"] > a.hosts_grace:
                     waiting.add("hosts")
                     print("WAITING maintainer: hosts-password (admin password dialog for /etc/hosts)", flush=True)
-            if window_at and "main_interface" not in m and time.monotonic() - window_at > a.login_grace \
+            if window_at and a.hold is None and "main_interface" not in m and time.monotonic() - window_at > a.login_grace \
                     and "login" not in waiting:
                 waiting.add("login")
                 print("WAITING maintainer: game-login (log in to the miHoYo account in the game window)", flush=True)
-            if a.close_after is not None and closed_at is None and "main_interface" in m \
-                    and now - m["main_interface"] >= a.close_after and s["game"]:
+            # Close once the main interface was reached, or (--hold) once the game window has been up that long:
+            # without a logged-in account the login screen is as far as an unattended run gets.
+            reached = m.get("main_interface")
+            if reached is None and a.hold is not None and window_at:
+                reached = (window_at - T0) + a.hold
+            if a.close_after is not None and closed_at is None and reached is not None \
+                    and now - reached >= a.close_after and s["game"]:
                 run([str(data.wine / "bin/wine"), "taskkill", "/im", exe_name(s["game"])],
                     env={**os.environ, "WINEPREFIX": str(data.prefix), "WINEDEBUG": "-all"})
                 closed_at = time.monotonic()
@@ -520,9 +529,12 @@ def evaluate(a, data, work, m, mid, verdict_line, reg_before, hosts_before, left
     else:
         check("LCH-029", None, "full-screen picture covers the notch strip", "run with --screen-check")
 
-    check("MAIN", "main_interface" in m, "reached the game's main interface (autoplay idle phase)",
-          f"@{m['main_interface']:.0f}s" if "main_interface" in m else
-          f"maintainer waits={sorted(waiting)}")
+    if a.hold is not None:
+        check("MAIN", "window" in m and "fullscreen" in m, "game window up and in native full screen (login screen)",
+              f"window@{m.get('window', -1):.0f}s fullscreen@{m.get('fullscreen', -1):.0f}s")
+    else:
+        check("MAIN", "main_interface" in m, "reached the game's main interface (autoplay idle phase)",
+              f"@{m['main_interface']:.0f}s" if "main_interface" in m else f"maintainer waits={sorted(waiting)}")
     failed = [r for r in RESULTS if r[1] == "FAIL"]
     print(f"DIAG verdict={'FAIL' if failed else 'PASS'} pass={sum(r[1] == 'PASS' for r in RESULTS)} "
           f"fail={len(failed)} skip={sum(r[1] == 'SKIP' for r in RESULTS)} data={data.root}", flush=True)
@@ -552,9 +564,13 @@ def main():
     r.add_argument("--app", required=True, help="path to the built Yaagl.app")
     r.add_argument("--data-dir", default=str(DEFAULT_DATA), help="isolated data directory (default: %(default)s)")
     r.add_argument("--game-dir", help="existing game directory to take over (otherwise the app installs one)")
+    r.add_argument("--allow-download", action="store_true",
+                   help="let the app install a missing game or update an old one (tens of GB); otherwise such a run fails")
     r.add_argument("--fresh", action="store_true", help="delete the isolated data directory first")
     r.add_argument("--timeout", type=float, default=7200, help="stop after N seconds")
     r.add_argument("--close-after", type=float, help="close the game window N seconds after the main interface")
+    r.add_argument("--hold", type=float, help="no main interface needed: close the game this many seconds after "
+                   "its window appears (unattended run stops at the login screen)")
     r.add_argument("--hosts-grace", type=float, default=30)
     r.add_argument("--login-grace", type=float, default=90)
     r.add_argument("--turn", type=float, default=12, help="camera-turn phase length (s) with --autoplay")

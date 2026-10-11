@@ -154,11 +154,12 @@ public struct StartupSteps: Sendable {
     self.recoverSession = recoverSession
   }
 
-  /// Rosetta's runtime, present once `softwareupdate --install-rosetta` has run.
-  public static let rosettaRuntime = URL(filePath: "/Library/Apple/usr/share/rosetta/rosetta")
+  /// Rosetta's runtime library, present once `softwareupdate --install-rosetta` has run. (`share/rosetta/rosetta`
+  /// is a 64-byte placeholder on macOS 27, so it says nothing.)
+  public static let rosettaRuntime = URL(filePath: "/Library/Apple/usr/libexec/oah/libRosettaRuntime")
 
   public static func isRosettaInstalled(at runtime: URL = rosettaRuntime) -> Bool {
-    FileManager.default.isExecutableFile(atPath: runtime.path)
+    FileManager.default.fileExists(atPath: runtime.path)
   }
 }
 
