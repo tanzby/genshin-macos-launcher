@@ -71,7 +71,8 @@ public struct MainPresentation: Sendable, Equatable {
   public var button: PrimaryButton
   public var buttonEnabled: Bool
   public var status: StatusLine
-  /// "Check file integrity" is offered only for an installed, current game while nothing exclusive runs.
+  /// "Check file integrity" needs the remote manifest: offered only online, for an installed, current game while
+  /// nothing exclusive runs.
   public var canRepair: Bool
   /// The "Pre-download" button is offered (also next to an error, so a failed pre-download can be retried).
   public var canPreDownload: Bool
@@ -83,7 +84,7 @@ public struct MainPresentation: Sendable, Equatable {
     // Pre-download may overlap with launching and running (APP-015), but not with install/update/repair.
     let preDownloadPhase = idleLike || s.phase == .launching || s.phase == .running
     let noBlockingJob = s.pendingJob.map { $0.kind == .preDownload } ?? true
-    let repairable = installed && idleLike && noBlockingJob && !s.wineNotReady && s.status?.canUpdate != true
+    let repairable = installed && s.isOnline && idleLike && noBlockingJob && !s.wineNotReady && s.status?.canUpdate != true
 
     let offline = s.hasLoaded && !s.isOnline
     // Download jobs and Wine preparation are paused by the same button.

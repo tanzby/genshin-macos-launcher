@@ -229,6 +229,7 @@ private func snapshot(
     #expect(!MainPresentation.derive(snapshot(phase: .running)).canRepair)
     let update = GameStatus(localVersion: "5.0.0", remoteVersion: "5.1.0", canUpdate: true)
     #expect(!MainPresentation.derive(snapshot(status: update)).canRepair)
+    #expect(!MainPresentation.derive(snapshot(online: false)).canRepair, "verifying needs the remote manifest")
   }
 }
 
