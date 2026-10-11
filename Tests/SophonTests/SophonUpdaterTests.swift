@@ -204,7 +204,6 @@ private final class FakeCDN: @unchecked Sendable {
 
 private struct Rig {
   let world: World
-  let root: URL
   let game: URL
   let temp: URL
   let cdn: FakeCDN
@@ -213,7 +212,7 @@ private struct Rig {
 
   init() throws {
     world = try World()
-    root = makeTemporaryDirectory("sophon-updater")
+    let root = makeTemporaryDirectory("sophon-updater")
     game = root.appendingPathComponent("game", isDirectory: true)
     temp = root.appendingPathComponent("tmp", isDirectory: true)
     try FileManager.default.createDirectory(at: game, withIntermediateDirectories: true)

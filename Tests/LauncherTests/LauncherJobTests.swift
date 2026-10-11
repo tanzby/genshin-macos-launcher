@@ -62,10 +62,7 @@ private final class Harness {
   ) async {
     let fake = FakeGameClient(status: status ?? GameStatus())
     if status == nil { fake.setStatusFailure(GameClientError.network) }
-    var directory: URL?
-    if hasGameDirectory {
-      directory = makeTemporaryDirectory("LauncherJobTests")
-    }
+    let directory = hasGameDirectory ? makeTemporaryDirectory("LauncherJobTests") : nil
     self.fake = fake
     self.directory = directory
     let sleeper = self.sleeper

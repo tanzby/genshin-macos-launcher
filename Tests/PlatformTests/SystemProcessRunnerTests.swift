@@ -163,19 +163,13 @@ private func writeScript(_ body: String, named name: String = "tool.sh", in dir:
     let runner = SystemProcessRunner(allowedRoots: [dir])
     let started = ContinuousClock.now
     let task = Task { try await runner.run(script, arguments: [pidFile.path], environment: [:], workingDirectory: nil) }
-    for _ in 0..<100 where !FileManager.default.fileExists(atPath: pidFile.path) {
-      try await Task.sleep(for: .milliseconds(50))
-    }
+    #expect(await pollUntil { FileManager.default.fileExists(atPath: pidFile.path) })
     let pidText = try String(contentsOf: pidFile, encoding: .utf8).trimmingCharacters(in: .whitespacesAndNewlines)
     let pid = try #require(Int32(pidText))
     task.cancel()
     _ = await task.result
     #expect(ContinuousClock.now - started < .seconds(15))
-    var alive = true
-    for _ in 0..<50 where alive {
-      alive = kill(pid, 0) == 0
-      if alive { try await Task.sleep(for: .milliseconds(100)) }
-    }
+    let alive = !(await pollUntil { kill(pid, 0) != 0 })
     #expect(!alive, "child \(pid) still running after cancel")
     if alive { kill(pid, SIGKILL) }
   }

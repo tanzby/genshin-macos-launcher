@@ -75,8 +75,7 @@ private func iniWith(_ version: String) -> String {
   }
 
   @Test func INS_005_anEmptyOrHalfInstalledDirectoryIsNotInstalled() throws {
-    let empty = temporaryURL("yaagl-inst")
-    try FileManager.default.createDirectory(at: empty, withIntermediateDirectories: true)
+    let empty = makeTemporaryDirectory("yaagl-inst")
     #expect(try SophonInstallation.installedVersion(in: empty) == nil)
 
     // An interrupted install: the template still says 0.0.0, so the install can be continued.
@@ -119,8 +118,7 @@ private func iniWith(_ version: String) -> String {
     #expect(throws: SophonError.installDirectoryNotEmpty) { try SophonInstallation.prepareForInstall(in: installed) }
     #expect(try String(contentsOf: installed.appending(path: "config.ini"), encoding: .utf8) == iniWith("5.6.0"))
 
-    let stranger = temporaryURL("yaagl-inst")
-    try FileManager.default.createDirectory(at: stranger, withIntermediateDirectories: true)
+    let stranger = makeTemporaryDirectory("yaagl-inst")
     try Data("x".utf8).write(to: stranger.appending(path: "photos.zip"))
     #expect(throws: SophonError.installDirectoryNotEmpty) { try SophonInstallation.prepareForInstall(in: stranger) }
     #expect(!FileManager.default.fileExists(atPath: stranger.appending(path: "config.ini").path))

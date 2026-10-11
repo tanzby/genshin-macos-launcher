@@ -62,7 +62,6 @@ private struct Harness {
   let fake: FakeGameClient
   let probe: StepsProbe
   let model: LauncherModel
-  let directory: URL
   /// The launch watchdog sleeps on this instead of the real clock, like the other launch tests.
   let sleeper = ManualSleeper()
   /// Drains `model.events` the way every other launcher test does; an unread stream crashed the CI toolchain.
@@ -72,7 +71,7 @@ private struct Harness {
     wine = FakeWinePreparer(status: wineStatus)
     fake = FakeGameClient(status: installed)
     probe = StepsProbe(fake: fake, rosetta: rosetta)
-    directory = makeTemporaryDirectory("LauncherStartupTests")
+    let directory = makeTemporaryDirectory("LauncherStartupTests")
     let sleeper = sleeper
     model = LauncherModel(
       client: fake, wine: wine, startup: probe.steps, gameDirectory: directory, chunkTempMargin: 0,

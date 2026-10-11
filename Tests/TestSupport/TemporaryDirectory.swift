@@ -13,11 +13,9 @@ private func makeRoot() -> URL {
   removeRootsOfExitedProcesses(in: temp)
   let url = temp.appending(path: "\(rootPrefix)\(getpid())-\(UUID().uuidString)", directoryHint: .isDirectory)
   try! FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
-  atexit { removeRoot() }
+  atexit { try? FileManager.default.removeItem(at: root) }
   return url.resolvingSymlinksInPath()
 }
-
-private func removeRoot() { try? FileManager.default.removeItem(at: root) }
 
 /// Roots are named `yaagl-tests-<pid>-<uuid>`; one whose process is gone was left by a crash.
 private func removeRootsOfExitedProcesses(in temp: URL) {

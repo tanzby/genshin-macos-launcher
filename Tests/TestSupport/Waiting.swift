@@ -13,12 +13,14 @@ public struct TestTimeout: Error, CustomStringConvertible {
 /// How long any wait in a test may take before it gives up. Only a red test ever reaches it.
 public let testFailsafe: Duration = .seconds(10)
 
-/// Polls `condition` every few milliseconds until it holds; false once `timeout` has passed or the task is cancelled.
-public func pollUntil(timeout: Duration = testFailsafe, _ condition: () async throws -> Bool) async rethrows -> Bool {
+/// Polls `condition` every `interval` until it holds; false once `timeout` has passed or the task is cancelled.
+public func pollUntil(
+  timeout: Duration = testFailsafe, interval: Duration = .milliseconds(5), _ condition: () async throws -> Bool
+) async rethrows -> Bool {
   let deadline = ContinuousClock.now + timeout
   while ContinuousClock.now < deadline && !Task.isCancelled {
     if try await condition() { return true }
-    try? await Task.sleep(for: .milliseconds(2))
+    try? await Task.sleep(for: interval)
   }
   return try await condition()
 }
@@ -46,8 +48,6 @@ public final class AsyncQueue<T: Sendable>: Sendable {
     var nextID = 0
   }
   private let state = Mutex(State())
-  public static var failsafe: Duration { testFailsafe }
-
   public init() {}
 
   public func push(_ item: T) {
@@ -66,7 +66,7 @@ public final class AsyncQueue<T: Sendable>: Sendable {
     await withTaskGroup(of: T?.self) { group in
       group.addTask { await self.popUnbounded() }
       group.addTask {
-        try? await Task.sleep(for: Self.failsafe)
+        try? await Task.sleep(for: testFailsafe)
         return nil
       }
       let first = await group.next() ?? nil
