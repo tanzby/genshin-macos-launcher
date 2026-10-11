@@ -31,11 +31,18 @@ targets:
       - path: Resources/protonextras
         type: folder
         buildPhase: resources
-      # DXMT built by scripts/build-dxmt (docs/adr/0003); absent in builds that did not run it.
-      - path: build/dxmt
-        type: folder
-        optional: true
-        buildPhase: resources
+    # DXMT built by scripts/build-dxmt (docs/adr/0003) goes into Contents/Resources/dxmt. A folder source would
+    # fail the build when the folder is absent, which it is in builds that did not run the script. Xcode does not
+    # re-sign for a change made here, so after the first scripts/build-dxmt delete the built app once.
+    postCompileScripts:
+      - name: Bundle DXMT
+        basedOnDependencyAnalysis: false
+        script: |
+          dest="$TARGET_BUILD_DIR/$UNLOCALIZED_RESOURCES_FOLDER_PATH/dxmt"
+          rm -rf "$dest"
+          if [ -d "$SRCROOT/build/dxmt" ]; then
+            ditto "$SRCROOT/build/dxmt" "$dest"
+          fi
     info:
       path: build/Info.plist
       properties:
@@ -52,6 +59,7 @@ targets:
         PRODUCT_NAME: Yaagl
         ARCHS: arm64
         ENABLE_HARDENED_RUNTIME: NO
+        ENABLE_USER_SCRIPT_SANDBOXING: NO
         GENERATE_INFOPLIST_FILE: YES
         SWIFT_EMIT_LOC_STRINGS: YES
         INFOPLIST_KEY_CFBundleDisplayName: Yaagl
