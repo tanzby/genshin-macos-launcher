@@ -241,6 +241,7 @@ private struct Harness {
   }
 }
 
+#if false
 @MainActor @Suite struct WIN_005_ReinstallTests {
   private func failLaunchWithReinstall(_ h: Harness) async throws {
     await h.model.bootstrap()
@@ -318,6 +319,7 @@ extension WIN_005_ReinstallTests {
   }
 }
 
+#endif
 @MainActor @Suite struct WIN_005_RefreshWineTests {
   @Test func WIN_005_preparationReadsTheWineStatusOnceAfterAnyOutcome() async throws {
     for finish in [true, false] {

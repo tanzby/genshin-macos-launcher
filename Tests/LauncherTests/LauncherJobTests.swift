@@ -261,6 +261,15 @@ private func jobJSON(kind: String, target: String? = nil, extra: String = "") ->
     #expect(h.fake.runs == [.install, .install])
   }
 
+  @Test func APP_013_aThrownLaunchErrorIsReportedAndFreesTheSlot() async throws {
+    let h = await Harness(status: Status.installed)
+    try await h.beginLaunch()
+    h.fake.failLaunch(GameClientError.network)
+    await h.model.waitUntilIdle()
+    #expect(h.model.lastError == .client(.network))
+    #expect(h.model.phase == .idle)
+  }
+
   @Test func APP_013_launchOutcomeErrorsDoNotLeaveJobState() async throws {
     // A failed job must not leave the launcher in a state that blocks the next launch.
     let h = await Harness(status: Status.installed)
