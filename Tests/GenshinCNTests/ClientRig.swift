@@ -24,6 +24,8 @@ final class FakeLauncher: GameLaunching {
   private let state = Mutex(State())
   let watchedFiles = Mutex<[URL]>([])
   let started = Mutex(0)
+  let recoveries = Mutex(0)
+  func recover() async { recoveries.withLock { $0 += 1 } }
 
   var recipes: [LaunchRecipe] { state.withLock { $0.recipes } }
   var cleanupFinished: Bool { state.withLock { $0.cleanupFinished } }

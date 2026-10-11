@@ -88,4 +88,30 @@ private func waitForLaunch(_ fake: FakeGameClient) async {
     await model.refresh()
     #expect(model.lastError == .client(.brokenInstallation))
   }
+
+  @MainActor
+  @Test func UPG_005_aSuccessfulRefreshClearsTheErrorTheLastRefreshLeft() async {
+    let fake = FakeGameClient(status: GameStatus(localVersion: "5.0.0", remoteVersion: "5.0.0"))
+    let model = LauncherModel(client: fake)
+    fake.setStatusFailure(GameClientError.brokenInstallation)
+    await model.refresh()
+    #expect(model.lastError == .client(.brokenInstallation))
+
+    fake.setStatus(GameStatus(localVersion: "5.0.0", remoteVersion: "5.0.0"))
+    await model.refresh()
+
+    #expect(model.lastError == nil)
+  }
+
+  @MainActor
+  @Test func APP_019_bootstrapRecoversACrashedSessionBeforeReadingTheGameStatus() async {
+    let fake = FakeGameClient(status: GameStatus(localVersion: "5.0.0", remoteVersion: "5.0.0"))
+    let model = LauncherModel(client: fake)
+
+    await model.bootstrap()
+
+    #expect(fake.events.first == "recover")
+    #expect(fake.recoveries == 1)
+    #expect(fake.statusCalls == 1)
+  }
 }

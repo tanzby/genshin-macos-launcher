@@ -20,6 +20,7 @@ public enum GenshinCNClientError: Error, Sendable, Equatable {
 /// What `GenshinCNClient` needs from the Wine side to start the game. `GameSession` is the production implementation.
 public protocol GameLaunching: Sendable {
   func launch(_ recipe: LaunchRecipe, onStarted: @escaping @Sendable () -> Void) async -> LaunchResult
+  func recover() async
 }
 
 extension GameSession: GameLaunching {}
@@ -84,6 +85,8 @@ public final class GenshinCNClient: GameClient {
     guard fileManager.fileExists(atPath: shim.path), fileManager.fileExists(atPath: dylib.path) else { return nil }
     return GameHostHelpers(shim: shim, dylib: dylib)
   }
+
+  public func recover() async { await launcher.recover() }
 
   public func setGameDirectory(_ url: URL?) {
     location.withLock { $0 = url }
@@ -181,7 +184,8 @@ public final class GenshinCNClient: GameClient {
       return error.code == .cancelled ? CancellationError() : GameClientError.network
     case let error as SophonError:
       switch error {
-      case .transport, .http: return GameClientError.network
+      case .transport: return GameClientError.network
+      case .http(let status) where status >= 500: return GameClientError.network  // a 4xx is a contract break
       case .checksumMismatch, .verificationFailed: return GameClientError.verificationFailed
       case .brokenInstallation: return GameClientError.brokenInstallation
       default: return error

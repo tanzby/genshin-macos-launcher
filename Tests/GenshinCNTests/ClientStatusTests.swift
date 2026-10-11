@@ -24,6 +24,22 @@ import Testing
     await #expect(throws: GameClientError.brokenInstallation) { try await rig.client.status() }
   }
 
+  @Test func UPG_005_anInstallThatLostItsExecutableIsStillAnInstallThatRepairCanFix() async throws {
+    let rig = ClientRig(main: .game("5.6.0"))
+    rig.install(.game("5.6.0"))
+    try FileManager.default.removeItem(at: rig.url("YuanShen.exe"))
+
+    let status = try await rig.client.status()
+
+    #expect(status.localVersion == "5.6.0")
+  }
+
+  @Test func APP_010_onlyTransportAndServerFaultsCountAsOffline() {
+    #expect((GenshinCNClient.map(SophonError.http(status: 503)) as? GameClientError) == .network)
+    #expect((GenshinCNClient.map(SophonError.transport(code: -1009)) as? GameClientError) == .network)
+    #expect((GenshinCNClient.map(SophonError.http(status: 403)) as? GameClientError) == nil)
+  }
+
   @Test func INS_014_anInstallAtTheLatestVersionOffersNothing() async throws {
     let rig = ClientRig(main: .game("5.6.0"))
     rig.install(.game("5.6.0"))

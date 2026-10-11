@@ -113,10 +113,14 @@ public protocol GameClient: Sendable {
   /// (they take no path). Called with the current folder, also `nil`, right before every client call that reads it
   /// (refresh, the disk-space check and `run` of a job, launch), never ahead of a check that may reject the call.
   func setGameDirectory(_ url: URL?)
+  /// Kills what a crashed launcher left of the game session and restores the files it had changed (ADR 0002).
+  /// Called once at startup, after Wine is ready and before the game status is read; never while a game runs.
+  func recover() async
 }
 
 extension GameClient {
   public func setGameDirectory(_ url: URL?) {}
+  public func recover() async {}
 }
 
 /// The seam between the launcher and the Wine runtime. `WineRuntime` is the production implementation;

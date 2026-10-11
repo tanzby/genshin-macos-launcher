@@ -11,6 +11,14 @@ import Wine
 private let noop: @Sendable () -> Void = {}
 
 @Suite struct ClientLaunchTests {
+  @Test func APP_019_recoverIsHandedToTheGameSession() async {
+    let rig = ClientRig(main: .game("5.6.0"))
+
+    await rig.client.recover()
+
+    #expect(rig.launcher.recoveries.withLock { $0 } == 1)
+  }
+
   private func installedRig() -> ClientRig {
     let release = FakeRelease.game("5.6.0")
     let rig = ClientRig(main: release)

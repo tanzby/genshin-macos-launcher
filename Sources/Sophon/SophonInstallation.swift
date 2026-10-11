@@ -34,12 +34,11 @@ public enum SophonInstallation {
     gameDirectory.appending(path: tempDirectoryName, directoryHint: .isDirectory)
   }
 
-  /// The installed version, or `nil` when there is no (complete) install: no `YuanShen.exe`, no
-  /// `globalgamemanagers` yet, or `config.ini` still holds the install template's `0.0.0`. The smaller of
+  /// The installed version, or `nil` when there is no (complete) install: no
+  /// `globalgamemanagers` yet (a lost `YuanShen.exe` alone is damage that repair fixes), or `config.ini` still holds the install template's `0.0.0`. The smaller of
   /// `globalgamemanagers` and `config.ini` wins, because `config.ini` is written last (UPG-005, UPG-011).
   public static func installedVersion(in gameDirectory: URL) throws -> String? {
     let fileManager = FileManager.default
-    guard fileManager.fileExists(atPath: gameDirectory.appending(path: executableName).path) else { return nil }
     // Bilibili builds carry PCGameSDK.dll; only the China official release is supported.
     guard !fileManager.fileExists(atPath: gameDirectory.appending(path: "\(dataFolder)/Plugins/PCGameSDK.dll").path)
     else { throw SophonError.brokenInstallation }

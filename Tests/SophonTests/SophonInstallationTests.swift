@@ -66,9 +66,17 @@ private func iniWith(_ version: String) -> String {
   }
 
   @Test func UPG_005_onlyTheChinaReleaseIsRecognised() throws {
-    let global = try makeGame(executable: false)
+    // The global release keeps its data in GenshinImpact_Data, so nothing is found under YuanShen_Data.
+    let global = FileManager.default.temporaryDirectory.appending(path: "yaagl-inst-\(UUID().uuidString)")
+    try FileManager.default.createDirectory(
+      at: global.appending(path: "GenshinImpact_Data"), withIntermediateDirectories: true)
     defer { try? FileManager.default.removeItem(at: global) }
     #expect(try SophonInstallation.installedVersion(in: global) == nil)
+
+    // A China install that only lost its executable still has a version, so repair can bring the file back.
+    let noExecutable = try makeGame(executable: false)
+    defer { try? FileManager.default.removeItem(at: noExecutable) }
+    #expect(try SophonInstallation.installedVersion(in: noExecutable) == "5.6.0")
 
     let bilibili = try makeGame(pcGameSDK: true)
     defer { try? FileManager.default.removeItem(at: bilibili) }

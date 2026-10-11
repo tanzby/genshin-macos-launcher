@@ -112,6 +112,8 @@ public final class LauncherModel {
   private var isShuttingDown = false
   private var launchWork: Task<LaunchOutcome, Error>?
   private var statusRead: Task<Void, Never>?
+  /// The error the last `refresh()` put into `lastError`, so a later good refresh can take it away again.
+  private var refreshFailure: LauncherError?
 
   public init(
     client: any GameClient,
@@ -151,7 +153,7 @@ public final class LauncherModel {
     guard exclusive == .idle, !isPausing, !isShuttingDown else { return }
     await refreshWine()
     guard isWineMissing else {
-      await refresh()
+      await recoverAndRefresh()
       return
     }
     do {
@@ -170,6 +172,12 @@ public final class LauncherModel {
     wineStatus = await wine.status()
   }
 
+  /// Startup only: the crash recovery of ADR 0002 comes before the first status read.
+  private func recoverAndRefresh() async {
+    await client.recover()
+    await refresh()
+  }
+
   /// A failed query keeps the previous status: offline must not turn an installed game into "install".
   public func refresh() async {
     client.setGameDirectory(gameDirectory)
@@ -177,11 +185,16 @@ public final class LauncherModel {
       let fresh = try await client.status()
       status = fresh
       isOnline = !(fresh.remoteVersion ?? "").isEmpty
+      if refreshFailure != nil, lastError == refreshFailure { lastError = nil }
+      refreshFailure = nil
     } catch {
       isOnline = false
       // Offline is a state of its own; anything else (a broken install) needs to be seen.
       let failure = LauncherError(error)
-      if failure != .client(.network), failure != .client(.cancelled) { lastError = failure }
+      if failure != .client(.network), failure != .client(.cancelled) {
+        lastError = failure
+        refreshFailure = failure
+      }
     }
     if let store = store { pendingJob = store.load() }
   }
@@ -435,7 +448,7 @@ public final class LauncherModel {
         // The game status is only read once Wine is ready. Wine is installed by now, so a pause must not
         // cancel this read (it would leave `status` nil and offer "install"); only shutdown does.
         if !isShuttingDown {
-          let read = Task { await self.refresh() }
+          let read = Task { await self.recoverAndRefresh() }
           statusRead = read
           await read.value
           statusRead = nil
