@@ -31,7 +31,7 @@ extension SophonDownloader {
       let key = SophonDownloaderLayout.fileKey(for: item.file.path)
       let directory = worker.chunkRoot.appending(path: key, directoryHint: .isDirectory)
       try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-      let progress = reporter.progress(forFile: item.file)
+      let progress = reporter.chunkProgress()
       let file = item.file
       for chunk in item.file.chunks {
         let url = try SophonDownloaderLayout.resourceURL(
@@ -65,10 +65,7 @@ extension SophonDownloader {
     into directory: URL,
     reporter: ProgressReporter
   ) async throws {
-    guard var prefix = ref.diffURLPrefix else { throw SophonError.malformedResponse }
-    while prefix.hasSuffix("/") { prefix.removeLast() }
-    guard URL(string: prefix)?.scheme == "https" else { throw SophonError.malformedResponse }
-    let base = prefix
+    let base = try SophonDownloaderLayout.httpsBase(ref.diffURLPrefix)
     try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
     let fetcher = ResourceFetcher(session: session)
     let config = configuration
@@ -83,6 +80,30 @@ extension SophonDownloader {
       }
     }
   }
+}
+
+/// Like `runBounded`, but collects the result of `body` for every item, in the order of `items`. Stops
+/// starting new items once the task is cancelled, and then throws `CancellationError`.
+func mapBounded<Item: Sendable, Result: Sendable>(
+  _ items: [Item], limit: Int, _ body: @escaping @Sendable (Item) async throws -> Result
+) async throws -> [Result] {
+  var results = [Result?](repeating: nil, count: items.count)
+  try await withThrowingTaskGroup(of: (Int, Result).self) { group in
+    var next = 0
+    func submit() {
+      guard next < items.count, !Task.isCancelled else { return }
+      let index = next
+      next += 1
+      group.addTask { (index, try await body(items[index])) }
+    }
+    for _ in 0..<max(1, limit) { submit() }
+    while let (index, result) = try await group.next() {
+      results[index] = result
+      submit()
+    }
+  }
+  try Task.checkCancellation()
+  return results.map { $0! }
 }
 
 /// Runs `body` for every item with at most `limit` in flight. Returns after all of them have stopped,

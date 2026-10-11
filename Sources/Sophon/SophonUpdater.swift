@@ -183,52 +183,36 @@ public struct SophonUpdater: Sendable {
     let counter = VerifyCounter(total: total, interval: .milliseconds(250), report: progress)
     progress(.verifying(done: 0, total: total))
     let limit = max(2, ProcessInfo.processInfo.activeProcessorCount - 4)
-    var verdicts = [Verdict](repeating: .untouched, count: candidates.count)
-    try await withThrowingTaskGroup(of: (Int, Verdict).self) { group in
-      var next = 0
-      func submit() {
-        guard next < candidates.count, !Task.isCancelled else { return }
-        let index = next
-        next += 1
-        let candidate = candidates[index]
-        group.addTask {
-          let verdict: Verdict = try await Offload.run { cancelled in
-            let newFile = candidate.file
-            let chunks = candidate.chunks
-            // Patchless entries are new files: the chunk download skips the ones already in place.
-            guard let patch = candidate.patch else { return .newFile(chunks) }
-            // One read serves both questions when the patch rewrites the file in place.
-            let inPlace = candidate.original == candidate.destination
-            let size = Self.size(of: candidate.destination)
-            let digest = (size == newFile.size || (inPlace && size == patch.originalSize))
-              ? try MD5Hasher.hex(ofFileAt: candidate.destination, cancelled: cancelled) : nil
-            if size == newFile.size, digest?.caseInsensitiveCompare(newFile.md5) == .orderedSame {
-              return .untouched
-            }
-            let originalMatches: Bool
-            if inPlace {
-              originalMatches =
-                size == patch.originalSize && digest?.caseInsensitiveCompare(patch.originalMD5) == .orderedSame
-            } else if let original = candidate.original {
-              originalMatches = try Self.matches(
-                original, size: patch.originalSize, md5: patch.originalMD5, cancelled: cancelled)
-            } else {
-              originalMatches = false
-            }
-            return originalMatches
-              ? .patch(SophonPlannedPatch(file: newFile, patch: patch, fallback: chunks)) : .download(chunks)
-          }
-          counter.add(max(candidate.file.size, candidate.patch?.originalSize ?? 0))
-          return (index, verdict)
+    let verdicts = try await mapBounded(candidates, limit: limit) { candidate in
+      let verdict: Verdict = try await Offload.run { cancelled in
+        let newFile = candidate.file
+        let chunks = candidate.chunks
+        // Patchless entries are new files: the chunk download skips the ones already in place.
+        guard let patch = candidate.patch else { return .newFile(chunks) }
+        // One read serves both questions when the patch rewrites the file in place.
+        let inPlace = candidate.original == candidate.destination
+        let size = Self.size(of: candidate.destination)
+        let digest = (size == newFile.size || (inPlace && size == patch.originalSize))
+          ? try MD5Hasher.hex(ofFileAt: candidate.destination, cancelled: cancelled) : nil
+        if size == newFile.size, digest?.caseInsensitiveCompare(newFile.md5) == .orderedSame {
+          return .untouched
         }
+        let originalMatches: Bool
+        if inPlace {
+          originalMatches =
+            size == patch.originalSize && digest?.caseInsensitiveCompare(patch.originalMD5) == .orderedSame
+        } else if let original = candidate.original {
+          originalMatches = try Self.matches(
+            original, size: patch.originalSize, md5: patch.originalMD5, cancelled: cancelled)
+        } else {
+          originalMatches = false
+        }
+        return originalMatches
+          ? .patch(SophonPlannedPatch(file: newFile, patch: patch, fallback: chunks)) : .download(chunks)
       }
-      for _ in 0..<limit { submit() }
-      while let (index, verdict) = try await group.next() {
-        verdicts[index] = verdict
-        submit()
-      }
+      counter.add(max(candidate.file.size, candidate.patch?.originalSize ?? 0))
+      return verdict
     }
-    try Task.checkCancellation()
     progress(.verifying(done: total, total: total))
 
     var patches: [SophonPlannedPatch] = []
@@ -421,12 +405,8 @@ public struct SophonUpdater: Sendable {
     return try MD5Hasher.hex(ofFileAt: url, cancelled: cancelled).caseInsensitiveCompare(md5) == .orderedSame
   }
 
-  static func size(of url: URL) -> Int64 {
-    guard let size = (try? FileManager.default.attributesOfItem(atPath: url.path))?[.size] as? NSNumber else {
-      return -1
-    }
-    return size.int64Value
-  }
+  /// -1 for a missing file, so it never equals a size from a manifest.
+  static func size(of url: URL) -> Int64 { SophonDownloaderLayout.fileSize(at: url) ?? -1 }
 
   /// Also true for a dangling symlink.
   static func exists(_ url: URL) -> Bool {

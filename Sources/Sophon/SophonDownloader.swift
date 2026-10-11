@@ -65,20 +65,10 @@ public struct SophonDownloader: Sendable {
     let worker = FileWorker(
       session: session, chunkBase: chunkBase, chunkSuffix: ref.chunkURLSuffix,
       gameDirectory: gameDirectory, tempDirectory: tempDirectory)
-    let limit = max(1, configuration.concurrency)
     let config = configuration
 
-    try await withThrowingTaskGroup(of: Void.self) { group in
-      var iterator = ordered.makeIterator()
-      func submit() -> Bool {
-        guard let item = iterator.next() else { return false }
-        group.addTask {
-          try await Self.process(item.file, to: item.destination, worker: worker, reporter: reporter, config: config)
-        }
-        return true
-      }
-      for _ in 0..<limit { if !submit() { break } }
-      while try await group.next() != nil { _ = submit() }
+    try await runBounded(ordered, limit: configuration.concurrency) { item in
+      try await Self.process(item.file, to: item.destination, worker: worker, reporter: reporter, config: config)
     }
     reporter.finish(.downloading(done: total, total: total))
     // Only the empty cache folder goes: chunks of other files may be a pre-download waiting for its update.
@@ -149,27 +139,11 @@ public struct SophonDownloader: Sendable {
     // REP-003: checking is disk and CPU bound, so it uses about as many workers as there are cores.
     let limit = max(2, ProcessInfo.processInfo.activeProcessorCount - 4)
 
-    let flags = try await withThrowingTaskGroup(of: (Int, Bool).self) { group in
-      var next = 0
-      var results = [Bool](repeating: false, count: candidates.count)
-      func submit() {
-        guard next < candidates.count, !Task.isCancelled else { return }
-        let index = next
-        next += 1
-        group.addTask {
-          let intact = try await Offload.run { try Self.isIntact(candidates[index], at: destinations[index], cancelled: $0) }
-          counter.add(candidates[index].size)
-          return (index, intact)
-        }
-      }
-      for _ in 0..<limit { submit() }
-      while let (index, intact) = try await group.next() {
-        results[index] = intact
-        submit()
-      }
-      return results
+    let flags = try await mapBounded(Array(candidates.indices), limit: limit) { index in
+      let intact = try await Offload.run { try Self.isIntact(candidates[index], at: destinations[index], cancelled: $0) }
+      counter.add(candidates[index].size)
+      return intact
     }
-    try Task.checkCancellation()
     progress(.verifying(done: total, total: total))
     return zip(candidates, flags).filter { !$1 }.map(\.0)
   }
@@ -177,10 +151,7 @@ public struct SophonDownloader: Sendable {
   // MARK: - Internals
 
   static func chunkBase(of ref: SophonManifestRef) throws -> String {
-    guard var prefix = ref.chunkURLPrefix else { throw SophonError.malformedResponse }
-    while prefix.hasSuffix("/") { prefix.removeLast() }
-    guard URL(string: prefix)?.scheme == "https" else { throw SophonError.malformedResponse }
-    return prefix
+    try SophonDownloaderLayout.httpsBase(ref.chunkURLPrefix)
   }
 
   static func compressedSize(of file: SophonFile) -> Int64 {
@@ -196,9 +167,7 @@ public struct SophonDownloader: Sendable {
 
   /// Size and MD5 both match. A size-only check lets corrupted files of the right size survive.
   static func isIntact(_ file: SophonFile, at url: URL, cancelled: CancelFlag) throws -> Bool {
-    guard let size = (try? FileManager.default.attributesOfItem(atPath: url.path))?[.size] as? NSNumber,
-      size.int64Value == file.size
-    else { return false }
+    guard SophonDownloaderLayout.fileSize(at: url) == file.size else { return false }
     return try MD5Hasher.hex(ofFileAt: url, cancelled: cancelled).caseInsensitiveCompare(file.md5) == .orderedSame
   }
 
@@ -213,7 +182,7 @@ public struct SophonDownloader: Sendable {
         at: worker.chunkRoot.appending(path: SophonDownloaderLayout.fileKey(for: file.path), directoryHint: .isDirectory))
       return
     }
-    let chunkProgress = reporter.progress(forFile: file)
+    let chunkProgress = reporter.chunkProgress()
     try await retrying(config) {
       try await worker.fetch(file, to: destination, reporter: chunkProgress)
     }
@@ -289,20 +258,18 @@ struct FileWorker: Sendable {
       let decoded = await Offload.run { _ in
         (try? Zstd.decompress(compressed, maxOutputSize: Int(SophonDownloaderLayout.maxChunkSize))).map { ($0, MD5Hasher.hex(of: $0)) }
       }
-      guard let (plain, plainMD5) = decoded else {
+      // A chunk that fails a check is dropped from the cache and from the progress, so the retry fetches it again.
+      func reject(_ error: SophonError) -> SophonError {
         try? fileManager.removeItem(at: cached)
         reporter.set(chunk.id, 0)
-        throw SophonError.checksumMismatch(path: file.path)
+        return error
       }
+      guard let (plain, plainMD5) = decoded else { throw reject(.checksumMismatch(path: file.path)) }
       guard plain.count == Int(chunk.uncompressedSize) else {
-        try? fileManager.removeItem(at: cached)
-        reporter.set(chunk.id, 0)
-        throw SophonError.invalidManifest("chunk \(chunk.id) does not hold \(chunk.uncompressedSize) bytes")
+        throw reject(.invalidManifest("chunk \(chunk.id) does not hold \(chunk.uncompressedSize) bytes"))
       }
       guard plainMD5.caseInsensitiveCompare(chunk.md5) == .orderedSame else {
-        try? fileManager.removeItem(at: cached)
-        reporter.set(chunk.id, 0)
-        throw SophonError.checksumMismatch(path: file.path)
+        throw reject(.checksumMismatch(path: file.path))
       }
       try handle.seek(toOffset: chunk.offset)
       try handle.write(contentsOf: plain)
@@ -334,7 +301,6 @@ struct FileWorker: Sendable {
       expected: Int64(chunk.compressedSize), to: cached, reporter: reporter)
     return try Data(contentsOf: cached)
   }
-
 }
 
 /// Downloads one resource (a chunk or an ldiff file) into `cached`, resuming with `Range` when part of
@@ -344,7 +310,7 @@ struct ResourceFetcher: Sendable {
 
   func fetch(name: String, url: URL, expected: Int64, to cached: URL, reporter: ChunkProgress) async throws {
     let fileManager = FileManager.default
-    var have = Self.size(of: cached)
+    var have = SophonDownloaderLayout.fileSize(at: cached) ?? 0
     if have > expected {
       try? fileManager.removeItem(at: cached)
       have = 0
@@ -416,16 +382,12 @@ struct ResourceFetcher: Sendable {
     try handle?.close()
     handle = nil
 
-    guard Self.size(of: cached) == expected else {
+    guard SophonDownloaderLayout.fileSize(at: cached) == expected else {
       // Short or long body: drop it so the next attempt starts clean.
       try? fileManager.removeItem(at: cached)
       reporter.set(name, 0)
       throw SophonError.checksumMismatch(path: name)
     }
-  }
-
-  private static func size(of url: URL) -> Int64 {
-    ((try? FileManager.default.attributesOfItem(atPath: url.path))?[.size] as? NSNumber)?.int64Value ?? 0
   }
 }
 
@@ -543,7 +505,7 @@ final class ProgressReporter: @unchecked Sendable {
   /// The closing report is never throttled.
   func finish(_ event: SophonProgress) { lock.withLock { report(event) } }
 
-  func progress(forFile file: SophonFile) -> ChunkProgress { ChunkProgress(reporter: self) }
+  func chunkProgress() -> ChunkProgress { ChunkProgress(reporter: self) }
 }
 
 /// Thread-safe, throttled `.verifying` reporter.
@@ -577,6 +539,19 @@ enum SophonDownloaderLayout {
   static func fileKey(for path: String) -> String { MD5Hasher.hex(of: Data(path.utf8)) }
 
   static let maxChunkSize: UInt32 = 64 << 20
+
+  /// Size in bytes, or nil when nothing is there (a dangling link counts as nothing).
+  static func fileSize(at url: URL) -> Int64? {
+    ((try? FileManager.default.attributesOfItem(atPath: url.path))?[.size] as? NSNumber)?.int64Value
+  }
+
+  /// A manifest's URL prefix without trailing slashes; it must be an https URL.
+  static func httpsBase(_ prefix: String?) throws -> String {
+    guard var prefix else { throw SophonError.malformedResponse }
+    while prefix.hasSuffix("/") { prefix.removeLast() }
+    guard URL(string: prefix)?.scheme == "https" else { throw SophonError.malformedResponse }
+    return prefix
+  }
 
   /// `<base>/<name><suffix>` with the name percent-encoded; `base` has no trailing slash.
   static func resourceURL(base: String, name: String, suffix: String) throws -> URL {
@@ -629,7 +604,7 @@ enum Offload {
 
 enum MD5Hasher {
   static func hex(of data: Data) -> String {
-    Insecure.MD5.hash(data: data).map { String(format: "%02x", $0) }.joined()
+    Insecure.MD5.hash(data: data).hexString
   }
 
   /// Streams the file in 1 MiB steps, checking for cancellation between steps.
@@ -641,8 +616,12 @@ enum MD5Hasher {
       if cancelled.isSet { throw CancellationError() }
       hasher.update(data: block)
     }
-    return hasher.finalize().map { String(format: "%02x", $0) }.joined()
+    return hasher.finalize().hexString
   }
+}
+
+extension Digest {
+  var hexString: String { map { String(format: "%02x", $0) }.joined() }
 }
 
 /// INS-011: manifest paths must stay inside the game directory.
