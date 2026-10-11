@@ -44,6 +44,8 @@ extension WineRuntime {
         try? fileManager.removeItem(at: layout.root.appending(path: name))
       }
     }
+    // The free-space check below reads the volume of `root`, so it has to exist first.
+    try fileManager.createDirectory(at: layout.root, withIntermediateDirectories: true)
 
     // The archive sits at a stable path with a name derived from the checksum: an interrupted download resumes
     // there on the next attempt (WIN-007).
