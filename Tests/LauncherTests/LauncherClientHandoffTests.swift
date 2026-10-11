@@ -90,6 +90,24 @@ private func waitForLaunch(_ fake: FakeGameClient) async {
   }
 
   @MainActor
+  @Test func APP_010_aSlowRefreshDoesNotOverwriteANewerOne() async {
+    let fake = FakeGameClient(status: GameStatus(localVersion: "5.0.0", remoteVersion: "5.0.0"))
+    let model = LauncherModel(client: fake)
+    fake.stallsStatus.withLock { $0 = true }
+    let slow = Task { await model.refresh() }
+    await fake.statusQueries.pop()
+    fake.stallsStatus.withLock { $0 = false }
+    fake.setStatus(GameStatus(localVersion: "5.1.0", remoteVersion: "5.1.0"))
+    await model.refresh()
+    #expect(model.status?.localVersion == "5.1.0")
+
+    fake.statusGate.push(())
+    await slow.value
+
+    #expect(model.status?.localVersion == "5.1.0")
+  }
+
+  @MainActor
   @Test func UPG_005_aSuccessfulRefreshClearsTheErrorTheLastRefreshLeft() async {
     let fake = FakeGameClient(status: GameStatus(localVersion: "5.0.0", remoteVersion: "5.0.0"))
     let model = LauncherModel(client: fake)

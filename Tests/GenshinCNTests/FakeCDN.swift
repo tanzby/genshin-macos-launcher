@@ -34,6 +34,8 @@ struct FakeRelease {
   var files: [String: Data]
   /// Older versions this release can be patched from.
   var diffTags: [String] = []
+  /// The CDN answers without size statistics (a contract break the disk check must not read as "0 bytes").
+  var omitsStats = false
 
   func manifestID(_ branch: String) -> String { "manifest-\(branch)-\(tag)" }
 
@@ -180,26 +182,24 @@ final class FakeCDN: @unchecked Sendable {
   }
 
   private func buildJSON(_ release: FakeRelease, branch: String) -> [String: Any] {
-    [
-      "build_id": "build-\(release.tag)", "tag": release.tag,
-      "manifests": [
-        [
-          "category_id": "1", "matching_field": "game",
-          "manifest": ["id": release.manifestID(branch)],
-          "manifest_download": download("https://cdn.test/manifests"),
-          "chunk_download": download("https://cdn.test/chunks"),
-          "stats": [
-            "compressed_size": String(release.compressedSize), "uncompressed_size": String(release.uncompressedSize),
-            "file_count": String(release.files.count), "chunk_count": String(release.files.count),
-          ],
-        ]
-      ],
+    var manifest: [String: Any] = [
+      "category_id": "1", "matching_field": "game",
+      "manifest": ["id": release.manifestID(branch)],
+      "manifest_download": download("https://cdn.test/manifests"),
+      "chunk_download": download("https://cdn.test/chunks"),
     ]
+    if !release.omitsStats {
+      manifest["stats"] = [
+        "compressed_size": String(release.compressedSize), "uncompressed_size": String(release.uncompressedSize),
+        "file_count": String(release.files.count), "chunk_count": String(release.files.count),
+      ]
+    }
+    return ["build_id": "build-\(release.tag)", "tag": release.tag, "manifests": [manifest]]
   }
 
   private func patchBuildJSON(_ release: FakeRelease, branch: String, installedGuess: [String]) -> [String: Any] {
     var stats: [String: Any] = [:]
-    for from in installedGuess {
+    for from in installedGuess where !release.omitsStats {
       stats[from] = [
         "compressed_size": String(release.compressedSize), "uncompressed_size": String(release.uncompressedSize),
         "file_count": String(release.files.count), "chunk_count": String(release.files.count),

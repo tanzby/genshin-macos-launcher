@@ -120,6 +120,10 @@ public final class LauncherModel {
   private var statusRead: Task<Void, Never>?
   /// The error the last `refresh()` put into `lastError`, so a later good refresh can take it away again.
   private var refreshFailure: LauncherError?
+  /// Numbers the `refresh()` calls, and the newest call whose status was published: an answer older than
+  /// that is stale and dropped.
+  private var refreshGeneration = 0
+  private var publishedGeneration = 0
   /// `GameSession.recover()` has run in this process; it must not run again while a game may be running.
   private var hasRecovered = false
   private var recovery: Task<Void, Never>?
@@ -232,15 +236,21 @@ public final class LauncherModel {
   }
 
   /// A failed query keeps the previous status: offline must not turn an installed game into "install".
+  /// A slow answer about an older directory or state must not overwrite a newer one.
   public func refresh() async {
+    refreshGeneration += 1
+    let generation = refreshGeneration
     client.setGameDirectory(gameDirectory)
     do {
       let fresh = try await client.status()
+      guard generation > publishedGeneration else { return }
+      publishedGeneration = generation
       status = fresh
       isOnline = !(fresh.remoteVersion ?? "").isEmpty
       if refreshFailure != nil, lastError == refreshFailure { lastError = nil }
       refreshFailure = nil
     } catch {
+      guard generation > publishedGeneration else { return }
       isOnline = false
       // Offline is a state of its own; anything else (a broken install) needs to be seen.
       let failure = LauncherError(error)
