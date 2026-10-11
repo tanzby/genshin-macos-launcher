@@ -115,18 +115,36 @@ private struct Harness {
     let first = Task { @MainActor in await model.bootstrap() }
     try await h.probe.recoveryStarted.pop("the recovery to begin")
     let second = Task { @MainActor in await model.bootstrap() }
-    var turns = 0
-    while h.wine.statusCalls < 2, turns < 10_000 {
-      await Task.yield()
-      turns += 1
-    }
-    for _ in 0..<50 { await Task.yield() }
+    h.wine.stallsStatus.withLock { $0 = true }
+    try await h.wine.statusQueries.pop("the second bootstrap's Wine status read")
+    h.wine.stallsStatus.withLock { $0 = false }
+    h.wine.statusGate.push(())
+    for _ in 0..<20 { await Task.yield() }
     #expect(h.fake.statusCalls == 0, "no game status read while the recovery is still running")
     h.probe.recoveryGate.push(())
     await first.value
     await second.value
     #expect(h.probe.recoveries == [0], "one recovery, finished before any game status read")
     #expect(h.fake.statusCalls == 2)
+  }
+
+  @Test func APP_001_jobsAndLaunchAreBusyWhileTheRecoveryRuns() async throws {
+    let h = Harness(wine: .ready)
+    defer { h.cleanUp() }
+    h.probe.stallRecovery()
+    let model = h.model
+    let boot = Task { @MainActor in await model.bootstrap() }
+    try await h.probe.recoveryStarted.pop("the recovery to begin")
+    for job in [GameJob.install, .update, .repair, .preDownload] {
+      await #expect(throws: LauncherError.busy, "\(job)") { try await h.model.start(job) }
+    }
+    await #expect(throws: LauncherError.busy) { try await h.model.launch() }
+    await #expect(throws: LauncherError.busy) { try await h.model.prepareWine() }
+    h.probe.recoveryGate.push(())
+    await boot.value
+    #expect(h.fake.runs.isEmpty)
+    try await h.model.start(.install)
+    await h.model.shutdown()
   }
 
   @Test func APP_001_bootstrapContinuesOnceRosettaIsInstalled() async throws {

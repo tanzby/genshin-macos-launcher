@@ -204,7 +204,8 @@ public final class LauncherModel {
   }
 
   /// Runs `recover()` once per process. Overlapping callers share the one running recovery and all wait for
-  /// it; it counts as done only after it has returned, so nothing reads the game state or launches before.
+  /// it; it counts as done only after it has returned, so nothing reads the game state before. While it runs
+  /// every job and launch entry answers `busy` (it kills the prefix and rewrites game files).
   private func recoverOnce() async {
     guard !hasRecovered, let startup else { return }
     let task = recovery ?? Task { await startup.recoverSession() }
@@ -233,7 +234,7 @@ public final class LauncherModel {
   // MARK: Jobs
 
   public func start(_ job: GameJob) async throws {
-    guard !isPausing, !isShuttingDown else { throw LauncherError.busy }
+    guard !isPausing, !isShuttingDown, recovery == nil else { throw LauncherError.busy }
     if job == .preDownload {
       try await startPreDownload()
     } else {
@@ -425,7 +426,7 @@ public final class LauncherModel {
   public func prepareWine() async throws {
     // Pressed before `bootstrap()` got to the Rosetta check: do it here, the 2 GB download must not come first.
     if !hasBootstrapped, !(await rosettaIsAvailable()) { throw LauncherError.rosettaMissing }
-    guard !isPausing, !isShuttingDown, exclusive == .idle else { throw LauncherError.busy }
+    guard !isPausing, !isShuttingDown, exclusive == .idle, recovery == nil else { throw LauncherError.busy }
     guard !isRosettaMissing else { throw LauncherError.rosettaMissing }
     guard let wine, wineStatus != .ready else { return }
     exclusive = .preparingWine  // claim before any await so nothing else can slip in
@@ -494,7 +495,7 @@ public final class LauncherModel {
   // MARK: Launch
 
   public func launch() async throws {
-    guard exclusive == .idle, !isPausing, !isShuttingDown else { throw LauncherError.busy }
+    guard exclusive == .idle, !isPausing, !isShuttingDown, recovery == nil else { throw LauncherError.busy }
     guard !isWineNotReady else { throw LauncherError.wineNotReady }
     guard let status, status.localVersion != nil else { throw LauncherError.notInstalled }
     guard let gameDirectory else { throw LauncherError.noGameDirectory }
