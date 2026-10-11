@@ -148,6 +148,13 @@ private func expectFilesBack(_ urls: [URL], sourceLocation: SourceLocation = #_s
     }
   }
 
+  @Test func WIN_017_windowsPathIsZDrivePathWithBackslashesEvenForNonAsciiAndSpaces() {
+    let path = GameSession.windowsPath(URL(filePath: "/Users/测试 user/Games/原神 GI/YuanShen.exe"))
+
+    #expect(path == #"Z:\Users\测试 user\Games\原神 GI\YuanShen.exe"#)
+    #expect(!path.contains("/"))
+  }
+
   @Test func LCH_035_emptyEnvironmentValuesAreDroppedAndZeroIsKept() async throws {
     try await withLaunchFixture { f in
       let recipe = makeLaunchRecipe(environment: ["KEPT": "1", "ZERO": "0", "WINEDLLOVERRIDES": "", "MTL_HUD_ENABLED": ""])
