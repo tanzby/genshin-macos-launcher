@@ -1,4 +1,5 @@
 import Foundation
+
 /// The files the launch moves aside as `<file>.bak` (LCH-014). A crash can leave them aside; this puts them back
 /// before anything verifies, patches or launches the game.
 enum GenshinGameFiles {

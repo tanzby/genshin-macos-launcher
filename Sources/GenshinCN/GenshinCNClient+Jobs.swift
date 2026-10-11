@@ -1,6 +1,7 @@
 import Foundation
 import Launcher
 import Sophon
+
 extension GenshinCNClient {
   // MARK: - Running jobs
 

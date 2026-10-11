@@ -35,8 +35,8 @@ public struct BackgroundImageProvider: Sendable {
       if touch(cached) { return .remote(cached) }
       if let downloaded = try? await download(remote, to: cached) { return .remote(downloaded) }
     }
-    return cachedFiles().max { modified($0) < modified($1) }.map { .remote(cacheDirectory.appending(path: $0.lastPathComponent)) }
-      ?? .bundledDefault
+    let newest = cachedFiles().max { modified($0) < modified($1) }
+    return newest.map { .remote(cacheDirectory.appending(path: $0.lastPathComponent)) } ?? .bundledDefault
   }
 
   // MARK: - hyp-connect
