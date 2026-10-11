@@ -3,7 +3,12 @@ name: DXMT
 # Builds DXMT from the pinned third_party/dxmt submodule (docs/adr/0003) and uploads it as the artifact "dxmt"
 # (the folder that ships in Yaagl.app/Contents/Resources/dxmt). release.yaml calls this workflow; it also runs on
 # pull requests and main when the pin or the recipe changes, and weekly so the cached LLVM does not expire
-# (Actions evicts caches unused for 7 days; a cold LLVM build takes about 20 minutes, a warm run about 4).
+# (Actions evicts caches unused for 7 days).
+#
+# Two caches. The built output (build/dxmt) is keyed by the pinned DXMT commit, the build script (which holds the
+# LLVM, Wine-header and meson versions) and the Xcode version: it is rebuilt only when one of those changes, and a
+# hit skips the toolchain and the build altogether. LLVM 15 has its own cache so a new DXMT commit does not rebuild
+# it. Duration: nothing cached about 25 minutes, LLVM cached about 4, output cached about 1.
 
 on:
   push:
@@ -32,19 +37,34 @@ jobs:
       - name: Select Xcode 16.1
         run: sudo xcode-select -s /Applications/Xcode_16.1.app
 
+      # A tag run reads the caches of the default branch only, so main has to have built this key (see `on`).
+      - name: Pinned DXMT commit
+        id: pin
+        run: echo "commit=$(git rev-parse HEAD:third_party/dxmt)" >> "$GITHUB_OUTPUT"
+
+      - name: Cache the built DXMT
+        id: output
+        uses: actions/cache@v4
+        with:
+          path: build/dxmt
+          key: dxmt-output-${{ steps.pin.outputs.commit }}-${{ hashFiles('scripts/build-dxmt') }}-xcode16.1
+
+      # The weekly run restores it too, so it is not evicted while a cached build keeps the other one in use.
       - name: Cache LLVM 15 (x86_64)
-        id: llvm
+        if: steps.output.outputs.cache-hit != 'true' || github.event_name == 'schedule'
         uses: actions/cache@v4
         with:
           path: build/dxmt-toolchains/llvm-darwin
           key: dxmt-llvm-llvmorg-15.0.7-x86_64-xcode16.1-v1
 
       - name: Install build tools
+        if: steps.output.outputs.cache-hit != 'true'
         run: |
           brew install mingw-w64
           pip3 install meson==1.10.0 --break-system-packages
 
       - name: Build DXMT
+        if: steps.output.outputs.cache-hit != 'true'
         run: scripts/build-dxmt
 
       - name: Check the output
@@ -56,7 +76,7 @@ jobs:
             test -s "$out/$f" || { echo "::error::missing $out/$f"; exit 1; }
           done
           test "$(lipo -archs "$out/x86_64-unix/winemetal.so")" = x86_64
-          test "$(cat "$out/VERSION")" = "$(git rev-parse HEAD:third_party/dxmt)"
+          test "$(cat "$out/VERSION")" = "${{ steps.pin.outputs.commit }}"
           ls -lR "$out"
 
       - name: Upload
