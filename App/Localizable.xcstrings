@@ -69,19 +69,19 @@
         }
       }
     },
-    "About Yaagl": {
+    "About Genshin Launcher": {
       "extractionState": "manual",
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "About Yaagl"
+            "value": "About Genshin Launcher"
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "关于 Yaagl"
+            "value": "关于 原神启动器"
           }
         }
       }
@@ -558,6 +558,57 @@
           "stringUnit": {
             "state": "translated",
             "value": "通用"
+          }
+        }
+      }
+    },
+    "Genshin Launcher adds a marked section to /etc/hosts that sends the game's telemetry domains to 0.0.0.0. The game will not start without it. macOS asks for your administrator password.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Genshin Launcher adds a marked section to /etc/hosts that sends the game's telemetry domains to 0.0.0.0. The game will not start without it. macOS asks for your administrator password."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "原神启动器 会在 /etc/hosts 中加入一段带标记的内容，把游戏的遥测域名指向 0.0.0.0。没有它游戏无法启动。macOS 会要求输入管理员密码。"
+          }
+        }
+      }
+    },
+    "Genshin Launcher can't start": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Genshin Launcher can't start"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "原神启动器 无法启动"
+          }
+        }
+      }
+    },
+    "Genshin Launcher could not remove %@: %@. Remove it yourself, then reopen Genshin Launcher.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Genshin Launcher could not remove %@: %@. Remove it yourself, then reopen Genshin Launcher."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "原神启动器 无法删除 %@：%@。请手动删除后重新打开 原神启动器。"
           }
         }
       }
@@ -1174,19 +1225,19 @@
         }
       }
     },
-    "Quitting Yaagl will close the game.": {
+    "Quitting Genshin Launcher will close the game.": {
       "extractionState": "manual",
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Quitting Yaagl will close the game."
+            "value": "Quitting Genshin Launcher will close the game."
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "退出 Yaagl 会同时关闭游戏。"
+            "value": "退出 原神启动器 会同时关闭游戏。"
           }
         }
       }
@@ -1259,19 +1310,19 @@
         }
       }
     },
-    "Rosetta 2 is not installed. Install it, then reopen Yaagl.": {
+    "Rosetta 2 is not installed. Install it, then reopen Genshin Launcher.": {
       "extractionState": "manual",
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Rosetta 2 is not installed. Install it, then reopen Yaagl."
+            "value": "Rosetta 2 is not installed. Install it, then reopen Genshin Launcher."
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "尚未安装 Rosetta 2。请先安装，再重新打开 Yaagl。"
+            "value": "尚未安装 Rosetta 2。请先安装，再重新打开 原神启动器。"
           }
         }
       }
@@ -1565,36 +1616,36 @@
         }
       }
     },
-    "The data folder was written by a newer version of Yaagl (format %lld). Update Yaagl, then reopen it.": {
+    "The data folder was written by a newer version of Genshin Launcher (format %lld). Update Genshin Launcher, then reopen it.": {
       "extractionState": "manual",
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "The data folder was written by a newer version of Yaagl (format %lld). Update Yaagl, then reopen it."
+            "value": "The data folder was written by a newer version of Genshin Launcher (format %lld). Update Genshin Launcher, then reopen it."
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "该数据文件夹由更新版本的 Yaagl 写入（格式 %lld）。请更新 Yaagl 后重新打开。"
+            "value": "该数据文件夹由更新版本的 原神启动器 写入（格式 %lld）。请更新 原神启动器 后重新打开。"
           }
         }
       }
     },
-    "The data folder's marker file is damaged. Nothing was deleted. Remove the file .yaagl-native or the whole folder, then reopen Yaagl.": {
+    "The data folder's marker file is damaged. Nothing was deleted. Remove the file .yaagl-native or the whole folder, then reopen Genshin Launcher.": {
       "extractionState": "manual",
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "The data folder's marker file is damaged. Nothing was deleted. Remove the file .yaagl-native or the whole folder, then reopen Yaagl."
+            "value": "The data folder's marker file is damaged. Nothing was deleted. Remove the file .yaagl-native or the whole folder, then reopen Genshin Launcher."
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "数据文件夹的标记文件已损坏，未删除任何内容。请删除 .yaagl-native 文件或整个文件夹，然后重新打开 Yaagl。"
+            "value": "数据文件夹的标记文件已损坏，未删除任何内容。请删除 .yaagl-native 文件或整个文件夹，然后重新打开 原神启动器。"
           }
         }
       }
@@ -1820,19 +1871,19 @@
         }
       }
     },
-    "The proxy only applies to the game, not to downloads made by Yaagl.": {
+    "The proxy only applies to the game, not to downloads made by Genshin Launcher.": {
       "extractionState": "manual",
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "The proxy only applies to the game, not to downloads made by Yaagl."
+            "value": "The proxy only applies to the game, not to downloads made by Genshin Launcher."
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "代理只作用于游戏，不影响 Yaagl 自己的下载。"
+            "value": "代理只作用于游戏，不影响 原神启动器 自己的下载。"
           }
         }
       }
@@ -2194,19 +2245,19 @@
         }
       }
     },
-    "Welcome to Yaagl": {
+    "Welcome to Genshin Launcher": {
       "extractionState": "manual",
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Welcome to Yaagl"
+            "value": "Welcome to Genshin Launcher"
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "欢迎使用 Yaagl"
+            "value": "欢迎使用 原神启动器"
           }
         }
       }
@@ -2343,57 +2394,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Wine 设置失败"
-          }
-        }
-      }
-    },
-    "Yaagl adds a marked section to /etc/hosts that sends the game's telemetry domains to 0.0.0.0. The game will not start without it. macOS asks for your administrator password.": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Yaagl adds a marked section to /etc/hosts that sends the game's telemetry domains to 0.0.0.0. The game will not start without it. macOS asks for your administrator password."
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Yaagl 会在 /etc/hosts 中加入一段带标记的内容，把游戏的遥测域名指向 0.0.0.0。没有它游戏无法启动。macOS 会要求输入管理员密码。"
-          }
-        }
-      }
-    },
-    "Yaagl can't start": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Yaagl can't start"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Yaagl 无法启动"
-          }
-        }
-      }
-    },
-    "Yaagl could not remove %@: %@. Remove it yourself, then reopen Yaagl.": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Yaagl could not remove %@: %@. Remove it yourself, then reopen Yaagl."
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Yaagl 无法删除 %@：%@。请手动删除后重新打开 Yaagl。"
           }
         }
       }

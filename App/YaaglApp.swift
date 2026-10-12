@@ -98,7 +98,7 @@ struct YaaglApp: App {
   }
 
   var body: some Scene {
-    Window("Yaagl", id: "main") {
+    Window("Genshin Launcher", id: "main") {
       if let runtime {
         MainView(
           notifier: runtime.notifier, drivenByAutoLaunch: autoLaunch.enabled,
@@ -114,7 +114,7 @@ struct YaaglApp: App {
     .windowResizability(.contentMinSize)
     .commands {
       CommandGroup(replacing: .appInfo) {
-        Button("About Yaagl") {
+        Button("About Genshin Launcher") {
           NSApp.orderFrontStandardAboutPanel(options: [.credits: Credits.attributed])
         }
       }
@@ -143,7 +143,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     if launcher.quitPlan == .confirmThenShutDown {
       let alert = NSAlert()
       alert.messageText = String(localized: "The game is still running")
-      alert.informativeText = String(localized: "Quitting Yaagl will close the game.")
+      alert.informativeText = String(localized: "Quitting Genshin Launcher will close the game.")
       alert.addButton(withTitle: String(localized: "Quit"))
       alert.addButton(withTitle: String(localized: "Cancel"))
       guard alert.runModal() == .alertFirstButtonReturn else { return .terminateCancel }
