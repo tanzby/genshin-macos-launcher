@@ -1,6 +1,7 @@
 import Foundation
 import Synchronization
 import Testing
+import TestSupport
 
 @testable import Launcher
 
@@ -27,10 +28,7 @@ final class FakeDelivery: NotificationDelivering, Sendable {
 
 @MainActor
 private func notifier(_ delivery: FakeDelivery) -> EventNotifier {
-  let suite = "genshin-launcher-notify-\(UUID().uuidString)"
-  let defaults = UserDefaults(suiteName: suite)!
-  defaults.removePersistentDomain(forName: suite)
-  return EventNotifier(delivery: delivery, defaults: defaults)
+  EventNotifier(delivery: delivery, defaults: makeTemporaryDefaults("notify").defaults)
 }
 
 @MainActor @Suite struct EventNotifierTests {
@@ -85,9 +83,7 @@ private func notifier(_ delivery: FakeDelivery) -> EventNotifier {
   }
 
   @Test func announcementsSurviveARelaunchWithoutRepeating() async {
-    let suite = "genshin-launcher-notify-\(UUID().uuidString)"
-    let defaults = UserDefaults(suiteName: suite)!
-    defaults.removePersistentDomain(forName: suite)
+    let defaults = makeTemporaryDefaults("notify").defaults
     let update = GameStatus(localVersion: "5.0.0", remoteVersion: "5.1.0", canUpdate: true)
     let first = FakeDelivery(granted: true)
     await EventNotifier(delivery: first, defaults: defaults).observe(status: update)
@@ -98,9 +94,7 @@ private func notifier(_ delivery: FakeDelivery) -> EventNotifier {
   }
 
   @Test func aDeniedAnnouncementIsNotMarkedAsSent() async {
-    let suite = "genshin-launcher-notify-\(UUID().uuidString)"
-    let defaults = UserDefaults(suiteName: suite)!
-    defaults.removePersistentDomain(forName: suite)
+    let defaults = makeTemporaryDefaults("notify").defaults
     let update = GameStatus(localVersion: "5.0.0", remoteVersion: "5.1.0", canUpdate: true)
     await EventNotifier(delivery: FakeDelivery(granted: false), defaults: defaults).observe(status: update)
     let later = FakeDelivery(granted: true)
@@ -109,9 +103,7 @@ private func notifier(_ delivery: FakeDelivery) -> EventNotifier {
   }
 
   @Test func aNotificationTheSystemRejectedIsAnnouncedAgainLater() async {
-    let suite = "genshin-launcher-notify-\(UUID().uuidString)"
-    let defaults = UserDefaults(suiteName: suite)!
-    defaults.removePersistentDomain(forName: suite)
+    let defaults = makeTemporaryDefaults("notify").defaults
     let update = GameStatus(localVersion: "5.0.0", remoteVersion: "5.1.0", canUpdate: true)
     await EventNotifier(delivery: FakeDelivery(granted: true, accepts: false), defaults: defaults)
       .observe(status: update)

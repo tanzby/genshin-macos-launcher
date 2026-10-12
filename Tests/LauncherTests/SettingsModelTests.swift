@@ -6,10 +6,7 @@ import TestSupport
 
 @MainActor
 private func freshDefaults() -> UserDefaults {
-  let suite = "genshin-launcher-tests-\(UUID().uuidString)"
-  let defaults = UserDefaults(suiteName: suite)!
-  defaults.removePersistentDomain(forName: suite)
-  return defaults
+  makeTemporaryDefaults().defaults
 }
 
 @MainActor @Suite struct SettingsModelTests {
@@ -226,9 +223,7 @@ private func freshDefaults() -> UserDefaults {
 
   /// The keys this app itself wrote into a private defaults domain.
   private func storedKeys(afterEverythingOn body: (SettingsModel) -> Void) -> Set<String> {
-    let suite = "genshin-launcher-tests-\(UUID().uuidString)"
-    let defaults = UserDefaults(suiteName: suite)!
-    defer { defaults.removePersistentDomain(forName: suite) }
+    let (defaults, suite) = makeTemporaryDefaults()
     body(SettingsModel(defaults: defaults))
     return Set(defaults.persistentDomain(forName: suite)?.keys.map { $0 } ?? [])
   }

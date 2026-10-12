@@ -11,10 +11,7 @@ private func makeController(
   status: GameStatus = GameStatus(localVersion: "5.0.0", remoteVersion: "5.0.0"),
   hosts: HostsBlocklist.Status = .current, startup: StartupSteps? = nil, gameDirectory: URL? = temporaryURL("genshin-launcher-mc")
 ) -> (MainController, FakeGameClient, SettingsModel) {
-  let suite = "genshin-launcher-controller-\(UUID().uuidString)"
-  let defaults = UserDefaults(suiteName: suite)!
-  defaults.removePersistentDomain(forName: suite)
-  let settings = SettingsModel(defaults: defaults)
+  let settings = SettingsModel(defaults: makeTemporaryDefaults("controller").defaults)
   settings.gameDirectory = gameDirectory
   let client = FakeGameClient(status: status)
   let launcher = LauncherModel(client: client, startup: startup, availableDiskSpace: { _ in Int64.max })
