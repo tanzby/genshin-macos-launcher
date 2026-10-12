@@ -51,7 +51,7 @@ targets:
         SUEnableAutomaticChecks: true
         SUScheduledCheckInterval: 86400
         # Without it Finder, Spotlight and Launchpad show the file name, not the localized display name.
-        # Xcode has no INFOPLIST_KEY_ build setting for it (one is silently dropped).
+        # An INFOPLIST_KEY_LSHasLocalizedDisplayName build setting is silently dropped, so it is set here.
         LSHasLocalizedDisplayName: true
     settings:
       base:
