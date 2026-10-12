@@ -15,11 +15,12 @@ git clone --recurse-submodules https://github.com/tanzby/genshin-macos-launcher.
 brew install xcodegen lefthook meson cmake ninja mingw-w64
 lefthook install
 scripts/build-dxmt
+scripts/dev/macos-check
 ```
 
 - `lefthook install` runs `scripts/dev/macos-check` before every push, the same check as CI.
 - The first `scripts/build-dxmt` also builds LLVM (a few minutes). After it, delete the built `Yaagl.app` once so Xcode signs it with DXMT inside.
-- Open the generated `Yaagl.xcodeproj` in Xcode to run the app.
+- `scripts/dev/macos-check` runs the tests, generates `Yaagl.xcodeproj` and builds the app. Open the project in Xcode to run it.
 
 ## Pull requests
 

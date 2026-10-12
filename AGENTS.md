@@ -1,6 +1,6 @@
 # AGENTS.md
 
-A native macOS launcher for Genshin Impact (CN server), written in Swift 6 and SwiftUI. It runs the Windows game through a modified Wine with DXMT. It replaces the TS launcher `tanzby/yet-another-anime-game-launcher`, which is now archived and still holds the research tickets.
+A native macOS launcher for Genshin Impact (CN server), written in Swift 6 and SwiftUI. It runs the Windows game through a modified Wine with DXMT. The research tickets live in the archived TS launcher `tanzby/yet-another-anime-game-launcher`.
 
 Setup and requirements: `CONTRIBUTING.md`.
 
@@ -23,7 +23,7 @@ Setup and requirements: `CONTRIBUTING.md`.
 
 - Judgement-call rules for Swift, tests and UI strings: `CODING_STANDARDS.md`. The mechanical rule from #48 is enforced by `scripts/dev/check-async-closure-default`, part of `macos-check`.
 - `main` is protected: changes land by PR, squash-merged, with the `swift` check green.
-- Issues live in GitHub Issues (`gh`). Label meanings: `docs/agents/triage-labels.md`.
+- Issues live in GitHub Issues (`gh`). Issue tracker, labels and domain docs: `docs/agents/`.
 - Never use bare `git stash`: the stash is shared by all worktrees. Use a WIP commit.
 - Only one checkout may run the game at a time. All share the installed app, `~/Library/Application Support/Yaagl` and the game files.
 
