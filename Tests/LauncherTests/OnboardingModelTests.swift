@@ -28,10 +28,7 @@ struct PasswordCancelled: Error {}
 
 @MainActor
 private func settings() -> SettingsModel {
-  let suite = "genshin-launcher-onboard-\(UUID().uuidString)"
-  let defaults = UserDefaults(suiteName: suite)!
-  defaults.removePersistentDomain(forName: suite)
-  return SettingsModel(defaults: defaults)
+  SettingsModel(defaults: makeTemporaryDefaults("onboard").defaults)
 }
 
 private func tempDirectory() -> URL { makeTemporaryDirectory("genshin-launcher-onb") }
