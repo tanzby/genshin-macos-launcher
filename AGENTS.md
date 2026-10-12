@@ -2,18 +2,10 @@
 
 A native macOS launcher for Genshin Impact (CN server), written in Swift 6 and SwiftUI. It runs the Windows game through a modified Wine with DXMT. Apple Silicon only, macOS 26+. Repo: `tanzby/genshin-macos-launcher`. It replaces the TS launcher `tanzby/yet-another-anime-game-launcher`, which is now archived and still holds the research tickets.
 
-## Working with the maintainer
-
-- Reply in Simplified Chinese.
-- When grilling or asking for decisions, ask through the AskUserQuestion tool: up to 4 questions per call, recommended option first. Don't ask in text-only rounds.
-- After opening a PR, see it through: review, wait for CI, squash-merge, clean up.
-
 ## Workflow: one worktree per change
 
 - Keep the main checkout on a clean `main`. Make each change in its own worktree under `.claude/worktrees/<name>` (gitignored), branched from `origin/main`.
-- `main` is protected: changes land by PR with the `swift` check passing, squash-merged.
-- Review before merge. Run `/code-review` on the PR diff. Fix or reply with a reason to every inline comment from `chatgpt-codex-connector[bot]`, push, then comment `@codex review` and repeat until it raises nothing new. Workflow, YAML, `project.yml` and doc changes get the same review. Merge only after review and a green `swift` check.
-- After a merge, clean up without being asked: remove the worktree and branch, fast-forward `main`, and delete temp files. A squash-merged branch is safe to delete when `git merge-tree --write-tree origin/main <branch>` equals `git rev-parse 'origin/main^{tree}'`.
+- `main` is protected: changes land by PR, squash-merged, with the `swift` check green.
 - Never use bare `git stash`; the stash stack is shared by all worktrees. Use a WIP commit instead.
 - Only one worktree may run the game at a time. All worktrees share the installed app, `~/Library/Application Support/Yaagl` and the game files.
 
@@ -23,7 +15,7 @@ git fetch origin && git worktree add .claude/worktrees/<name> -b <branch> origin
 
 ## Commands
 
-- `scripts/dev/macos-check` runs `swift test`, then `xcodegen generate` and `xcodebuild`. It is the CI `swift` job and the lefthook pre-push hook (`brew install xcodegen lefthook && lefthook install`).
+- `scripts/dev/macos-check` runs the repo checks, `swift test`, then `xcodegen generate` and `xcodebuild`. It is the CI `swift` job and the lefthook pre-push hook (`brew install xcodegen lefthook && lefthook install`).
 - `swift test` on its own for the library targets.
 - Every third-party package is declared in `Package.swift`, never in `project.yml` (Sparkle comes in through the `Updates` target), so SwiftPM and Xcode resolve the same graph and `Package.resolved` stays put (#87).
 - `Helpers/build.sh [--dev]` builds the x86_64 helpers by hand; normally XcodeGen builds them.
@@ -35,9 +27,7 @@ git fetch origin && git worktree add .claude/worktrees/<name> -b <branch> origin
 - `Package.swift` holds the library targets (Sophon, Platform, Wine, GenshinCN, Launcher) with one-way dependencies. `project.yml` (XcodeGen) defines the arm64 App and the x86_64 helpers in `Helpers/`. The generated `.xcodeproj` is not committed.
 - Only Wine, the x86_64 helpers and the system tools `codesign`, `tar` and `ditto` may run as external processes. Everything else is Swift or a linked C target.
 - Research behind these decisions is in `docs/research/`. Its `file:line` references point at the old TS repo.
-- Swift code: never use a closure literal as the default of an `async` closure parameter (`sleep: ... = { try await Task.sleep(for: $0) }`); the Xcode 26.6 runtime in CI aborts with "freed pointer was not the last allocation" (#48). Use a named function as the default.
-- Tests: wait for a condition by polling with a timeout, not with a fixed `Task.sleep`; CI runners are slow and uneven. Use the `TestSupport` target: `pollUntil`, `waitUntil` (observation) and `AsyncQueue` for waiting, `makeTemporaryDirectory` / `temporaryURL` for files (removed when the test process exits, so tests don't clean up).
-- UI strings: String Catalog, zh-Hans and en only. Use the swiftui-specialist skill when writing SwiftUI.
+- Judgement-call rules for Swift, tests and UI strings: `CODING_STANDARDS.md`. The mechanical rule from #48 is enforced by `scripts/dev/check-async-closure-default`, part of `macos-check`.
 
 ## Verification
 

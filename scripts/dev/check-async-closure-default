@@ -1,0 +1,7 @@
+#!/bin/sh
+# #48: a closure literal as the default of an `async` closure parameter aborts the Xcode 26.6 runtime in CI
+# ("freed pointer was not the last allocation"). Use a named function as the default instead.
+set -eu
+cd "$(dirname "$0")/../.."
+hits=$(grep -rnE --include='*.swift' 'async[^=]*->[^=]*= *\{' Sources Tests App Helpers 2>/dev/null | grep -vE '^[^:]+:[0-9]+:[[:space:]]*(let|var) ' || true)
+[ -z "$hits" ] || { echo "$hits"; echo "closure literal as default of an async closure parameter (#48): use a named function"; exit 1; }
