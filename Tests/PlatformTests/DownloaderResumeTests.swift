@@ -118,7 +118,7 @@ private func withResumeFixture(
   server: RangeStubProtocol.Server = .init(body: body),
   _ test: (Downloader, URL, URL, URL) async throws -> Void
 ) async throws {
-  let dir = makeTemporaryDirectory("yaagl-resume-test")
+  let dir = makeTemporaryDirectory("genshin-launcher-resume-test")
   let url = URL(string: "https://downloads.invalid/\(UUID().uuidString)/archive.bin")!
   RangeStubProtocol.register(server, for: url)
   defer { RangeStubProtocol.unregister(url) }

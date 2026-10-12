@@ -14,7 +14,7 @@ import TestSupport
 
 /// Runs `body` with a fresh, symlink-resolved temp directory (TestSupport removes it when the process exits).
 func withWineTempDirectory<T>(_ body: (URL) async throws -> T) async throws -> T {
-  try await body(makeTemporaryDirectory("yaagl-wine-test"))
+  try await body(makeTemporaryDirectory("genshin-launcher-wine-test"))
 }
 
 /// Relative paths of every file and directory below `root` (sorted), without following symlinks.

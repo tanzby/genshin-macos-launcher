@@ -1,10 +1,10 @@
 import Foundation
 
-/// `~/Library/Application Support/Yaagl`. `prepare()` is the only way to get one for real use:
+/// `~/Library/Application Support/Genshin Launcher`. `prepare()` is the only way to get one for real use:
 /// it runs the first-launch cleanup of TS-launcher leftovers (ADR 0001) before returning.
 public struct DataDirectory: Sendable, Equatable {
-  public static let name = "Yaagl"
-  package static let nativeMarkerName = ".yaagl-native"
+  public static let name = "Genshin Launcher"
+  package static let nativeMarkerName = ".genshin-launcher-native"
 
   public let root: URL
 
@@ -39,7 +39,7 @@ public struct DataDirectory: Sendable, Equatable {
 }
 
 extension DataDirectory {
-  /// Content of `.yaagl-native`. Kept in its own file so that damage to other state is never
+  /// Content of `.genshin-launcher-native`. Kept in its own file so that damage to other state is never
   /// mistaken for "no marker", which would trigger a wipe.
   package struct Marker: Codable, Sendable, Equatable {
     public static let currentSchemaVersion = 1
@@ -62,7 +62,7 @@ extension DataDirectory {
   /// Top-level entries of the TS launcher that the native app deletes. `wine-gptk4/`, `gptk4/`,
   /// `logs/` and everything unlisted belong to the user and stay.
   static let residueNames: Set<String> = [
-    ".storage", "wine", "wineprefix", "dxmt", "YaaglGame.app", "sidecar",
+    ".storage", "wine", "wineprefix", "dxmt", "GenshinLauncherGame.app", "sidecar",
     "resources.neu", "resources.neu.update", ".bundle-stamp", "neutralinojs.log", "aria2.session",
     "decompress.log", "winedrv_config.bat", "config.bat", "wineboot.log", "winecfg.log",
     "wine.tar.xz", "icon.icns",

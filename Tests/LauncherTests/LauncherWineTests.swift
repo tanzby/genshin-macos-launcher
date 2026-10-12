@@ -22,7 +22,7 @@ private final class Harness {
   let log: EventLog
   let directory: URL
 
-  var jobFile: URL { directory.appending(path: ".yaagl-tmp").appending(path: "job.json") }
+  var jobFile: URL { directory.appending(path: ".genshin-launcher-tmp").appending(path: "job.json") }
 
   init(wine wineStatus: WineStatus, game: GameStatus = installed) {
     wine = FakeWinePreparer(status: wineStatus)

@@ -1,5 +1,5 @@
 /*
- * yaagl-gamehost: injected into the game's Wine process (wine-shim.c sets
+ * genshin-launcher-gamehost: injected into the game's Wine process (wine-shim.c sets
  * DYLD_INSERT_LIBRARIES for it only) to put the game window into a native
  * macOS full-screen Space, which is what macOS Game Mode requires. Wine's mac driver only offers native full screen
  * for resizable windows, and the game's window is not. In full screen the
@@ -12,8 +12,8 @@
  * It also answers lookups of this Mac's own host name locally (see
  * gamehost_getaddrinfo).
  *
- * Env: YAAGL_GAMEHOST_LOG=<file>  optional log file
- *      YAAGL_GAMEHOST_DEV=<mode>   load yaagl-gamehost-dev.dylib (see there)
+ * Env: GENSHIN_LAUNCHER_GAMEHOST_LOG=<file>  optional log file
+ *      GENSHIN_LAUNCHER_GAMEHOST_DEV=<mode>   load genshin-launcher-gamehost-dev.dylib (see there)
  */
 #include <dispatch/dispatch.h>
 #include <dlfcn.h>
@@ -70,17 +70,17 @@ __attribute__((visibility("default"))) void gamehost_say(const char *fmt, ...) {
 }
 #define say gamehost_say
 
-/* YAAGL_GAMEHOST_DEV: load the development companion (frame statistics,
+/* GENSHIN_LAUNCHER_GAMEHOST_DEV: load the development companion (frame statistics,
  * scripted input, screenshots) next to this library. */
 static void startDev(id win) {
-  if (!getenv("YAAGL_GAMEHOST_DEV")) return;
+  if (!getenv("GENSHIN_LAUNCHER_GAMEHOST_DEV")) return;
   Dl_info info;
   char path[1024];
   if (!dladdr((void *)startDev, &info) || !info.dli_fname) return;
   snprintf(path, sizeof path, "%s", info.dli_fname);
   char *slash = strrchr(path, '/');
   if (!slash) return;
-  snprintf(slash + 1, path + sizeof path - slash - 1, "yaagl-gamehost-dev.dylib");
+  snprintf(slash + 1, path + sizeof path - slash - 1, "genshin-launcher-gamehost-dev.dylib");
   void *dev = dlopen(path, RTLD_NOW);
   void (*start)(void *) = dev ? dlsym(dev, "gamehost_dev_start") : NULL;
   if (start) start(win);
@@ -395,7 +395,7 @@ static void onImage(const struct mach_header *mh, intptr_t slide) {
 }
 
 __attribute__((constructor)) static void init(void) {
-  const char *path = getenv("YAAGL_GAMEHOST_LOG");
+  const char *path = getenv("GENSHIN_LAUNCHER_GAMEHOST_LOG");
   if (path && *path) logFd = open(path, O_WRONLY | O_CREAT | O_APPEND, 0644);
   if (gethostname(hostName, sizeof hostName)) *hostName = 0;
   hostName[sizeof hostName - 1] = 0;

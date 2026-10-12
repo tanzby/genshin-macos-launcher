@@ -39,7 +39,7 @@ struct AppRuntime {
 }
 
 @main
-struct YaaglApp: App {
+struct GenshinLauncherApp: App {
   @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
   @State private var meter = ProgressMeter()
   private let runtime: AppRuntime?
@@ -77,12 +77,12 @@ struct YaaglApp: App {
       runtime = nil
       let failure = DataDirectoryFailure(error, root: autoLaunch.dataRoot ?? DataDirectory.defaultRoot)
       startupFailure = failure
-      // `--autolaunch` has no one to read the window: leave the verdict `yaagl-diag` polls for, and exit.
+      // `--autolaunch` has no one to read the window: leave the verdict `genshin-launcher-diag` polls for, and exit.
       if autoLaunch.enabled {
         let log = DiagLog(logsDirectory: DataDirectory(root: failure.root).logs)
         log.reset()
         AutoLaunch.reportPrepareFailure(error, to: log)
-        FileHandle.standardError.write(Data("yaagl: \(failure.message)\n".utf8))
+        FileHandle.standardError.write(Data("genshin-launcher: \(failure.message)\n".utf8))
         exit(1)
       }
     }

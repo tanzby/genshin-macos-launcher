@@ -11,7 +11,7 @@ This project builds on, bundles or links the following. Notices are added as eac
 | [HDiffPatch](https://github.com/sisong/HDiffPatch) v4.5.2 (`Sources/CHDiffPatch/hpatch`, patcher only, commit f62556a) | Applying Sophon ldiff patches | MIT |
 | protonextras (`Resources/protonextras/`) | Four Windows files copied into the Wine prefix for the Steam patch; see below | steam_helper: BSD-3-Clause (Valve); lsteamclient: Steamworks SDK licence, redistribution open; Wine-derived parts: LGPL-2.1-or-later |
 | Wine (CrossOver 11.0-1 build, yaagl/anime-game-wine) | Downloaded at install time into the data directory, not bundled | LGPL-2.1-or-later (CrossOver sources: see upstream) |
-| [DXMT](https://github.com/3Shain/dxmt) (submodule `third_party/dxmt`, commit `e94c312f5c054263acf261cfa109edf13e757587`) | Built from source in CI (`scripts/build-dxmt`), shipped in `Yaagl.app/Contents/Resources/dxmt` and copied into the Wine runtime; see below | LGPL-2.1-or-later |
+| [DXMT](https://github.com/3Shain/dxmt) (submodule `third_party/dxmt`, commit `e94c312f5c054263acf261cfa109edf13e757587`) | Built from source in CI (`scripts/build-dxmt`), shipped in `Genshin Launcher.app/Contents/Resources/dxmt` and copied into the Wine runtime; see below | LGPL-2.1-or-later |
 | [LLVM](https://github.com/llvm/llvm-project) 15.0.7 | Statically linked into DXMT's `winemetal.so` (shader converter) | Apache-2.0 WITH LLVM-exception |
 | App icon artwork (`App/Assets.xcassets/AppIcon.appiconset`, Paimon from the Genshin Impact HoYoLAB icon) | App icon, masked by `scripts/dev/make-app-icon` | © HoYoverse; not licensed to this project, used as fan art |
 

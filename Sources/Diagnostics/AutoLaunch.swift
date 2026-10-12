@@ -2,16 +2,16 @@ import Foundation
 import Launcher
 import Platform
 
-/// Command-line switches that let a script (`scripts/diag/yaagl-diag`) drive the app without clicks (APP-020,
-/// the replacement of the TS launcher's `YAAGL_AUTOLAUNCH`). Each switch is a flag or an environment
+/// Command-line switches that let a script (`scripts/diag/genshin-launcher-diag`) drive the app without clicks (APP-020,
+/// the replacement of the TS launcher's autolaunch environment variable). Each switch is a flag or an environment
 /// variable, so `open --env KEY=VALUE App.app` works as well as `App --autolaunch`.
 ///
 /// | Argument | Environment | Meaning |
 /// |---|---|---|
-/// | `--autolaunch` | `YAAGL_AUTOLAUNCH=1` | prepare Wine, install the game if needed, launch, quit when the game exits |
-/// | `--data-dir <path>` | `YAAGL_DATA_DIR` | use this data directory instead of `~/Library/Application Support/Yaagl` |
-/// | `--game-dir <path>` | `YAAGL_GAME_DIR` | use this game directory instead of the saved setting |
-/// | `--allow-download` | `YAAGL_ALLOW_DOWNLOAD=1` | install a missing game or update an old one (tens of GB); without it such a run fails |
+/// | `--autolaunch` | `GENSHIN_LAUNCHER_AUTOLAUNCH=1` | prepare Wine, install the game if needed, launch, quit when the game exits |
+/// | `--data-dir <path>` | `GENSHIN_LAUNCHER_DATA_DIR` | use this data directory instead of `~/Library/Application Support/Genshin Launcher` |
+/// | `--game-dir <path>` | `GENSHIN_LAUNCHER_GAME_DIR` | use this game directory instead of the saved setting |
+/// | `--allow-download` | `GENSHIN_LAUNCHER_ALLOW_DOWNLOAD=1` | install a missing game or update an old one (tens of GB); without it such a run fails |
 public struct AutoLaunchOptions: Sendable, Equatable {
   public var enabled: Bool
   public var dataRoot: URL?
@@ -51,10 +51,10 @@ public struct AutoLaunchOptions: Sendable, Equatable {
       arguments.contains(flag) || ["1", "true"].contains(environment[variable] ?? "")
     }
     return AutoLaunchOptions(
-      enabled: isSet("--autolaunch", "YAAGL_AUTOLAUNCH"),
-      dataRoot: value("--data-dir", "YAAGL_DATA_DIR"),
-      gameDirectory: value("--game-dir", "YAAGL_GAME_DIR"),
-      allowDownload: isSet("--allow-download", "YAAGL_ALLOW_DOWNLOAD"))
+      enabled: isSet("--autolaunch", "GENSHIN_LAUNCHER_AUTOLAUNCH"),
+      dataRoot: value("--data-dir", "GENSHIN_LAUNCHER_DATA_DIR"),
+      gameDirectory: value("--game-dir", "GENSHIN_LAUNCHER_GAME_DIR"),
+      allowDownload: isSet("--allow-download", "GENSHIN_LAUNCHER_ALLOW_DOWNLOAD"))
   }
 }
 
@@ -177,7 +177,7 @@ public struct AutoLaunch {
     }
   }
 
-  /// The verdict of a run that never started because the data directory could not be prepared. `yaagl-diag`
+  /// The verdict of a run that never started because the data directory could not be prepared. `genshin-launcher-diag`
   /// polls for the result line and the exit line, so the composition root writes them too when it stops early.
   public static func reportPrepareFailure(_ error: any Error, to log: DiagLog) {
     log.say("autolaunch: result=failed reason=data-dir \(error)")

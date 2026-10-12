@@ -24,7 +24,7 @@ hk4e 共享代码中 os/universal 的分支不在范围内。渲染后端只有 
 
 **约定。**
 
-- `<data>` 表示数据目录 `~/Library/Application Support/Yaagl`，也就是 Neutralino 的 `NL_PATH`。代码中的 `resolve("./x")` 都指 `<data>/x`。
+- `<data>` 表示数据目录 `~/Library/Application Support/Genshin Launcher`，也就是 Neutralino 的 `NL_PATH`。代码中的 `resolve("./x")` 都指 `<data>/x`。
 - `<game>` 表示游戏安装目录。
 - secret 常量（定义在 `src/clients/secret.ts`，由 `configure.sh` 从 `secret.b64` 解码，worktree 中没有这个文件）只写常量名，不写值。
 - 路径都相对于仓库根目录。
@@ -48,7 +48,7 @@ hk4e 共享代码中 os/universal 的分支不在范围内。渲染后端只有 
    - FPS 解锁：没有任何代码读取这个设置，DXMT 的帧率上限固定为 60；
    - Workaround #3：对 hk4ecn 不起作用；
    - `wine_update_url`、`wine_netbiosname`、`singleton`、`DEFAULT_WINE_DISTRO_URL`：只写不读；
-   - 高级设置页：发行版构建时没有设置 `YAAGL_ADVANCED_ENABLE`，所以永远看不到。
+   - 高级设置页：发行版构建时没有设置 `GENSHIN_LAUNCHER_ADVANCED_ENABLE`，所以永远看不到。
 6. **自定义分辨率的默认高度是 `"1920"`**（`resolution.tsx:162`）。用户只打开开关、不填数值时，分辨率是 1920×1920。
 7. **安全风险：aria2 RPC 对局域网开放且没有 secret**（`--rpc-listen-all=true`、`-d /`）。另外，写 `/etc/hosts` 时用 `printf` 把整个文件内容当作格式串，原内容里的 `%` 会被解释。原生版不应沿用这两处做法。
 8. **磁盘空间检查用的是压缩后的 chunk 大小。** 公式为 `ceil(GiB)×1.2`，会低估实际所需空间；更新和预下载则完全不检查（INS-004）。
@@ -91,11 +91,11 @@ hk4e 共享代码中 os/universal 的分支不在范围内。渲染后端只有 
 **类别:** 策略　**优先级:** P0　**置信度:** 高
 **来源:** `build-app.js:19-24,71-74,222-224`、`src/utils/neu.ts:4-17`
 **规格:**
-  Given 渠道为 hk4ecn，且没有设置 `YAAGL_TEST`
-  Then 数据目录为 `$HOME/Library/Application Support/Yaagl`（设置了 `YAAGL_TEST` 时目录名加 " Test" 后缀）
+  Given 渠道为 hk4ecn，且没有设置 `GENSHIN_LAUNCHER_TEST`
+  Then 数据目录为 `$HOME/Library/Application Support/Genshin Launcher`（设置了 `GENSHIN_LAUNCHER_TEST` 时目录名加 " Test" 后缀）
   And `resolve("./wineprefix")` 返回 `<data>/wineprefix`
   And `resolve` 的结果是相对路径或 `/` 时，抛出 "Assertation failed"
-**参数:** 发行名 "Yaagl"
+**参数:** 发行名 "Genshin Launcher"
 
 ### APP-003: 启动时把 App bundle 同步到数据目录
 **类别:** 生命周期　**优先级:** P0　**置信度:** 高
@@ -107,7 +107,7 @@ hk4e 共享代码中 os/universal 的分支不在范围内。渲染后端只有 
   Then 执行 `rsync -rlptu Contents/Resources/. "$APST_DIR"`，自更新写进数据目录的较新文件得以保留
   Given 戳不同或不存在（首次运行，或拖入了新版 DMG）
   Then 执行不带 `-u` 的 `rsync -rlpt`，用 bundle 覆盖数据目录，然后写入新戳
-  And 最后执行 `cd "$APST_DIR"; PATH_LAUNCH=<.app 路径> exec Yaagl --path="$APST_DIR"`
+  And 最后执行 `cd "$APST_DIR"; PATH_LAUNCH=<.app 路径> exec Genshin Launcher --path="$APST_DIR"`
 **边界情况:** rsync 不带 `--delete`，数据目录里的旧文件会一直保留。安装一个更旧的 DMG 同样会全量覆盖，相当于降级。
 
 ### APP-004: 部分路径依赖进程当前目录
@@ -277,16 +277,16 @@ hk4e 共享代码中 os/universal 的分支不在范围内。渲染后端只有 
   Then 不做任何事
 **疑似缺陷:** 见 REP-005：hk4e 的完整性检查不会清除 `patched`。
 
-### APP-020: YAAGL_AUTOLAUNCH 自动启动
+### APP-020: GENSHIN_LAUNCHER_AUTOLAUNCH 自动启动
 **类别:** 策略　**优先级:** P2　**置信度:** 高
 **来源:** `src/launcher/index.tsx:87-91,109-119`
 **规格:**
-  Given 用 `open --env YAAGL_AUTOLAUNCH=1` 启动应用，且游戏已安装、不需要更新
+  Given 用 `open --env GENSHIN_LAUNCHER_AUTOLAUNCH=1` 启动应用，且游戏已安装、不需要更新
   When init 完成
   Then 自动执行 launch(config)，游戏结束后执行终止钩子并 `exit(0)`
-  And 未安装或需要更新时，记录日志 "YAAGL_AUTOLAUNCH: game not ready, skipped"
+  And 未安装或需要更新时，记录日志 "GENSHIN_LAUNCHER_AUTOLAUNCH: game not ready, skipped"
   And 只有值严格等于 "1" 时才生效
-**边界情况:** `scripts/dev/yaagl-diag` 依赖这个钩子，原生版需要保留等价的能力。
+**边界情况:** `scripts/dev/genshin-launcher-diag` 依赖这个钩子，原生版需要保留等价的能力。
 
 ### APP-021: 启动器背景资源
 **类别:** 计算　**优先级:** P2　**置信度:** 高
@@ -977,8 +977,8 @@ hk4e 共享代码中 os/universal 的分支不在范围内。渲染后端只有 
 **来源:** `src/clients/mhy/hk4e/program-launch-game.ts:143-174`
 **规格:**
   Given `blockNet=true`
-  Then 写出 `/tmp/yaagl_network_block_script.sh`，通过 osascript 以管理员权限在后台运行。脚本依次：
-  1. 如果 `/etc/hosts` 中没有 `0.0.0.0 <CN_BLOCK_URL>`，就追加一段，首尾分别是 "# Temporarily Added by Yaagl" 和 "# End of section"；
+  Then 写出 `/tmp/genshin-launcher_network_block_script.sh`，通过 osascript 以管理员权限在后台运行。脚本依次：
+  1. 如果 `/etc/hosts` 中没有 `0.0.0.0 <CN_BLOCK_URL>`，就追加一段，首尾分别是 "# Temporarily Added by Genshin Launcher" 和 "# End of section"；
   2. sleep 10；
   3. 用 `sed -i.bak` 删除这一段；
   4. 删除脚本自身。
@@ -998,7 +998,7 @@ hk4e 共享代码中 os/universal 的分支不在范围内。渲染后端只有 
 **类别:** 校验　**优先级:** P1　**置信度:** 高
 **来源:** `src/wine/game-host.ts:66-74,123-126`
 **规格:**
-  Given `sidecar/gamehost/yaagl-wine-shim` 或 `yaagl-gamehost.dylib` 不存在，或者准备过程中抛出任何异常
+  Given `sidecar/gamehost/genshin-launcher-wine-shim` 或 `genshin-launcher-gamehost.dylib` 不存在，或者准备过程中抛出任何异常
   Then 记录日志 "game host unavailable: …"，返回 `{}`，游戏以普通窗口方式启动
 
 ### LCH-024: 安装 wine 加载器 shim
@@ -1010,11 +1010,11 @@ hk4e 共享代码中 os/universal 的分支不在范围内。渲染后端只有 
   And 当 `wine` 与 shim 内容不同（用 `cmp -s` 比较）时，把 shim 复制为 `wine`
 **边界情况:** 关闭 Game Mode 不会卸载 shim。切换 Wine 后，新的 runtime 会被自动重新套上 shim。
 
-### LCH-025: 构建并注册 YaaglGame.app
+### LCH-025: 构建并注册 GenshinLauncherGame.app
 **类别:** 策略　**优先级:** P1　**置信度:** 高
 **来源:** `src/wine/game-host.ts:17-23,34-58,86-115`
 **规格:**
-  Given `<data>/YaaglGame.app/Contents/MacOS/.wine-host` 与当前的 wine-host 不一致
+  Given `<data>/GenshinLauncherGame.app/Contents/MacOS/.wine-host` 与当前的 wine-host 不一致
   Then 把 wine-host 复制为 `.wine-host` 和 `MacOS/wine`，然后执行 `codesign -f -s - -i com.3shain.yaagl.game`
   And 如果 `<data>/icon.icns` 存在，复制到 bundle 中
   And Info.plist 内容有变化时重写。关键字段：CFBundleExecutable=wine，Name 和 DisplayName 为"原神"，LSUIElement、LSSupportsGameMode、NSHighResolutionCapable 均为 true，LSApplicationCategoryType=public.app-category.games，NSPrincipalClass=WineApplication
@@ -1026,10 +1026,10 @@ hk4e 共享代码中 os/universal 的分支不在范围内。渲染后端只有 
 **来源:** `src/wine/game-host.ts:116-122`
 **规格:**
   Then 设置以下环境变量：
-  - `YAAGL_GAME_HOST_EXE=<data>/YaaglGame.app/Contents/MacOS/wine`
-  - `YAAGL_GAME_HOST_MATCH=<exe 名>`
-  - `YAAGL_GAME_HOST_DYLIB=<data>/sidecar/gamehost/yaagl-gamehost.dylib`
-  - `YAAGL_GAMEHOST_LOG=<data>/logs/gamehost.log`
+  - `GENSHIN_LAUNCHER_GAME_HOST_EXE=<data>/GenshinLauncherGame.app/Contents/MacOS/wine`
+  - `GENSHIN_LAUNCHER_GAME_HOST_MATCH=<exe 名>`
+  - `GENSHIN_LAUNCHER_GAME_HOST_DYLIB=<data>/sidecar/gamehost/genshin-launcher-gamehost.dylib`
+  - `GENSHIN_LAUNCHER_GAMEHOST_LOG=<data>/logs/gamehost.log`
 
 ### LCH-027: wine-shim 按可执行文件分流
 **类别:** 策略　**优先级:** P0　**置信度:** 高
@@ -1253,7 +1253,7 @@ hk4e 共享代码中 os/universal 的分支不在范围内。渲染后端只有 
 **类别:** 策略　**优先级:** P1　**置信度:** 高
 **来源:** `src/hosts.ts:3-29`、`src/wine/wine-install-program.ts:82`
 **规格:**
-  Then 以 sudo 重写 `# Added by Yaagl` 到 `# End of section` 之间的内容；文件中没有这一段时追加到末尾。段内容依次为警告行、`ENSURE_HOSTS` 中每个域名一行 `0.0.0.0 <域名>`、结束标记和一个空行
+  Then 以 sudo 重写 `# Added by Genshin Launcher` 到 `# End of section` 之间的内容；文件中没有这一段时追加到末尾。段内容依次为警告行、`ENSURE_HOSTS` 中每个域名一行 `0.0.0.0 <域名>`、结束标记和一个空行
 **参数:** `ENSURE_HOSTS`（secret）共 7 个遥测和日志上报域名。`server.hosts`（`CN_CUSTOM_HOSTS`）从未被使用。
 **边界情况:** 只有开始标记、没有结束标记时，开始标记之后的全部内容都会丢失。
 **疑似缺陷（安全）:** 写入时用 `printf <内容> > /etc/hosts`，原文件内容被当成格式串，其中的 `%` 或 `\` 会被解释，导致文件内容被改坏。
@@ -1290,7 +1290,7 @@ hk4e 共享代码中 os/universal 的分支不在范围内。渲染后端只有 
 **类别:** 策略　**优先级:** P0　**置信度:** 高
 **来源:** `src/wine/wine.ts:20-71,219-226`
 **规格:**
-  Then runtime 默认为 `<data>/wine`，可以用 `YAAGL_WINE_RUNTIME` 覆盖（仅供开发使用）
+  Then runtime 默认为 `<data>/wine`，可以用 `GENSHIN_LAUNCHER_WINE_RUNTIME` 覆盖（仅供开发使用）
   And 优先使用 `bin/wine64`，不存在时用 `bin/wine`；wineserver 取 loader 所在目录下的同名文件
   And 每个 Wine 进程都带 `WINEDEBUG=fixme-all,err-unwind,+timestamp` 和 `WINEPREFIX=<data>/wineprefix`，调用方传入的同名变量会覆盖它们
 **疑似缺陷:** 覆盖 runtime 后，DXMT 注入（WIN-020）仍然写到 `./wine`。
@@ -1363,9 +1363,9 @@ hk4e 共享代码中 os/universal 的分支不在范围内。渲染后端只有 
 **来源:** `src/constants/version.ts:1-4`、`.github/workflows/build-ontag.yaml:7,14-18`、`build-app.js:97`
 **规格:**
   Given 推送 tag `0.2.0`
-  Then `CURRENT_YAAGL_VERSION` 为 "0.2.0"；Info.plist 中的 CFBundleVersion 和 CFBundleShortVersionString 也是这个值
+  Then `CURRENT_GENSHIN_LAUNCHER_VERSION` 为 "0.2.0"；Info.plist 中的 CFBundleVersion 和 CFBundleShortVersionString 也是这个值
   And tag 必须匹配 `^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$`，否则 CI 失败
-  And 本地构建没有设置 `YAAGL_VERSION` 时，版本为 "development"，plist 中为 "1.0.0"
+  And 本地构建没有设置 `GENSHIN_LAUNCHER_VERSION` 时，版本为 "development"，plist 中为 "1.0.0"
 
 ### UPD-002: 开发版跳过自更新
 **类别:** 策略　**优先级:** P1　**置信度:** 高
@@ -1375,7 +1375,7 @@ hk4e 共享代码中 os/universal 的分支不在范围内。渲染后端只有 
 ### UPD-003: 识别渠道
 **类别:** 计算　**优先级:** P0　**置信度:** 高
 **来源:** `src/updater.ts:29-39`
-**规格:** `YAAGL_CHANNEL_CLIENT=hk4ecn` 时，updateVersion 为 "hk4ecn"。只有 universal 渠道会再用 `YAAGL_OS` 区分。
+**规格:** `GENSHIN_LAUNCHER_CHANNEL_CLIENT=hk4ecn` 时，updateVersion 为 "hk4ecn"。只有 universal 渠道会再用 `GENSHIN_LAUNCHER_OS` 区分。
 
 ### UPD-004: 更新源与 API
 **类别:** 策略　**优先级:** P0　**置信度:** 高
@@ -1389,7 +1389,7 @@ hk4e 共享代码中 os/universal 的分支不在范围内。渲染后端只有 
 **类别:** 校验　**优先级:** P0　**置信度:** 高
 **来源:** `src/updater.ts:43-71`
 **规格:**
-  Then 必须存在名为 `resources_hk4ecn.neu` 的资产才算有更新；`Yaagl.app.tar.gz`（用于更新 sidecar）是可选的
+  Then 必须存在名为 `resources_hk4ecn.neu` 的资产才算有更新；`Genshin Launcher.app.tar.gz`（用于更新 sidecar）是可选的
   And 缺少 neu 资产时，视为已是最新
 
 ### UPD-006: 版本比较
@@ -1434,7 +1434,7 @@ hk4e 共享代码中 os/universal 的分支不在范围内。渲染后端只有 
   Given release 中有 sidecar 资产
   Then 下载到 `<data>/sidecar.tar.gz`
   And 执行 `rm -rf ./sidecar` 和 `mkdir -p ./sidecar`
-  And 执行 `tar --strip-components=4 -C ./sidecar -zxvf ./sidecar.tar.gz "Yaagl.app/Contents/Resources/sidecar"`，然后删除压缩包
+  And 执行 `tar --strip-components=4 -C ./sidecar -zxvf ./sidecar.tar.gz "Genshin Launcher.app/Contents/Resources/sidecar"`，然后删除压缩包
 **参数:** sidecar 包含 aria2、7z、xdelta、hpatchz、protonextras、gamehost、sophon_server。
 
 ### UPD-011: 下载并替换 resources.neu
@@ -1442,7 +1442,7 @@ hk4e 共享代码中 os/universal 的分支不在范围内。渲染后端只有 
 **来源:** `src/updater.ts:135-151`
 **规格:**
   Then 下载到 `<data>/resources.neu.update`，再执行 `mv -f` 覆盖 `resources.neu`
-  And 不修改 `/Applications/Yaagl.app`，因此 plist 中的版本号仍是旧的
+  And 不修改 `/Applications/Genshin Launcher.app`，因此 plist 中的版本号仍是旧的
 
 ### UPD-012: 更新进度的换算
 **类别:** 计算　**优先级:** P2　**置信度:** 高
@@ -1471,7 +1471,7 @@ hk4e 共享代码中 os/universal 的分支不在范围内。渲染后端只有 
 **来源:** `.github/workflows/build-ontag.yaml:79-99`
 **规格:**
   Given 推送 tag
-  Then 只构建 hk4ecn 渠道。release 中包含 `Yaagl-<ver>.dmg`、`Yaagl.app.tar.gz`（顶层目录为 Yaagl.app）、`resources_hk4ecn.neu`
+  Then 只构建 hk4ecn 渠道。release 中包含 `GenshinLauncher-<ver>.dmg`、`Genshin Launcher.app.tar.gz`（顶层目录为 Genshin Launcher.app）、`resources_hk4ecn.neu`
   And 这三个文件名都被 UPD-005 依赖
 **边界情况:** 迁移到 Sparkle 时，旧版 TS 客户端仍按这些文件名检查更新，过渡方案必须考虑这一点（地图 Not yet specified 中已列出）。
 
@@ -1534,7 +1534,7 @@ hk4e 共享代码中 os/universal 的分支不在范围内。渲染后端只有 
 
 | 标签页 | 内容 |
 |---|---|
-| 通用（SETTING_GENERAL） | 左栏依次为：游戏安装目录｜Metal HUD、Retina、左 CMD｜代理开关、代理主机、SETTING_PROXY_DESC 说明文字｜界面语言、YAAGL 版本。右栏为"快速操作"：检查完整性、应用推荐设置｜打开 Wine 命令行、打开游戏目录、打开 YAAGL 数据目录｜检查更新 |
+| 通用（SETTING_GENERAL） | 左栏依次为：游戏安装目录｜Metal HUD、Retina、左 CMD｜代理开关、代理主机、SETTING_PROXY_DESC 说明文字｜界面语言、启动器版本。右栏为"快速操作"：检查完整性、应用推荐设置｜打开 Wine 命令行、打开游戏目录、打开启动器数据目录｜检查更新 |
 | 游戏（SETTING_GAME） | 见 CFG-030 |
 | Wine | 标签名硬编码为 "Wine"，页内只有 Wine 版本一项 |
 | 高级 | 有条件显示（CFG-006）。内容为警告条 SETTING_ADVANCED_ALERT、FPS 解锁、ReShade |
@@ -1546,12 +1546,12 @@ hk4e 共享代码中 os/universal 的分支不在范围内。渲染后端只有 
 **类别:** 生命周期　**优先级:** P2　**置信度:** 中
 **来源:** `src/config/index.tsx:79-109`、`src/constants/version.ts:6-7`
 **规格:**
-  Given 构建时设置了 `YAAGL_ADVANCED_ENABLE=="1"`
+  Given 构建时设置了 `GENSHIN_LAUNCHER_ADVANCED_ENABLE=="1"`
   When 用户在版本号文字上点击，满足"点击记录超过 5 次，且最近一次与倒数第 5 次的间隔小于 1000 ms"
   Then 切换 `config_advanced`；切到显示时弹出 SETTING_ADVANCED_VISIBLE 通知，然后清空点击记录
   Given 构建时没有设置这个变量
   Then 永远不显示高级页
-**疑似缺陷:** CI 和 vite 配置都没有设置 `YAAGL_ADVANCED_ENABLE`，所以发行版中永远看不到 FPS 解锁和 ReShade。
+**疑似缺陷:** CI 和 vite 配置都没有设置 `GENSHIN_LAUNCHER_ADVANCED_ENABLE`，所以发行版中永远看不到 FPS 解锁和 ReShade。
 **置信度说明:** **待确认：**原生版要保留高级页和这个手势吗？
 
 ### CFG-007: 关闭设置页
@@ -1633,10 +1633,10 @@ hk4e 共享代码中 os/universal 的分支不在范围内。渲染后端只有 
   And 用户修改语言后立即写入，并显示 SETTING_RESTART_TO_TAKE_EFFECT；当前界面不切换语言
 **置信度说明:** **待确认：**原生版首次运行时也要把推断出的语言写入吗？还是改为跟随系统语言？
 
-### CFG-018: YAAGL 版本显示
+### CFG-018: 启动器版本显示
 **类别:** 策略　**优先级:** P2　**置信度:** 高
 **来源:** `src/config/index.tsx:152-159`
-**规格:** 显示 `CURRENT_YAAGL_VERSION`；值为空时显示 "development"。这段文字同时也是高级页手势的点击区域（CFG-006）。
+**规格:** 显示 `CURRENT_GENSHIN_LAUNCHER_VERSION`；值为空时显示 "development"。这段文字同时也是高级页手势的点击区域（CFG-006）。
 
 ### CFG-019: FPS 解锁（不起作用）
 **类别:** 策略　**优先级:** P2　**置信度:** 中
@@ -1735,7 +1735,7 @@ hk4e 共享代码中 os/universal 的分支不在范围内。渲染后端只有 
 - 打开游戏目录：执行 `open <game_install_dir>`。
 - 打开数据目录：执行 `open <data>`。日志位于 `<data>/logs/`。
 
-### CFG-033: 检查 YAAGL 更新
+### CFG-033: 检查启动器更新
 **规格:** 同见 UPD-007 和 UPD-009。
 
 ### CFG-034: Licenses 标签页
@@ -1859,7 +1859,7 @@ DeleteFile   { key, info{ list[{ filename, size, hash }] } }
 
 **HoYoConnect 背景**：定义在 `src/clients/mhy/launcher-info.ts:127-203`，结构为 `{background{url,link}, icon{url,hover_url,link}, video{url,size}, theme{url,link}, type}`。对 hk4ecn 而言，`getLatestVersionInfo` 和 `LauncherResourceData` 都是死代码。
 
-### 数据目录布局（`<data>` = `~/Library/Application Support/Yaagl`）
+### 数据目录布局（`<data>` = `~/Library/Application Support/Genshin Launcher`）
 
 | 路径 | 写入方 | 读取方 | 来源 |
 |---|---|---|---|
@@ -1874,7 +1874,7 @@ DeleteFile   { key, info{ list[{ filename, size, hash }] } }
 | `wineprefix/` | wineboot、patch | Wine | `app.tsx:104`、`patch.ts:66-121` |
 | `dxmt/` | DXMT 下载 | patch | `downloadable-resource.ts:152-210` |
 | `reshade/` | ReShade 下载 | patch | `downloadable-resource.ts:222-296` |
-| `YaaglGame.app/` | game-host | LaunchServices | `game-host.ts:17,87-115` |
+| `GenshinLauncherGame.app/` | game-host | LaunchServices | `game-host.ts:17,87-115` |
 | `logs/game_<ts>.log`、`logs/gamehost.log` | 启动游戏 | 人工排查 | `program-launch-game.ts:137,141`、`game-host.ts:121` |
 | `wineboot.log`、`winecfg.log` | Wine 安装 | 人工排查 | `wine-install-program.ts:89-90` |
 | `winedrv_config.bat`（不删除）、`config.bat`、`hk4e_*.reg`（临时） | 启动游戏 | wine | `wine.ts:173`、`program-launch-game.ts:39,81,135,262,292` |
@@ -1885,7 +1885,7 @@ DeleteFile   { key, info{ list[{ filename, size, hash }] } }
 
 - `/etc/hosts`（WIN-011、LCH-021）
 - `/tmp/.wine-<uid>/server-*`（LCH-003）
-- `/tmp/yaagl_network_block_script.sh`
+- `/tmp/genshin-launcher_network_block_script.sh`
 
 游戏目录内的文件：`config.ini`、`.tmp/`、`ldiff/`、`*.bak`、`ReShade.ini`、ReShade 的两个 DLL。
 

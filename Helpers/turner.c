@@ -1,5 +1,5 @@
 /*
- * Development helper run inside the game's Wine prefix by yaagl-diag:
+ * Development helper run inside the game's Wine prefix by genshin-launcher-diag:
  * turns the camera with relative mouse motion through SendInput, the same
  * path real mouse input takes into the game.
  * Usage: turner.exe <seconds> <dx per step> <step ms>

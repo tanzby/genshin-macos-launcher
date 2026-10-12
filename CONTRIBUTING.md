@@ -19,8 +19,8 @@ scripts/dev/macos-check
 ```
 
 - `lefthook install` runs `scripts/dev/macos-check` before every push, the same check as CI.
-- The first `scripts/build-dxmt` also builds LLVM (a few minutes). After it, delete the built `Yaagl.app` once so Xcode signs it with DXMT inside.
-- `scripts/dev/macos-check` runs the tests, generates `Yaagl.xcodeproj` and builds the app. Open the project in Xcode to run it.
+- The first `scripts/build-dxmt` also builds LLVM (a few minutes). After it, delete the built `Genshin Launcher.app` once so Xcode signs it with DXMT inside.
+- `scripts/dev/macos-check` runs the tests, generates `GenshinLauncher.xcodeproj` and builds the app. Open the project in Xcode to run it.
 
 ## Pull requests
 

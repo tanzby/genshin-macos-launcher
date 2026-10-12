@@ -20,5 +20,5 @@ jobs:
 
       - name: Sophon contract tests
         env:
-          YAAGL_LIVE: "1"
+          GENSHIN_LAUNCHER_LIVE: "1"
         run: swift test --filter SophonLiveContractTests

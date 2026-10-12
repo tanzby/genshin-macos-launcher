@@ -293,7 +293,7 @@ public final class LauncherModel {
     _ job: GameJob, stream: AsyncThrowingStream<JobProgress, Error>, store: PendingJobStore
   ) async {
     let activity = ProcessInfo.processInfo.beginActivity(
-      options: [.userInitiated, .idleSystemSleepDisabled], reason: "Yaagl game job")
+      options: [.userInitiated, .idleSystemSleepDisabled], reason: "Genshin Launcher game job")
     var failure: Error?
     do {
       for try await update in stream { progress = update }
@@ -422,7 +422,7 @@ public final class LauncherModel {
 
   private func runWinePreparation(_ wine: any WinePreparing) async {
     let activity = ProcessInfo.processInfo.beginActivity(
-      options: [.userInitiated, .idleSystemSleepDisabled], reason: "Yaagl Wine preparation")
+      options: [.userInitiated, .idleSystemSleepDisabled], reason: "Genshin Launcher Wine preparation")
     let (updates, sink) = AsyncStream<WineInstallProgress>.makeStream(bufferingPolicy: .bufferingNewest(1))  // only the latest progress matters
     var failure: Error?
     let forced = needsForcedReinstall

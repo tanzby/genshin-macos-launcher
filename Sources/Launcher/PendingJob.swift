@@ -1,7 +1,7 @@
 import Foundation
 
 /// A game job that was paused or interrupted before finishing. Persisted at
-/// `<game>/.yaagl-tmp/job.json` so the main button can offer "continue" after a restart.
+/// `<game>/.genshin-launcher-tmp/job.json` so the main button can offer "continue" after a restart.
 package struct PendingJob: Codable, Sendable, Equatable {
   public var schemaVersion = 1
   public var kind: GameJob
@@ -20,7 +20,7 @@ extension PendingJob {
 
 /// Reads and writes `job.json`. Unknown fields are ignored; an unreadable file counts as absent.
 struct PendingJobStore: Sendable {
-  static let directoryName = ".yaagl-tmp"
+  static let directoryName = ".genshin-launcher-tmp"
   static let fileName = "job.json"
 
   let gameDirectory: URL

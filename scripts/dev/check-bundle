@@ -1,11 +1,11 @@
 #!/bin/sh
-# Asserts what a built Yaagl.app must contain: x86_64 helpers in Contents/Helpers/ and the
-# protonextras Windows files in Contents/Resources/protonextras/, DXMT in Contents/Resources/dxmt/ (if built), plus the required Info.plist keys. Usage: check-bundle [Yaagl.app]
+# Asserts what a built Genshin Launcher.app must contain: x86_64 helpers in Contents/Helpers/ and the
+# protonextras Windows files in Contents/Resources/protonextras/, DXMT in Contents/Resources/dxmt/ (if built), plus the required Info.plist keys. Usage: check-bundle [Genshin Launcher.app]
 set -eu
 cd "$(dirname "$0")/../.."
-app="${1:-build/DerivedData/Build/Products/Debug/Yaagl.app}"
+app="${1:-build/DerivedData/Build/Products/Debug/Genshin Launcher.app}"
 fail=0
-for helper in yaagl-wine-shim yaagl-gamehost.dylib; do
+for helper in genshin-launcher-wine-shim genshin-launcher-gamehost.dylib; do
   path="$app/Contents/Helpers/$helper"
   if [ ! -f "$path" ]; then echo "missing: $path"; fail=1; continue; fi
   if [ "$(lipo -archs "$path")" != "x86_64" ]; then echo "not x86_64-only: $path"; fail=1; fi

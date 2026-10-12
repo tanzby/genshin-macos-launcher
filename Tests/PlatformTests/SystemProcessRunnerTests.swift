@@ -4,7 +4,7 @@ import TestSupport
 
 @testable import Platform
 
-private func runnerTempDirectory() -> URL { makeTemporaryDirectory("yaagl-runner-test") }
+private func runnerTempDirectory() -> URL { makeTemporaryDirectory("genshin-launcher-runner-test") }
 
 private func writeScript(_ body: String, named name: String = "tool.sh", in dir: URL) throws -> URL {
   let url = dir.appending(path: name)
@@ -38,7 +38,7 @@ private func writeScript(_ body: String, named name: String = "tool.sh", in dir:
   @Test("WIN-008 allows /usr/bin/codesign (a failing invocation is returned, not rejected)")
   func runsCodesign() async throws {
     let result = try await SystemProcessRunner().run(
-      URL(filePath: "/usr/bin/codesign"), arguments: ["-dv", "/nonexistent/yaagl-test"], environment: [:],
+      URL(filePath: "/usr/bin/codesign"), arguments: ["-dv", "/nonexistent/genshin-launcher-test"], environment: [:],
       workingDirectory: nil)
     #expect(result.exitCode != 0)
   }

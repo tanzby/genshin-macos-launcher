@@ -28,13 +28,13 @@ struct PasswordCancelled: Error {}
 
 @MainActor
 private func settings() -> SettingsModel {
-  let suite = "yaagl-onboard-\(UUID().uuidString)"
+  let suite = "genshin-launcher-onboard-\(UUID().uuidString)"
   let defaults = UserDefaults(suiteName: suite)!
   defaults.removePersistentDomain(forName: suite)
   return SettingsModel(defaults: defaults)
 }
 
-private func tempDirectory() -> URL { makeTemporaryDirectory("yaagl-onb") }
+private func tempDirectory() -> URL { makeTemporaryDirectory("genshin-launcher-onb") }
 
 @MainActor @Suite struct OnboardingModelTests {
   @Test func APP_020_autoLaunchNeverOffersTheGameFolderPickerButStillOffersHosts() {

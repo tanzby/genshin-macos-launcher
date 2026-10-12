@@ -1,6 +1,6 @@
-# Yaagl
+# Genshin Launcher
 
-Yaagl 是 macOS 上的原神启动器。原生版（本仓库）让用户安装、更新、预下载、修复游戏，并在 Wine 中启动它。
+Genshin Launcher 是 macOS 上的原神启动器。原生版（本仓库）让用户安装、更新、预下载、修复游戏，并在 Wine 中启动它。
 
 ## Language
 
@@ -9,11 +9,11 @@ Yaagl 是 macOS 上的原神启动器。原生版（本仓库）让用户安装�
 _Avoid_: 安装路径、gamedir
 
 **Data Directory**:
-`~/Library/Application Support/Yaagl`，存放 Wine、prefix、DXMT、日志和原生状态文件。
+`~/Library/Application Support/Genshin Launcher`，存放 Wine、prefix、DXMT、日志和原生状态文件。
 _Avoid_: 应用目录、support 目录
 
 **Native Marker**:
-数据目录里 `.yaagl-native` 文件，表示这个目录属于原生版。没有这个文件就触发首启清场。
+数据目录里 `.genshin-launcher-native` 文件，表示这个目录属于原生版。没有这个文件就触发首启清场。
 _Avoid_: 版本文件
 
 **Job**:
@@ -21,7 +21,7 @@ _Avoid_: 版本文件
 _Avoid_: 任务、task（task 留给 Swift 并发）
 
 **Pending Job**:
-被暂停或被中断、还没完成的游戏作业，记录种类和目标版本，存在游戏目录的 `.yaagl-tmp/job.json`。Wine 准备不记 Pending Job，由 Wine 目录的版本戳推导。重启后主按钮显示「继续」。
+被暂停或被中断、还没完成的游戏作业，记录种类和目标版本，存在游戏目录的 `.genshin-launcher-tmp/job.json`。Wine 准备不记 Pending Job，由 Wine 目录的版本戳推导。重启后主按钮显示「继续」。
 _Avoid_: 断点
 
 **ldiff**:
@@ -41,7 +41,7 @@ _Avoid_: patch、补丁
 _Avoid_: patched 标记
 
 **Hosts Blocklist**:
-`/etc/hosts` 里 `# Added by Yaagl` 到 `# End of section` 的一段，把遥测域名指向 0.0.0.0。缺失或过期时禁止启动游戏。
+`/etc/hosts` 里 `# Added by Genshin Launcher` 到 `# End of section` 的一段，把遥测域名指向 0.0.0.0。缺失或过期时禁止启动游戏。
 _Avoid_: 屏蔽网络、block_net
 
 **对等清单**:

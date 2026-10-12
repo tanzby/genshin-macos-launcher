@@ -2,12 +2,12 @@ import Foundation
 import Platform
 import os
 
-private let log = Logger(subsystem: "io.github.tanzby.yaagl", category: "wine")
+private let log = Logger(subsystem: "io.github.tanzby.genshin-launcher", category: "wine")
 
 /// Executes a `LaunchRecipe`: launch mutations, run, wait, restore.
 package struct GameSession: Sendable {
-  /// Bundle id of `YaaglGame.app` (UPD-017). `codesign -i` must use the same id.
-  package static let gameHostBundleIdentifier = "io.github.tanzby.yaagl.game"
+  /// Bundle id of `GenshinLauncherGame.app` (UPD-017). `codesign -i` must use the same id.
+  package static let gameHostBundleIdentifier = "io.github.tanzby.genshin-launcher.game"
   static let keptGameLogs = 20
 
   let layout: WineLayout

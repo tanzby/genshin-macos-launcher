@@ -21,7 +21,7 @@ import TestSupport
   @Test func WIN_011_sectionHasMarkersAndOneZeroRoutePerDomain() {
     let section = HostsBlocklist.section(for: Self.domains)
     let lines = section.split(separator: "\n", omittingEmptySubsequences: false).map(String.init)
-    #expect(lines.first == "# Added by Yaagl")
+    #expect(lines.first == "# Added by Genshin Launcher")
     #expect(lines.contains("# End of section"))
     let routes = lines.filter { $0.hasPrefix("0.0.0.0 ") }
     #expect(routes == Self.domains.map { "0.0.0.0 \($0)" })
@@ -56,7 +56,7 @@ import TestSupport
 
   @Test func WIN_011_statusIsOutdatedWhenSectionHasNoEndMarker() throws {
     let temp = TempDir()
-    let hosts = Self.system + "# Added by Yaagl\n0.0.0.0 a.example.com\n"
+    let hosts = Self.system + "# Added by Genshin Launcher\n0.0.0.0 a.example.com\n"
     let (blocklist, _, _) = try makeBlocklist(temp, hosts: hosts)
     #expect(try blocklist.status() == .outdated)
   }
@@ -77,7 +77,7 @@ import TestSupport
 
   @Test func WIN_011_applyReplacesOutdatedSectionInPlace() async throws {
     let temp = TempDir()
-    let stale = "# Added by Yaagl\n# old\n0.0.0.0 old.example.com\n# End of section\n"
+    let stale = "# Added by Genshin Launcher\n# old\n0.0.0.0 old.example.com\n# End of section\n"
     let hosts = Self.system + stale + "192.168.0.2 nas\n"
     let (blocklist, _, file) = try makeBlocklist(temp, hosts: hosts)
 
@@ -86,14 +86,14 @@ import TestSupport
     let result = try String(contentsOf: file, encoding: .utf8)
     #expect(!result.contains("old.example.com"))
     #expect(result.contains("192.168.0.2 nas"))
-    #expect(result.components(separatedBy: "# Added by Yaagl").count == 2)
+    #expect(result.components(separatedBy: "# Added by Genshin Launcher").count == 2)
     #expect(try blocklist.status() == .current)
   }
 
   @Test func WIN_011_unterminatedSectionOnlyLosesItsOwnLines() async throws {
     // The TS version dropped everything after an unterminated start marker.
     let temp = TempDir()
-    let hosts = Self.system + "# Added by Yaagl\n0.0.0.0 a.example.com\n192.168.0.2 nas\n"
+    let hosts = Self.system + "# Added by Genshin Launcher\n0.0.0.0 a.example.com\n192.168.0.2 nas\n"
     let (blocklist, _, file) = try makeBlocklist(temp, hosts: hosts)
 
     try await blocklist.apply()
@@ -111,7 +111,7 @@ import TestSupport
     try await blocklist.apply()
 
     let result = try String(contentsOf: file, encoding: .utf8)
-    #expect(result.components(separatedBy: "# Added by Yaagl").count == 2)
+    #expect(result.components(separatedBy: "# Added by Genshin Launcher").count == 2)
     #expect(result.contains("1.2.3.4 mid"))
   }
 
@@ -184,7 +184,7 @@ import TestSupport
   @Test func WIN_011_foreignEndMarkerDoesNotSwallowUserLines() async throws {
     let temp = TempDir()
     let file = temp.path("hosts")
-    let hosts = "# Added by Yaagl\n0.0.0.0 a.example.com\n10.0.0.1 mine\n# End of section\n"
+    let hosts = "# Added by Genshin Launcher\n0.0.0.0 a.example.com\n10.0.0.1 mine\n# End of section\n"
     try hosts.write(to: file, atomically: true, encoding: .utf8)
     let blocklist = HostsBlocklist(domains: ["a.example.com"], hostsFile: file, admin: ShellAdmin(), scratchDirectory: temp.url)
     try await blocklist.apply()

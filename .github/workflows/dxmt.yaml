@@ -1,7 +1,7 @@
 name: DXMT
 
 # Builds DXMT from the pinned third_party/dxmt submodule (docs/adr/0003) and uploads it as the artifact "dxmt"
-# (the folder that ships in Yaagl.app/Contents/Resources/dxmt). release.yaml calls this workflow; it also runs on
+# (the folder that ships in Genshin Launcher.app/Contents/Resources/dxmt). release.yaml calls this workflow; it also runs on
 # pull requests and main when the pin or the recipe changes, and weekly so the cached LLVM does not expire
 # (Actions evicts caches unused for 7 days).
 #

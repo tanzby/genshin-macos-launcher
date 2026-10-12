@@ -9,7 +9,7 @@ scripts/dev/parity-coverage --strict
 scripts/dev/check-async-closure-default
 swift test
 xcodegen generate
-xcodebuild -project Yaagl.xcodeproj -scheme Yaagl -configuration Debug \
+xcodebuild -project GenshinLauncher.xcodeproj -scheme GenshinLauncher -configuration Debug \
   -destination 'platform=macOS,arch=arm64' -derivedDataPath build/DerivedData build
 [ "$(git hash-object Package.resolved)" = "$resolved" ] || { git diff Package.resolved; echo "Package.resolved was rewritten (#87)"; exit 1; }
 

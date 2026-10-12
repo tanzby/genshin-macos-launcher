@@ -22,14 +22,14 @@ enum HDiffPatcher {
     defer { close(outFD) }
 
     let result = withExtendedLifetime(cancelled) {
-      yaagl_hpatch_apply(
+      launcher_hpatch_apply(
         oldFD, diffFD, UInt64(offset), UInt64(length), outFD, UInt64(expectedSize),
         { context in Unmanaged<CancelFlag>.fromOpaque(context!).takeUnretainedValue().isSet ? 1 : 0 },
         Unmanaged.passUnretained(cancelled).toOpaque())
     }
     switch result {
-    case YAAGL_HPATCH_OK: return
-    case YAAGL_HPATCH_CANCELLED: throw CancellationError()
+    case LAUNCHER_HPATCH_OK: return
+    case LAUNCHER_HPATCH_CANCELLED: throw CancellationError()
     default: throw SophonError.patchFailed(path: name)
     }
   }

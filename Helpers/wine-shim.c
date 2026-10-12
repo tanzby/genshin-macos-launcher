@@ -2,9 +2,9 @@
  * Installed as <wine>/lib/wine/x86_64-unix/wine, the loader Wine execs for
  * every new Windows process; the original host is kept beside it as
  * wine-host. The process whose executable (argv[1]) contains
- * YAAGL_GAME_HOST_MATCH (the game executable name) runs YAAGL_GAME_HOST_EXE
+ * GENSHIN_LAUNCHER_GAME_HOST_MATCH (the game executable name) runs GENSHIN_LAUNCHER_GAME_HOST_EXE
  * instead (the copy of wine-host inside the registered game .app, so macOS
- * can enable Game Mode for it), with YAAGL_GAME_HOST_DYLIB injected. Every
+ * can enable Game Mode for it), with GENSHIN_LAUNCHER_GAME_HOST_DYLIB injected. Every
  * other process runs wine-host unchanged.
  *
  * argv[0] is set to this file's resolved path; the host looks for ntdll.so
@@ -26,9 +26,9 @@ int main(int argc, char **argv) {
   }
   argv[0] = real;
 
-  const char *gameHost = getenv("YAAGL_GAME_HOST_EXE");
-  const char *match = getenv("YAAGL_GAME_HOST_MATCH");
-  const char *dylib = getenv("YAAGL_GAME_HOST_DYLIB");
+  const char *gameHost = getenv("GENSHIN_LAUNCHER_GAME_HOST_EXE");
+  const char *match = getenv("GENSHIN_LAUNCHER_GAME_HOST_MATCH");
+  const char *dylib = getenv("GENSHIN_LAUNCHER_GAME_HOST_DYLIB");
   if (argc > 1 && gameHost && *gameHost && match && *match && strcasestr(argv[1], match) &&
       access(gameHost, X_OK) == 0) {
     if (dylib && *dylib) setenv("DYLD_INSERT_LIBRARIES", dylib, 1);

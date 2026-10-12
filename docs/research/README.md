@@ -3,8 +3,9 @@
 这些文档是从旧 TS 版启动器（[tanzby/yet-another-anime-game-launcher](https://github.com/tanzby/yet-another-anime-game-launcher)，提交 `f38cda4` 前后）迁到原生版之前做的研究，是原生版设计与验收的依据。
 
 - 文中的 `file:line` 引用、`src/…`、`sophon_server/…`、`native/gamehost/…` 都指**旧仓库**。
+- 旧版里以旧项目名开头的标识（环境变量、文件名、隐藏文件、本仓库早期的 bundle id）已统一改写成现名前缀；核对旧代码时以旧仓库为准。旧版写在用户机器上的 `com.3shain.*` 路径和外部仓库地址保持原样。
 - 文中的 `#NN` 票号指旧仓库的 wayfinder 地图 [#13](https://github.com/tanzby/yet-another-anime-game-launcher/issues/13)。
-- 研究中的“待定”和“建议”已经由后续决定收口，以本仓库地图的 Decisions so far 和 `docs/adr/` 为准，例如 bundle id 已改为 `io.github.tanzby.yaagl`，数据不再兼容旧版。
+- 研究中的“待定”和“建议”已经由后续决定收口，以本仓库地图的 Decisions so far 和 `docs/adr/` 为准，例如 bundle id 已改为 `io.github.tanzby.genshin-launcher`，数据不再兼容旧版。
 
 | 文档 | 内容 |
 |---|---|

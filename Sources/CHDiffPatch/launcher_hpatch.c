@@ -1,5 +1,5 @@
 // Thin file-descriptor front end over the vendored HDiffPatch patcher (hpatch/, v4.5.2, MIT).
-#include "yaagl_hpatch.h"
+#include "launcher_hpatch.h"
 
 #include <errno.h>
 #include <stdlib.h>
@@ -67,11 +67,11 @@ static int file_size(int fd, uint64_t *size) {
   return 0;
 }
 
-yaagl_hpatch_result yaagl_hpatch_apply(
+launcher_hpatch_result launcher_hpatch_apply(
     int old_fd, int diff_fd, uint64_t diff_offset, uint64_t diff_length, int out_fd,
     uint64_t expected_new_size, int (*is_cancelled)(void *context), void *context) {
   uint64_t old_size = 0;
-  if (file_size(old_fd, &old_size) != 0) return YAAGL_HPATCH_IO_ERROR;
+  if (file_size(old_fd, &old_size) != 0) return LAUNCHER_HPATCH_IO_ERROR;
 
   stream_ctx old_ctx = {old_fd, 0, is_cancelled, context, 0, 0};
   stream_ctx diff_ctx = {diff_fd, diff_offset, is_cancelled, context, 0, 0};
@@ -87,28 +87,28 @@ yaagl_hpatch_result yaagl_hpatch_apply(
   if (getCompressedDiffInfo(&plain, &diff_stream)) {
     // "HDIFF13&" plus an empty compressor name: what the CN ldiff files are.
     if (plain.compressType[0] != '\0' || plain.compressedCount != 0) {
-      return YAAGL_HPATCH_UNSUPPORTED_COMPRESSION;
+      return LAUNCHER_HPATCH_UNSUPPORTED_COMPRESSION;
     }
     if (plain.oldDataSize != old_size || plain.newDataSize != expected_new_size) {
-      return YAAGL_HPATCH_SIZE_MISMATCH;
+      return LAUNCHER_HPATCH_SIZE_MISMATCH;
     }
   } else if (!diff_ctx.cancelled && !diff_ctx.io_failed &&
              getSingleCompressedDiffInfo(&single, &diff_stream, 0)) {
     is_single = 1;
-    if (single.compressType[0] != '\0') return YAAGL_HPATCH_UNSUPPORTED_COMPRESSION;
+    if (single.compressType[0] != '\0') return LAUNCHER_HPATCH_UNSUPPORTED_COMPRESSION;
     if (single.oldDataSize != old_size || single.newDataSize != expected_new_size) {
-      return YAAGL_HPATCH_SIZE_MISMATCH;
+      return LAUNCHER_HPATCH_SIZE_MISMATCH;
     }
-    if (single.stepMemSize > kMaxStepMem) return YAAGL_HPATCH_BAD_DIFF;
+    if (single.stepMemSize > kMaxStepMem) return LAUNCHER_HPATCH_BAD_DIFF;
   } else {
-    return diff_ctx.cancelled ? YAAGL_HPATCH_CANCELLED
-           : diff_ctx.io_failed ? YAAGL_HPATCH_IO_ERROR
-                                : YAAGL_HPATCH_BAD_DIFF;
+    return diff_ctx.cancelled ? LAUNCHER_HPATCH_CANCELLED
+           : diff_ctx.io_failed ? LAUNCHER_HPATCH_IO_ERROR
+                                : LAUNCHER_HPATCH_BAD_DIFF;
   }
 
   size_t cache_size = (is_single ? (size_t)single.stepMemSize : 0) + kIOCache;
   unsigned char *cache = (unsigned char *)malloc(cache_size);
-  if (!cache) return YAAGL_HPATCH_OUT_OF_MEMORY;
+  if (!cache) return LAUNCHER_HPATCH_OUT_OF_MEMORY;
 
   hpatch_BOOL ok =
       is_single
@@ -119,8 +119,8 @@ yaagl_hpatch_result yaagl_hpatch_apply(
           : patch_decompress_with_cache(&out_stream, &old_stream, &diff_stream, NULL, cache,
                                         cache + cache_size);
   free(cache);
-  if (ok) return YAAGL_HPATCH_OK;
-  if (old_ctx.cancelled || diff_ctx.cancelled || out_ctx.cancelled) return YAAGL_HPATCH_CANCELLED;
-  if (old_ctx.io_failed || diff_ctx.io_failed || out_ctx.io_failed) return YAAGL_HPATCH_IO_ERROR;
-  return YAAGL_HPATCH_PATCH_FAILED;
+  if (ok) return LAUNCHER_HPATCH_OK;
+  if (old_ctx.cancelled || diff_ctx.cancelled || out_ctx.cancelled) return LAUNCHER_HPATCH_CANCELLED;
+  if (old_ctx.io_failed || diff_ctx.io_failed || out_ctx.io_failed) return LAUNCHER_HPATCH_IO_ERROR;
+  return LAUNCHER_HPATCH_PATCH_FAILED;
 }

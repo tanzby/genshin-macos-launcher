@@ -13,7 +13,7 @@
 | `xdelta3` | **否**：hk4ecn 的 `patched` 列表为空 | 删除；以后真需要再把 xdelta3 源码作为 C target | Apache-2.0（若引入） |
 | `protonextras` | 仅在开启「Steam 补丁」（默认关）时 | 不能变成 Swift：是 Windows PE 文件，原样作为资源打包 | Proton，BSD-3（顶层）+ 各子目录自有许可 |
 | `gamehost`（`wine-shim.c`、`gamehost.c`） | 是，Game Mode + 原生全屏（默认开） | **必须保留 C**，改成 SwiftPM/Xcode 的 x86_64 C target 随 App 打包 | 自有代码 |
-| `gamehost-dev.m`、`turner.c` | 否，仅 `yaagl-diag` 开发用，不随 App 发布 | `gamehost-dev.m` 可做 x86_64 ObjC target；`turner.c` 是 Windows 程序，仍用 llvm-mingw | 自有代码 |
+| `gamehost-dev.m`、`turner.c` | 否，仅 `genshin-launcher-diag` 开发用，不随 App 发布 | `gamehost-dev.m` 可做 x86_64 ObjC target；`turner.c` 是 Windows 程序，仍用 llvm-mingw | 自有代码 |
 | Sophon 的 zstd 依赖 | 是（Sophon 分块是 zstd） | zstd C 源码作为 C target（Apple Compression 不支持 zstd） | BSD-3 |
 | 系统 `tar`/`unzip`/`md5`/`df` | 是 | Apple `Compression`（xz、raw deflate）+ 小型 Swift tar/zip 读取，或 libarchive C target；`CryptoKit`；`FileManager`/`statfs` | 无 / libarchive 为 BSD-2 |
 | 系统 `codesign`、`lsregister` | 是（Game Mode 的 bundle） | `lsregister` → `LSRegisterURL`；**`codesign` 没有公开 API 替代** | — |
@@ -66,12 +66,12 @@
 
 `build-app.js:281-284` 在打包时调用 `native/gamehost/build.sh` 生成，主 checkout 的 `sidecar/gamehost/` 下两个文件均为 **x86_64** Mach-O（Wine 在 Rosetta 下运行）。`src/wine/game-host.ts:66-127`（`prepareGameHost`）在 `hk4e/program-launch-game.ts:178-184` 里调用，「原生全屏 + Game Mode」设置默认开（`docs/genshin-macos.md`）。
 
-- **`wine-shim.c` → `yaagl-wine-shim`**：被拷成 `<wine>/lib/wine/x86_64-unix/wine`（`game-host.ts:76-84`），原 loader 改名 `wine-host`。Wine 为**每个** Windows 进程 exec 这个路径；shim 判断 `argv[1]` 是否含游戏 exe 名，是则设 `DYLD_INSERT_LIBRARIES` 并 exec 已注册的 `YaaglGame.app/Contents/MacOS/wine`，否则 exec `wine-host`（`wine-shim.c:29-42`）。
+- **`wine-shim.c` → `genshin-launcher-wine-shim`**：被拷成 `<wine>/lib/wine/x86_64-unix/wine`（`game-host.ts:76-84`），原 loader 改名 `wine-host`。Wine 为**每个** Windows 进程 exec 这个路径；shim 判断 `argv[1]` 是否含游戏 exe 名，是则设 `DYLD_INSERT_LIBRARIES` 并 exec 已注册的 `GenshinLauncherGame.app/Contents/MacOS/wine`，否则 exec `wine-host`（`wine-shim.c:29-42`）。
   - 必须是独立的 x86_64 可执行文件，并且在 Wine 的进程树里被 exec，不在 App 进程内。理论上可以用 Swift 写，但它是每个 Wine 进程都会走的 45 行 exec 跳板，Swift 运行时没有任何好处。**保留 C**，用 SwiftPM（`--arch x86_64`）或 XcodeGen 中 `ARCHS=x86_64` 的 C 目标构建并打进 App。
-- **`gamehost.c` → `yaagl-gamehost.dylib`**：通过 `DYLD_INSERT_LIBRARIES` 注入游戏的 Wine 进程（`gamehost.c:1-17`）。它用 `dlsym` 拿 objc runtime，在 `winemac.so` 加载后（`gamehost.c:385-403` 的 dyld image 回调）给 Wine 的 `NSWindow` 子类换实现：私有全屏 frame getter、`minimumLevelForActive:`、`toggleFullScreen:`；还通过 `__DATA,__interpose` 段替换 `getaddrinfo`（`gamehost.c:298-337`）。
+- **`gamehost.c` → `genshin-launcher-gamehost.dylib`**：通过 `DYLD_INSERT_LIBRARIES` 注入游戏的 Wine 进程（`gamehost.c:1-17`）。它用 `dlsym` 拿 objc runtime，在 `winemac.so` 加载后（`gamehost.c:385-403` 的 dyld image 回调）给 Wine 的 `NSWindow` 子类换实现：私有全屏 frame getter、`minimumLevelForActive:`、`toggleFullScreen:`；还通过 `__DATA,__interpose` 段替换 `getaddrinfo`（`gamehost.c:298-337`）。
   - 头注释写明「只链接 libSystem：Wine host 不能过早加载 AppKit」（`gamehost.c:8-10`）。Swift dylib 即便不 `import AppKit` 也会带入 Swift 运行时与 Foundation 依赖，而 `__interpose` 段、constructor、在 x86_64 Wine 进程里按时机 swizzle，都是 C 层面的事。**必须保留 C**（「用 Swift 替换」= 用 SwiftPM/Xcode 构建 x86_64 C target、随 App 打包）。
-- **`gamehost-dev.m`**：开发专用的 ObjC 伴随库，由 `gamehost.c:75-88` 在 `YAAGL_GAMEHOST_DEV` 下 `dlopen`；只给 `scripts/dev/yaagl-diag --autoplay` 用，不随 App 发布（`docs/genshin-macos.md:39`）。可作为 x86_64 ObjC target 构建，不影响产品。
-- **`turner.c`**：Windows 控制台程序（`#include <windows.h>`，`SendInput`），由 `build.sh:25-28` 用 llvm-mingw 编译，`yaagl-diag:451-496` 在前缀里运行。**不可能是 Swift，也不能用 SwiftPM 构建**；保持 dev-only 的 mingw 构建。
+- **`gamehost-dev.m`**：开发专用的 ObjC 伴随库，由 `gamehost.c:75-88` 在 `GENSHIN_LAUNCHER_GAMEHOST_DEV` 下 `dlopen`；只给 `scripts/dev/genshin-launcher-diag --autoplay` 用，不随 App 发布（`docs/genshin-macos.md:39`）。可作为 x86_64 ObjC target 构建，不影响产品。
+- **`turner.c`**：Windows 控制台程序（`#include <windows.h>`，`SendInput`），由 `build.sh:25-28` 用 llvm-mingw 编译，`genshin-launcher-diag:451-496` 在前缀里运行。**不可能是 Swift，也不能用 SwiftPM 构建**；保持 dev-only 的 mingw 构建。
 - **`build.sh`**：迁移后由 SwiftPM/XcodeGen 的 x86_64 target 取代（`--dev` 部分可保留脚本或另建 target）。
 
 `prepareGameHost` 同时依赖两个系统二进制：

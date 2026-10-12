@@ -4,24 +4,24 @@
 
 ## 0. 名词与目录
 
-- **数据目录**：`~/Library/Application Support/Yaagl`，下文的 `./` 都相对它。App 启动脚本 `parameterized` 把 `Contents/Resources/.` rsync 到这里，`cd` 进去，再以 `--path=$APST_DIR` 启动 Neutralino（`build-app.js:222`、`build-app.js:233`、`build-app.js:236`）。`resolve()` 把相对路径拼到 `NL_PATH` 上（`src/utils/neu.ts:4-17`）。
-- **Wine 运行时**：`./wine`。开发时可用 `YAAGL_WINE_RUNTIME` 换成别的目录（`src/wine/wine.ts:24-29`）。
+- **数据目录**：`~/Library/Application Support/Genshin Launcher`，下文的 `./` 都相对它。App 启动脚本 `parameterized` 把 `Contents/Resources/.` rsync 到这里，`cd` 进去，再以 `--path=$APST_DIR` 启动 Neutralino（`build-app.js:222`、`build-app.js:233`、`build-app.js:236`）。`resolve()` 把相对路径拼到 `NL_PATH` 上（`src/utils/neu.ts:4-17`）。
+- **Wine 运行时**：`./wine`。开发时可用 `GENSHIN_LAUNCHER_WINE_RUNTIME` 换成别的目录（`src/wine/wine.ts:24-29`）。
 - **Prefix**：`./wineprefix`，写死在 `src/app.tsx:104`。
 - **loader**：如果有 `bin/wine64` 就用它，否则用 `bin/wine`（`src/wine/wine.ts:219-226`）。
 - **DXMT 文件**：`./dxmt/`。
-- **Game Mode 辅助程序**：`./sidecar/gamehost/yaagl-wine-shim` 和 `yaagl-gamehost.dylib`（`src/wine/game-host.ts:15-16`），由 `native/gamehost/build.sh` 构建成 **x86_64**（`native/gamehost/build.sh:15-17`），打包时生成（`build-app.js:282`）。
-- **游戏 App 外壳**：`./YaaglGame.app`，bundle id 是 `com.3shain.yaagl.game`（`src/wine/game-host.ts:17-21`）。
+- **Game Mode 辅助程序**：`./sidecar/gamehost/genshin-launcher-wine-shim` 和 `genshin-launcher-gamehost.dylib`（`src/wine/game-host.ts:15-16`），由 `native/gamehost/build.sh` 构建成 **x86_64**（`native/gamehost/build.sh:15-17`），打包时生成（`build-app.js:282`）。
+- **游戏 App 外壳**：`./GenshinLauncherGame.app`，bundle id 是 `com.3shain.yaagl.game`（`src/wine/game-host.ts:17-21`）。
 - **设置存储**：Neutralino storage，所有 `getKey`/`setKey` 都走 `Neutralino.storage`（`src/utils/neu.ts:139-156`）。文件放在数据目录的 `.storage/`（`neutralino.config.json:19` 允许 `storage.*`）。
 
 ## 1. 进程拓扑
 
 ```
-Yaagl (Neutralino)
+Genshin Launcher (Neutralino)
  └─ sh -c "<ENV…> <runtime>/bin/wine64 cmd /c Z:\…\config.bat &> logs/game_<ts>.log"   ← Neutralino.os.spawnProcess
       └─ wine64 (loader)  ── 需要时自动拉起 → <runtime>/bin/wineserver（每个 prefix 一个）
-           └─ 每个新 Windows 进程：exec <runtime>/lib/wine/x86_64-unix/wine   ← 实际是 yaagl-wine-shim
+           └─ 每个新 Windows 进程：exec <runtime>/lib/wine/x86_64-unix/wine   ← 实际是 genshin-launcher-wine-shim
                 ├─ argv[1] 含 YuanShen.exe → setenv DYLD_INSERT_LIBRARIES=gamehost.dylib，
-                │                           exec YaaglGame.app/Contents/MacOS/wine（wine-host 的副本）
+                │                           exec GenshinLauncherGame.app/Contents/MacOS/wine（wine-host 的副本）
                 └─ 其他（cmd.exe、services、winedevice、explorer、steam.exe…）
                                           → 清掉 DYLD_INSERT_LIBRARIES，exec 同目录的 wine-host
 ```
@@ -30,11 +30,11 @@ Yaagl (Neutralino)
 - `exec2` 先用 `build()` 拼出一行带环境变量前缀的 shell 命令，交给 `Neutralino.os.spawnProcess`，再等 `spawnedProcess` 事件里的 `exit`。退出码不为 0 就 reject（`src/utils/neu.ts:39-86`）。日志用 `&> logfile` 重定向（`src/utils/neu.ts:45-48`）。
 - 其他 Wine 调用（`reg`/`regedit`/`wineboot`/`winecfg`）走同步的 `exec`，也就是 `Neutralino.os.execCommand`（`src/wine/wine.ts:35-52`、`src/utils/neu.ts:19-37`）。
 - wineserver 只直接调用两种：`wineserver -w` 等待 prefix 空闲，`wineserver -k` 杀掉 prefix（`src/wine/wine.ts:73-81`）。
-- shim 的逻辑见 `native/gamehost/wine-shim.c:20-45`。它把 argv[0] 改成自身的真实路径，因为 host 要靠它找 `ntdll.so`。匹配用的是 `strcasestr(argv[1], YAAGL_GAME_HOST_MATCH)`，而且要求 `YAAGL_GAME_HOST_EXE` 可执行。所以 steam.exe 本身不会被匹配，它再拉起的 YuanShen.exe 才会。
+- shim 的逻辑见 `native/gamehost/wine-shim.c:20-45`。它把 argv[0] 改成自身的真实路径，因为 host 要靠它找 `ntdll.so`。匹配用的是 `strcasestr(argv[1], GENSHIN_LAUNCHER_GAME_HOST_MATCH)`，而且要求 `GENSHIN_LAUNCHER_GAME_HOST_EXE` 可执行。所以 steam.exe 本身不会被匹配，它再拉起的 YuanShen.exe 才会。
 - 安装 shim 由 `prepareGameHost` 完成（`src/wine/game-host.ts:66-127`）：
   1. 第一次运行时把原 `x86_64-unix/wine` 改名为 `wine-host`。如果 `wine-host` 已不存在、而 loader 位置已经是 shim，就报错，防止把 shim 当成 host 搬走（`:79-83`）。
   2. 内容不同才复制 shim（`:84`）。
-  3. `wine-host` 有变化时，重建 `YaaglGame.app/Contents/MacOS/wine`，同时留一份 `.wine-host` 用来比较。然后执行 `codesign -f -s - -i com.3shain.yaagl.game`（`:93-110`）。签名标识符必须等于 bundle id，否则每次 `getaddrinfo` 会卡住约 35 秒（`docs/genshin-macos.md:13`）。
+  3. `wine-host` 有变化时，重建 `GenshinLauncherGame.app/Contents/MacOS/wine`，同时留一份 `.wine-host` 用来比较。然后执行 `codesign -f -s - -i com.3shain.yaagl.game`（`:93-110`）。签名标识符必须等于 bundle id，否则每次 `getaddrinfo` 会卡住约 35 秒（`docs/genshin-macos.md:13`）。
   4. 写 Info.plist（`:34-58`，关键键是 `LSApplicationCategoryType=public.app-category.games`、`LSSupportsGameMode`、`LSUIElement`、`NSPrincipalClass=WineApplication`）。有改动时执行 `lsregister -f`（`:115`）。
   5. 任何失败都返回 `{}`：游戏照常启动，只是没有 Game Mode（`:123-126`）。
 
@@ -63,11 +63,11 @@ Yaagl (Neutralino)
 | `DXMT_METALFX_SPATIAL_SWAPCHAIN` | `1` / 不设 | 见 §5 |
 | `GST_PLUGIN_FEATURE_RANK` | `atdec:MAX,avdec_h264:MAX` | 写死（过场视频解码） |
 | `HTTP_PROXY`、`HTTPS_PROXY` | `config_proxyHost` 的值 | 只在 `config_proxyEnabled=true` 时设置（`src/config/proxy-enabled.tsx:21`、`src/config/proxy-host.tsx:27`） |
-| `YAAGL_GAME_HOST_EXE` | `YaaglGame.app/Contents/MacOS/wine` | `config_game_mode`，**默认 true**（`hk4e/config/game-mode.tsx:22`），并且辅助程序存在时才设置 |
-| `YAAGL_GAME_HOST_MATCH` | `server.executable`（CN：YuanShen.exe） | 同上，`src/wine/game-host.ts:116-122` |
-| `YAAGL_GAME_HOST_DYLIB` | `sidecar/gamehost/yaagl-gamehost.dylib` | 同上。shim 只把它转成 `DYLD_INSERT_LIBRARIES` 交给游戏进程 |
-| `YAAGL_GAMEHOST_LOG` | `logs/gamehost.log` | 同上，由 dylib 的构造函数打开（`native/gamehost/gamehost.c:397-403`） |
-| `YAAGL_GAMEHOST_DEV` | 仅开发用 | 由 yaagl-diag 设置，dylib 据此加载 dev 伴侣库（`gamehost.c:75-88`） |
+| `GENSHIN_LAUNCHER_GAME_HOST_EXE` | `GenshinLauncherGame.app/Contents/MacOS/wine` | `config_game_mode`，**默认 true**（`hk4e/config/game-mode.tsx:22`），并且辅助程序存在时才设置 |
+| `GENSHIN_LAUNCHER_GAME_HOST_MATCH` | `server.executable`（CN：YuanShen.exe） | 同上，`src/wine/game-host.ts:116-122` |
+| `GENSHIN_LAUNCHER_GAME_HOST_DYLIB` | `sidecar/gamehost/genshin-launcher-gamehost.dylib` | 同上。shim 只把它转成 `DYLD_INSERT_LIBRARIES` 交给游戏进程 |
+| `GENSHIN_LAUNCHER_GAMEHOST_LOG` | `logs/gamehost.log` | 同上，由 dylib 的构造函数打开（`native/gamehost/gamehost.c:397-403`） |
+| `GENSHIN_LAUNCHER_GAMEHOST_DEV` | 仅开发用 | 由 genshin-launcher-diag 设置，dylib 据此加载 dev 伴侣库（`gamehost.c:75-88`） |
 
 `renderBackend` 对 hk4e 的所有发行版都是 `dxmt`（`src/wine/distro.ts:17-78`），所以 `program-launch-game.ts:205-207` 的非 dxmt 分支对原神 CN 是死代码。
 
@@ -97,7 +97,7 @@ Yaagl (Neutralino)
    6. **生成 `config.bat`**（`:126-135`）：内容依次是：`copy HoYoKProtect.sys` 到 `%WINDIR%\system32\`；`cd /d` 进游戏目录；用 `-platform_type CLOUD_THIRD_PARTY_PC -is_cloud 1` 启动游戏 exe。注意：在 Steam patch 路径下 config.bat **不会被执行**，所以这次复制和这两个启动参数都不会生效（`:187-190`）。
    7. **`patchProgram`**（`src/clients/mhy/patch.ts:29-125`）。key `patched` 已存在时直接跳过：
       - 游戏文件（没有开 patchOff 时）：CN 现在只把 `server.removed` 里的三个文件改名为 `.bak`：`upload_crash.exe`、`crashreport.exe` 和 `vulkan-1.dll`（`src/clients/hk4ecn.ts:49-63`）。`patched` 和 `added` 两个列表都是空的。
-      - **DXMT 注入运行时**：`./wine/lib/wine/x86_64-windows/{d3d10core,d3d11,dxgi}.dll` 先改名为 `.bak`，再从 `./dxmt/` 复制新的过去（`patch.ts:69-73`）。`winemetal.dll` 复制到 `x86_64-windows/` 和 `prefix/system32/`，`winemetal.so` 复制到 `x86_64-unix/`（`:76-87`）。路径写死为 `./wine`，**没有遵循 `YAAGL_WINE_RUNTIME`**。
+      - **DXMT 注入运行时**：`./wine/lib/wine/x86_64-windows/{d3d10core,d3d11,dxgi}.dll` 先改名为 `.bak`，再从 `./dxmt/` 复制新的过去（`patch.ts:69-73`）。`winemetal.dll` 复制到 `x86_64-windows/` 和 `prefix/system32/`，`winemetal.so` 复制到 `x86_64-unix/`（`:76-87`）。路径写死为 `./wine`，**没有遵循 `GENSHIN_LAUNCHER_WINE_RUNTIME`**。
       - **Proton extras**：`sidecar/protonextras/steam{64,32}.exe` 和 `lsteamclient{64,32}.dll` 复制到 `system32/` 和 `syswow64/`（`:105-122`）。
       - 设置 `patched=1`（`:124`）。如果进程崩溃，下次启动时 `init()` 发现 `patched` 存在，就先执行 revert；revert 失败则改为完整性校验（`hk4e/index.tsx:290-304`）。
    8. 执行 `mkdir logs`。
@@ -107,8 +107,8 @@ Yaagl (Neutralino)
 
 ### 3.4 需要 sudo 的步骤（`osascript … with administrator privileges`）
 
-- **安装 Wine 时**，`ensureHosts(ENSURE_HOSTS)` 用 sudo 重写 `/etc/hosts` 里 `# Added by Yaagl` 到 `# End of section` 之间的内容（`src/hosts.ts:3-29`，`wine-install-program.ts:82`）。
-- **block-net**：写一个 `/tmp/yaagl_network_block_script.sh`，用 sudo 在后台执行。脚本往 hosts 里加 `0.0.0.0 <CN_BLOCK_URL>`，`sleep 10` 秒后用 `sed` 删掉（`program-launch-game.ts:143-174`）。
+- **安装 Wine 时**，`ensureHosts(ENSURE_HOSTS)` 用 sudo 重写 `/etc/hosts` 里 `# Added by Genshin Launcher` 到 `# End of section` 之间的内容（`src/hosts.ts:3-29`，`wine-install-program.ts:82`）。
+- **block-net**：写一个 `/tmp/genshin-launcher_network_block_script.sh`，用 sudo 在后台执行。脚本往 hosts 里加 `0.0.0.0 <CN_BLOCK_URL>`，`sleep 10` 秒后用 `sed` 删掉（`program-launch-game.ts:143-174`）。
 - **安装 Wine 时**，`xattr -s -r -d com.apple.quarantine ./wine` 也走 sudo（`src/utils/unix.ts:5-11`）。
 - `runInSudo` 的实现见 `src/utils/neu.ts:88-102`。
 
@@ -116,7 +116,7 @@ Yaagl (Neutralino)
 
 设计文档在 `docs/genshin-macos.md:3-22`，实现分两半：
 
-**(a) 让系统把它认作游戏（isIdentifiedGame）**：游戏进程必须是一个已注册 bundle 里的可执行文件，而且 bundle 声明 `LSApplicationCategoryType=games`。只在未打包的二进制里嵌入 `__info_plist` 不够（`docs/genshin-macos.md:7`）。做法见 §1：shim 把游戏进程改为执行 `YaaglGame.app/Contents/MacOS/wine`。
+**(a) 让系统把它认作游戏（isIdentifiedGame）**：游戏进程必须是一个已注册 bundle 里的可执行文件，而且 bundle 声明 `LSApplicationCategoryType=games`。只在未打包的二进制里嵌入 `__info_plist` 不够（`docs/genshin-macos.md:7`）。做法见 §1：shim 把游戏进程改为执行 `GenshinLauncherGame.app/Contents/MacOS/wine`。
 
 **(b) 原生全屏（isGameFullscreen）**：由注入的 `gamehost.dylib` 完成（`native/gamehost/gamehost.c`）：
 
@@ -130,7 +130,7 @@ Yaagl (Neutralino)
 - **getaddrinfo 拦截**：本机 `<host>.local` 的查询直接用网卡地址回答，避免被 Local Network 权限卡约 35 s（`:293-336`，`docs/genshin-macos.md:21`）。
 - **卡住的进程自杀**：游戏窗口消失 15 s 后进程还在，就 `_exit(0)`（`:226-266`）。
 
-这些行为都在 **Wine 进程内部**，与启动器用什么语言写无关。Swift 版只需要：构建并分发 x86_64 的 shim 和 dylib；完成 §1 里 `prepareGameHost` 的文件操作、签名和 LaunchServices 注册；设置那四个 `YAAGL_GAME_HOST*` 环境变量。
+这些行为都在 **Wine 进程内部**，与启动器用什么语言写无关。Swift 版只需要：构建并分发 x86_64 的 shim 和 dylib；完成 §1 里 `prepareGameHost` 的文件操作、签名和 LaunchServices 注册；设置那四个 `GENSHIN_LAUNCHER_GAME_HOST*` 环境变量。
 
 ## 5. MetalFX 与 DXMT 开关
 
@@ -146,7 +146,7 @@ Yaagl (Neutralino)
 
 ### 6.1 Wine（`src/wine/distro.ts`、`src/wine/wine-install-program.ts`）
 
-- 发行版列表是内置常量 `YAAGL_BUILTIN_WINE`，共 6 项（`distro.ts:17-78`），**不从网络获取**。每项有 `id`、`remoteUrl`，以及 `attributes.winePath`，即压缩包里 wine 目录的位置，用于 `--strip-components`。
+- 发行版列表是内置常量 `GENSHIN_LAUNCHER_BUILTIN_WINE`，共 6 项（`distro.ts:17-78`），**不从网络获取**。每项有 `id`、`remoteUrl`，以及 `attributes.winePath`，即压缩包里 wine 目录的位置，用于 `--strip-components`。
 - CN 的默认值是 `DEFAULT_WINE_DISTRO_TAG = "11.0-dxmt-signed-with-patches"`（`src/clients/hk4ecn.ts:25`），下载源为 `yaagl/anime-game-wine` 的 release `wine-11.0-signed`（`distro.ts:28-37`）。`DEFAULT_WINE_DISTRO_URL`（`hk4ecn.ts:23`）已经没人引用。
 - **状态机**（`distro.ts:94-131`），涉及的 storage key 有 `wine_state`、`wine_tag`、`wine_update_tag`、`wine_update_url`：
   - `wine_state=="update"`：安装 `wine_update_tag` 对应的发行版，找不到就装默认版本。
@@ -192,7 +192,7 @@ Yaagl (Neutralino)
 
 ### 7.4 启动器退出与自动启动
 
-- 开发用的 `YAAGL_AUTOLAUNCH=1`：启动后执行 `launch()`，然后调用 `shutdown()` 运行终止钩子，再 `exit(0)`（`src/launcher/index.tsx:87-118`）。
+- 开发用的 `GENSHIN_LAUNCHER_AUTOLAUNCH=1`：启动后执行 `launch()`，然后调用 `shutdown()` 运行终止钩子，再 `exit(0)`（`src/launcher/index.tsx:87-118`）。
 - aria2 用 `--stop-with-process <ppid>` 跟随启动器一起退出（`src/app.tsx:56-75`）。Wine 进程没有这类绑定：启动器被强制退出后，Wine 会一直留着，等下次启动前的 `shutdown()` 清理。
 
 ## 8. Neutralino 依赖与 Swift 对应
@@ -218,13 +218,13 @@ Yaagl (Neutralino)
 | 消息框、选择目录 | `os.showMessageBox`、`os.showFolderDialog` | `NSAlert`、`NSOpenPanel` |
 | 重启 App | `open "$PATH_LAUNCH"` 再 `app.exit`（`neu.ts:377-390`） | `NSWorkspace.shared.openApplication(at: Bundle.main.bundleURL, configuration: { createsNewApplicationInstance = true })`，然后 `NSApp.terminate` |
 | 打开 URL | `os.open` | `NSWorkspace.shared.open(_:)` |
-| 日志 | `Neutralino.debug.log` | `os.Logger`，再加一份写到 `logs/` 的文件日志，方便 yaagl-diag 读取 |
+| 日志 | `Neutralino.debug.log` | `os.Logger`，再加一份写到 `logs/` 的文件日志，方便 genshin-launcher-diag 读取 |
 | 启动器退出时的清理钩子 | `addTerminationHook` | `NSApplicationDelegate.applicationShouldTerminate` 返回 `.terminateLater`，异步清理完再回复 |
 
 ## 9. 给 Swift 版的结论
 
 1. **启动契约本身很小，可以照搬**：固定的环境变量表（§2）、两条注册表 `reg add`、可选的 HDR 和分辨率 regedit、`config.bat` 的三行内容、DXMT 文件的注入和还原、一次 `wine64 cmd /c config.bat`，再加上 15 s 的退出窗口和 `shutdown()`。
-2. **Game Mode 和刘海区域的逻辑全部在 Wine 进程内**（shim 和 dylib），Swift 版不需要用 AppKit 重新实现任何全屏行为。启动器只负责准备 `YaaglGame.app`、签名、`LSRegisterURL`，以及传四个环境变量。
+2. **Game Mode 和刘海区域的逻辑全部在 Wine 进程内**（shim 和 dylib），Swift 版不需要用 AppKit 重新实现任何全屏行为。启动器只负责准备 `GenshinLauncherGame.app`、签名、`LSRegisterURL`，以及传四个环境变量。
 3. **shim 和 dylib 必须是 x86_64**，因为它们加载进 Rosetta 下的 Wine。它们不能作为 SwiftPM C target 链接进 arm64 的 App，只能当作单独构建的 x86_64 产物放进 bundle 的 Resources。
 4. 外部依赖可以分三类：
    - 可以完全去掉：aria2、shell 转义、`ps`/`lsof`/`awk`、`cmp`、`xattr`、`lsregister`；
@@ -235,11 +235,11 @@ Yaagl (Neutralino)
 
 1. **x86_64 原生辅助程序怎么构建、怎么分发**：用 XcodeGen 里一个 x86_64 的 target，还是在 build phase 里调用 `native/gamehost/build.sh`？“sidecar 全部替换”这条决策需要补充说明：shim、dylib 和 `protonextras/*.exe|dll` 是加载进 Wine 或复制进 prefix 的文件，不是被 shell 出去执行的工具。
 2. **Neutralino `.storage` 怎么迁移**：既然沿用数据目录，旧 key 要么继续读，要么在第一次运行时迁移。
-3. **`YaaglGame.app` 的 bundle id 是 `com.3shain.yaagl.game`**：地图已决定“与上游彻底分叉”。要不要改名，以及改名会重置 LaunchServices 登记和 TCC 授权，需要定下来（`game-host.ts:18-21`）。
+3. **`GenshinLauncherGame.app` 的 bundle id 是 `com.3shain.yaagl.game`**：地图已决定“与上游彻底分叉”。要不要改名，以及改名会重置 LaunchServices 登记和 TCC 授权，需要定下来（`game-host.ts:18-21`）。
 4. **现有 bug 和死代码，是照搬还是修复**：
    - catch 分支不会撤销 HDR 和分辨率注册表（§7.1）；
    - Steam patch 路径不会复制 `HoYoKProtect.sys`，也不会加 cloud 启动参数（§3 第 6 步）；
-   - DXMT 注入写死 `./wine`，没有遵循 `YAAGL_WINE_RUNTIME`（§3 第 7 步）；
+   - DXMT 注入写死 `./wine`，没有遵循 `GENSHIN_LAUNCHER_WINE_RUNTIME`（§3 第 7 步）；
    - `config_fps_unlock` 和 `wine_netbiosname` 是死设置；
    - `DXMT_CONFIG_FILE` 指向的文件从不生成；
    - 换 Wine 会删掉整个 prefix；

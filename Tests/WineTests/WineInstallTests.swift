@@ -428,7 +428,7 @@ private let thumbprint = "F09065E2D57F005BBD975DDCF9EB63F570764F17"
   func stampContents() async throws {
     try await withWineTempDirectory { dir in
       let h = try await makeInstalledWineHarness(in: dir)
-      #expect(h.layout.stampFile.path.hasSuffix("wine/.yaagl-wine-stamp.json"))
+      #expect(h.layout.stampFile.path.hasSuffix("wine/.genshin-launcher-wine-stamp.json"))
       #expect(try h.readStamp() == WineStamp(schemaVersion: 1, wineVersion: "test-wine-1", dxmtVersion: wineFixtureCommit))
     }
   }

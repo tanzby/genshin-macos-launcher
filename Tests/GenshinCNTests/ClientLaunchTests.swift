@@ -278,11 +278,11 @@ actor Log {
     try FileManager.default.createDirectory(at: helpers, withIntermediateDirectories: true)
 
     #expect(GenshinCNClient.helpers(in: app) == nil)
-    try Data("shim".utf8).write(to: helpers.appending(path: "yaagl-wine-shim"))
+    try Data("shim".utf8).write(to: helpers.appending(path: "genshin-launcher-wine-shim"))
     #expect(GenshinCNClient.helpers(in: app) == nil)
-    try Data("dylib".utf8).write(to: helpers.appending(path: "yaagl-gamehost.dylib"))
+    try Data("dylib".utf8).write(to: helpers.appending(path: "genshin-launcher-gamehost.dylib"))
     #expect(
       GenshinCNClient.helpers(in: app)
-        == GameHostHelpers(shim: helpers.appending(path: "yaagl-wine-shim"), dylib: helpers.appending(path: "yaagl-gamehost.dylib")))
+        == GameHostHelpers(shim: helpers.appending(path: "genshin-launcher-wine-shim"), dylib: helpers.appending(path: "genshin-launcher-gamehost.dylib")))
   }
 }

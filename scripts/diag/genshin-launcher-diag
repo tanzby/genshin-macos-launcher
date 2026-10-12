@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""Black-box real-machine diagnostics for the native Yaagl app. Text output only.
+"""Black-box real-machine diagnostics for the native Genshin Launcher app. Text output only.
 
-`run` drives one built Yaagl.app with `--autolaunch` against an isolated data
-directory (never ~/Library/Application Support/Yaagl), watches Wine processes,
+`run` drives one built Genshin Launcher.app with `--autolaunch` against an isolated data
+directory (never ~/Library/Application Support/Genshin Launcher), watches Wine processes,
 windows, logs/launcher.log and logs/gamehost.log, and prints one line per
 check: `CHECK <rule> <PASS|FAIL|SKIP> <name> <detail>`, then
 `DIAG verdict=PASS|FAIL`. Rule IDs are those of docs/parity/hk4e-cn.md.
@@ -27,11 +27,11 @@ from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 REPO = HERE.parents[1]
-CACHE = Path.home() / "Library/Caches/yaagl-diag"
+CACHE = Path.home() / "Library/Caches/genshin-launcher-diag"
 DEFAULT_DATA = CACHE / "data"
 GAME_EXES = ("YuanShen.exe", "GenshinImpact.exe")
-BUNDLE_ID = "io.github.tanzby.yaagl"
-GAME_HOST_ID = "io.github.tanzby.yaagl.game"
+BUNDLE_ID = "io.github.tanzby.genshin-launcher"
+GAME_HOST_ID = "io.github.tanzby.genshin-launcher.game"
 HOSTS = Path("/etc/hosts")
 T0 = time.monotonic()
 
@@ -284,7 +284,7 @@ class ScreenCheck:
 
 def prepare_app(a):
     """Copy the built app and add the development companion (screen/autoplay modes) next to the game host."""
-    work = CACHE / "app" / "Yaagl.app"
+    work = CACHE / "app" / "Genshin Launcher.app"
     if work.exists():
         shutil.rmtree(work)
     work.parent.mkdir(parents=True, exist_ok=True)
@@ -307,17 +307,17 @@ def seed(data):
 
 
 def launch(app, data, a):
-    env = ["YAAGL_AUTOLAUNCH=1", f"YAAGL_DATA_DIR={data.root}"]
+    env = ["GENSHIN_LAUNCHER_AUTOLAUNCH=1", f"GENSHIN_LAUNCHER_DATA_DIR={data.root}"]
     if a.game_dir:
-        env.append(f"YAAGL_GAME_DIR={a.game_dir}")
+        env.append(f"GENSHIN_LAUNCHER_GAME_DIR={a.game_dir}")
     if a.allow_download:
-        env.append("YAAGL_ALLOW_DOWNLOAD=1")
+        env.append("GENSHIN_LAUNCHER_ALLOW_DOWNLOAD=1")
     shots = None
     if a.screen_check or a.autoplay:
         shots = CACHE / "shots" / str(int(time.time()))
         shots.mkdir(parents=True, exist_ok=True)
-        env += [f"YAAGL_GAMEHOST_SHOT_DIR={shots}"]
-        env += ["YAAGL_GAMEHOST_DEV=screen"] if a.screen_check else ["YAAGL_GAMEHOST_DEV=autoplay", f"YAAGL_GAMEHOST_TURN={a.turn:g}"]
+        env += [f"GENSHIN_LAUNCHER_GAMEHOST_SHOT_DIR={shots}"]
+        env += ["GENSHIN_LAUNCHER_GAMEHOST_DEV=screen"] if a.screen_check else ["GENSHIN_LAUNCHER_GAMEHOST_DEV=autoplay", f"GENSHIN_LAUNCHER_GAMEHOST_TURN={a.turn:g}"]
     args = ["open", "-n", *[x for e in env for x in ("--env", e)], str(app), "--args", "--autolaunch"]
     r = run(args)
     if r.returncode:
@@ -330,16 +330,16 @@ def cmd_run(a):
         a.close_after = 0
     app = Path(a.app).resolve()
     if not (app / "Contents/MacOS").is_dir():
-        sys.exit(f"--app is not a built Yaagl.app: {app}")
-    if data.root.resolve() == (Path.home() / "Library/Application Support/Yaagl").resolve():
+        sys.exit(f"--app is not a built Genshin Launcher.app: {app}")
+    if data.root.resolve() == (Path.home() / "Library/Application Support/Genshin Launcher").resolve():
         sys.exit("refusing to use the real data directory; pass an isolated --data-dir")
     if stray_wine():
         sys.exit("a Wine process is already running (another worktree may be playing); stop it first")
     if app_pids(app):
-        sys.exit("this Yaagl.app is already running")
+        sys.exit("this Genshin Launcher.app is already running")
     if a.fresh and data.root.exists():
         shutil.rmtree(data.root)
-    first_run = not (data.root / ".yaagl-native").exists()
+    first_run = not (data.root / ".genshin-launcher-native").exists()
     if first_run:
         seed(data)
     # The game host appends to gamehost.log across runs; stale lines would satisfy this run's checks.
@@ -403,7 +403,7 @@ def cmd_run(a):
                 mid["steam"] = (data.prefix / "drive_c/windows/system32/steam.exe").exists()
                 mid["moved"] = sorted(str(p) for p in Path(a.game_dir or "/nonexistent").glob("YuanShen_Data/**/*.bak")) if a.game_dir else []
             # Hand-offs to the maintainer. Hosts: /etc/hosts still has no section after Wine is ready.
-            if "ready" in m and "Added by Yaagl" not in HOSTS.read_text(errors="replace") and "hosts" not in waiting:
+            if "ready" in m and "Added by Genshin Launcher" not in HOSTS.read_text(errors="replace") and "hosts" not in waiting:
                 if "launching" not in m and now - m["ready"] > a.hosts_grace:
                     waiting.add("hosts")
                     print("WAITING maintainer: hosts-password (admin password dialog for /etc/hosts)", flush=True)
@@ -481,15 +481,15 @@ def evaluate(a, data, work, m, mid, verdict_line, reg_before, hosts_before, left
     if first_run:
         gone = all(not (data.root / p).exists() for p in SEED_RESIDUE)
         kept = all((data.root / p).exists() for p in SEED_KEPT)
-        check("APP-002", (data.root / ".yaagl-native").exists() and gone and kept,
+        check("APP-002", (data.root / ".genshin-launcher-native").exists() and gone and kept,
               "first launch: marker written, TS leftovers removed, wine-gptk4 and logs kept")
     else:
-        check("APP-002", (data.root / ".yaagl-native").exists(), "native marker present")
+        check("APP-002", (data.root / ".genshin-launcher-native").exists(), "native marker present")
     # Wine install.
-    stamp = data.wine / ".yaagl-wine-stamp.json"
+    stamp = data.wine / ".genshin-launcher-wine-stamp.json"
     check("WIN-016", stamp.exists() and (data.wine / "bin/wine").exists(), "Wine runtime installed under the data dir")
     mounted = [p for p in mid.get("procs", []) if str(data.wine) in p["comm"] or str(data.wine) in p["cmd"]
-               or "YaaglGame.app" in p["comm"]]
+               or "GenshinLauncherGame.app" in p["comm"]]
     check("WIN-016", bool(mounted) if mid else None, "game runs on the app's own Wine")
     q = run(["xattr", "-rl", str(data.wine / "bin")]).stdout if data.wine.exists() else ""
     check("WIN-010", data.wine.exists() and "com.apple.quarantine" not in q, "no quarantine attribute on Wine")
@@ -498,23 +498,23 @@ def evaluate(a, data, work, m, mid, verdict_line, reg_before, hosts_before, left
     regs = data.read(data.prefix / "system.reg") + data.read(data.prefix / "user.reg")
     check("WIN-009", "F09065E2D57F005BBD975DDCF9EB63F570764F17".lower() in regs.lower(), "root certificates in the prefix")
     hosts = HOSTS.read_text(errors="replace") if HOSTS.exists() else ""
-    check("WIN-011", "# Added by Yaagl" in hosts and "# End of section" in hosts, "/etc/hosts blocklist section present",
-          "newly written" if "# Added by Yaagl" not in hosts_before and "# Added by Yaagl" in hosts else "")
+    check("WIN-011", "# Added by Genshin Launcher" in hosts and "# End of section" in hosts, "/etc/hosts blocklist section present",
+          "newly written" if "# Added by Genshin Launcher" not in hosts_before and "# Added by Genshin Launcher" in hosts else "")
     # Game host / Game Mode.
-    host_app = data.root / "YaaglGame.app"
+    host_app = data.root / "GenshinLauncherGame.app"
     ident = run(["codesign", "-dv", str(host_app / "Contents/MacOS/wine")]).stderr
-    check("LCH-025", host_app.exists() and f"Identifier={GAME_HOST_ID}" in ident, "YaaglGame.app built and signed with the bundle id")
+    check("LCH-025", host_app.exists() and f"Identifier={GAME_HOST_ID}" in ident, "GenshinLauncherGame.app built and signed with the bundle id")
     wine_dir = data.wine / "lib/wine/x86_64-unix"
     check("LCH-024", (wine_dir / "wine-host").exists() and (wine_dir / "wine").exists(), "loader shim installed beside wine-host")
     check("LCH-026", "gamehost: installed in pid" in hostlog, "game host dylib loaded in the game", "")
-    ok, detail = hostname_probe(work / "Contents/Helpers/yaagl-gamehost.dylib", CACHE / "probe")
+    ok, detail = hostname_probe(work / "Contents/Helpers/genshin-launcher-gamehost.dylib", CACHE / "probe")
     check("LCH-031", ok, "own host name resolves locally, other names untouched", detail)
     check("LCH-022", "isIdentifiedGame=1" in hostlog, "Game Mode: game identified by gamepolicyd")
     game = mid.get("game_sample")
-    split = [p for p in mid.get("procs", []) if "YaaglGame.app" in p["comm"]]
-    others = [p for p in mid.get("procs", []) if "YaaglGame.app" not in p["comm"] and "wineserver" not in p["comm"]]
+    split = [p for p in mid.get("procs", []) if "GenshinLauncherGame.app" in p["comm"]]
+    others = [p for p in mid.get("procs", []) if "GenshinLauncherGame.app" not in p["comm"] and "wineserver" not in p["comm"]]
     check("LCH-027", (bool(split) and all(is_game(p) for p in split)) if game else None,
-          "only the game process runs from YaaglGame.app", f"host_procs={len(split)} other={len(others)}")
+          "only the game process runs from GenshinLauncherGame.app", f"host_procs={len(split)} other={len(others)}")
     check("LCH-028", ("fullscreen" in m and "toggled native full screen" in hostlog) if game else None,
           "game window in a native full-screen Space")
     # Registry and files.
@@ -605,7 +605,7 @@ def hostname_probe(dylib, work):
     own = os.uname().nodename
     # The host also answers to its name without ".local", but only when the host name has that suffix.
     spellings = {own, own.upper()} | ({own[:-6]} if own.lower().endswith(".local") else set())
-    env = {**os.environ, "DYLD_INSERT_LIBRARIES": str(dylib), "YAAGL_GAMEHOST_LOG": str(log)}
+    env = {**os.environ, "DYLD_INSERT_LIBRARIES": str(dylib), "GENSHIN_LAUNCHER_GAMEHOST_LOG": str(log)}
 
     def resolve(name):
         out = run([str(exe), name], env=env, timeout=60)  # Rosetta runs it; `arch` would drop DYLD_INSERT_LIBRARIES
@@ -625,7 +625,7 @@ def hostname_probe(dylib, work):
 
 
 def cmd_probe(a):
-    dylib = Path(a.app) / "Contents/Helpers/yaagl-gamehost.dylib"
+    dylib = Path(a.app) / "Contents/Helpers/genshin-launcher-gamehost.dylib"
     ok, detail = hostname_probe(dylib, CACHE / "probe")
     check("LCH-031", ok, "own host name resolves locally, other names untouched", detail)
     sys.exit(0 if ok else 1)
@@ -650,7 +650,7 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = ap.add_subparsers(dest="cmd", required=True)
     r = sub.add_parser("run", help="full end-to-end diag against a built app")
-    r.add_argument("--app", required=True, help="path to the built Yaagl.app")
+    r.add_argument("--app", required=True, help="path to the built Genshin Launcher.app")
     r.add_argument("--data-dir", default=str(DEFAULT_DATA), help="isolated data directory (default: %(default)s)")
     r.add_argument("--game-dir", help="existing game directory to take over (otherwise the app installs one)")
     r.add_argument("--allow-download", action="store_true",
@@ -667,7 +667,7 @@ def main():
     r.add_argument("--screen-check", action="store_true", help="compare the screen with the game picture (needs Screen Recording)")
     r.set_defaults(fn=cmd_run)
     pr = sub.add_parser("probe", help="LCH-031 only: resolve this Mac's host name through the game host dylib")
-    pr.add_argument("--app", required=True, help="path to the built Yaagl.app")
+    pr.add_argument("--app", required=True, help="path to the built Genshin Launcher.app")
     pr.set_defaults(fn=cmd_probe)
     for name, fn in (("ps", cmd_ps), ("kill", cmd_kill)):
         p = sub.add_parser(name)

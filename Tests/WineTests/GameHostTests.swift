@@ -8,7 +8,7 @@ import Testing
 // fakes; the bundle layout, the plist and the idempotence are asserted on disk.
 
 private let gameHostVariables = [
-  "YAAGL_GAME_HOST_EXE", "YAAGL_GAME_HOST_MATCH", "YAAGL_GAME_HOST_DYLIB", "YAAGL_GAMEHOST_LOG",
+  "GENSHIN_LAUNCHER_GAME_HOST_EXE", "GENSHIN_LAUNCHER_GAME_HOST_MATCH", "GENSHIN_LAUNCHER_GAME_HOST_DYLIB", "GENSHIN_LAUNCHER_GAMEHOST_LOG",
 ]
 
 private var helperOptions: LaunchFixtureOptions {
@@ -36,10 +36,10 @@ private func expectNoGameHostVariables(_ f: LaunchFixture, sourceLocation: Sourc
 
       #expect(result == .exited)
       let environment = try #require(f.runner.gameCall?.environment)
-      #expect(environment["YAAGL_GAME_HOST_EXE"] == f.macOSWine.path)
-      #expect(environment["YAAGL_GAME_HOST_MATCH"] == "YuanShen.exe")
-      #expect(environment["YAAGL_GAME_HOST_DYLIB"] == helpers.dylib.path)
-      #expect(environment["YAAGL_GAMEHOST_LOG"] == f.layout.logsDirectory.appending(path: "gamehost.log").path)
+      #expect(environment["GENSHIN_LAUNCHER_GAME_HOST_EXE"] == f.macOSWine.path)
+      #expect(environment["GENSHIN_LAUNCHER_GAME_HOST_MATCH"] == "YuanShen.exe")
+      #expect(environment["GENSHIN_LAUNCHER_GAME_HOST_DYLIB"] == helpers.dylib.path)
+      #expect(environment["GENSHIN_LAUNCHER_GAMEHOST_LOG"] == f.layout.logsDirectory.appending(path: "gamehost.log").path)
     }
   }
 
@@ -165,7 +165,7 @@ private func expectNoGameHostVariables(_ f: LaunchFixture, sourceLocation: Sourc
       let result = await f.session.launch(makeLaunchRecipe())
 
       #expect(result == .exited)
-      #expect(f.runner.gameCall?.environment["YAAGL_GAME_HOST_EXE"] != nil)  // positive: game mode worked
+      #expect(f.runner.gameCall?.environment["GENSHIN_LAUNCHER_GAME_HOST_EXE"] != nil)  // positive: game mode worked
       #expect(launchRead(f.layout.unixWine) == LaunchBytes.shim)
       #expect(launchModificationDate(f.layout.unixWine) == longAgo)
     }
@@ -178,7 +178,7 @@ private func expectNoGameHostVariables(_ f: LaunchFixture, sourceLocation: Sourc
       let result = await f.session.launch(makeLaunchRecipe())
 
       #expect(result == .exited)
-      #expect(GameSession.gameHostBundleIdentifier == "io.github.tanzby.yaagl.game")
+      #expect(GameSession.gameHostBundleIdentifier == "io.github.tanzby.genshin-launcher.game")
       #expect(launchRead(f.macOSWine) == LaunchBytes.host)
       #expect(launchRead(f.macOSDotWineHost) == LaunchBytes.host)
       #expect(launchRead(f.macOSWine) != LaunchBytes.shim)
@@ -186,7 +186,7 @@ private func expectNoGameHostVariables(_ f: LaunchFixture, sourceLocation: Sourc
       #expect(signs.count == 1)
       let sign = try #require(signs.first)
       #expect(sign.executable == "/usr/bin/codesign")
-      #expect(sign.arguments == ["-f", "-s", "-", "-i", "io.github.tanzby.yaagl.game", f.macOSWine.path])
+      #expect(sign.arguments == ["-f", "-s", "-", "-i", "io.github.tanzby.genshin-launcher.game", f.macOSWine.path])
     }
   }
 
@@ -200,7 +200,7 @@ private func expectNoGameHostVariables(_ f: LaunchFixture, sourceLocation: Sourc
       let plist = try #require(
         try? PropertyListSerialization.propertyList(from: data, options: [], format: nil) as? [String: Any])
       #expect(plist["CFBundleExecutable"] as? String == "wine")
-      #expect(plist["CFBundleIdentifier"] as? String == "io.github.tanzby.yaagl.game")
+      #expect(plist["CFBundleIdentifier"] as? String == "io.github.tanzby.genshin-launcher.game")
       #expect(plist["CFBundleName"] as? String == "原神")
       #expect(plist["CFBundleDisplayName"] as? String == "原神")
       #expect(plist["LSApplicationCategoryType"] as? String == "public.app-category.games")
@@ -242,7 +242,7 @@ private func expectNoGameHostVariables(_ f: LaunchFixture, sourceLocation: Sourc
       #expect(f.services.registered.count == 1)
       #expect(launchModificationDate(f.infoPlist) == longAgo)
       #expect(f.runner.gameCalls.count == 2)
-      #expect(f.runner.gameCalls.last?.environment["YAAGL_GAME_HOST_EXE"] == f.macOSWine.path)
+      #expect(f.runner.gameCalls.last?.environment["GENSHIN_LAUNCHER_GAME_HOST_EXE"] == f.macOSWine.path)
     }
   }
 
@@ -274,7 +274,7 @@ private func expectNoGameHostVariables(_ f: LaunchFixture, sourceLocation: Sourc
       _ = await f.session.launch(makeLaunchRecipe())
 
       #expect(f.runner.calls(.codesign).count == 2)
-      #expect(f.runner.gameCalls.last?.environment["YAAGL_GAME_HOST_EXE"] == f.macOSWine.path)
+      #expect(f.runner.gameCalls.last?.environment["GENSHIN_LAUNCHER_GAME_HOST_EXE"] == f.macOSWine.path)
     }
   }
 
@@ -287,7 +287,7 @@ private func expectNoGameHostVariables(_ f: LaunchFixture, sourceLocation: Sourc
       _ = await f.session.launch(makeLaunchRecipe())
 
       #expect(f.services.registered.count == 2)
-      #expect(f.runner.gameCalls.last?.environment["YAAGL_GAME_HOST_EXE"] == f.macOSWine.path)
+      #expect(f.runner.gameCalls.last?.environment["GENSHIN_LAUNCHER_GAME_HOST_EXE"] == f.macOSWine.path)
     }
   }
 

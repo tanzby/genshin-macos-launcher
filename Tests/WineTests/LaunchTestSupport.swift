@@ -534,8 +534,8 @@ func withLaunchFixture<T>(
 
     var helpers: GameHostHelpers?
     if options.helpers {
-      let shim = dir.appending(path: "helpers/yaagl-wine-shim")
-      let dylib = dir.appending(path: "helpers/yaagl-gamehost.dylib")
+      let shim = dir.appending(path: "helpers/genshin-launcher-wine-shim")
+      let dylib = dir.appending(path: "helpers/genshin-launcher-gamehost.dylib")
       try launchWrite(LaunchBytes.shim, to: shim)
       try launchWrite(LaunchBytes.dylib, to: dylib)
       helpers = GameHostHelpers(shim: shim, dylib: dylib)

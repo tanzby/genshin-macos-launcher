@@ -9,9 +9,9 @@ import TestSupport
 @MainActor
 private func makeController(
   status: GameStatus = GameStatus(localVersion: "5.0.0", remoteVersion: "5.0.0"),
-  hosts: HostsBlocklist.Status = .current, startup: StartupSteps? = nil, gameDirectory: URL? = temporaryURL("yaagl-mc")
+  hosts: HostsBlocklist.Status = .current, startup: StartupSteps? = nil, gameDirectory: URL? = temporaryURL("genshin-launcher-mc")
 ) -> (MainController, FakeGameClient, SettingsModel) {
-  let suite = "yaagl-controller-\(UUID().uuidString)"
+  let suite = "genshin-launcher-controller-\(UUID().uuidString)"
   let defaults = UserDefaults(suiteName: suite)!
   defaults.removePersistentDomain(forName: suite)
   let settings = SettingsModel(defaults: defaults)
@@ -81,7 +81,7 @@ private func makeController(
   @Test func APP_017_installRightAfterPickingAFolderDoesNotWaitForARefresh() async throws {
     let (controller, client, settings) = makeController(status: GameStatus(), gameDirectory: nil)
     await controller.refresh()
-    settings.gameDirectory = temporaryURL("yaagl-mc")
+    settings.gameDirectory = temporaryURL("genshin-launcher-mc")
     await controller.perform(.install)
     #expect(controller.actionError == nil)
     _ = try await client.nextRun()

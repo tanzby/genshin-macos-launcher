@@ -13,11 +13,11 @@ struct DataDirectoryFailure {
     message =
       switch error as? DataDirectory.PrepareError {
       case .unrecognizedMarker:
-        String(localized: "The data folder's marker file is damaged. Nothing was deleted. Remove the file .yaagl-native or the whole folder, then reopen Yaagl.")
+        String(localized: "The data folder's marker file is damaged. Nothing was deleted. Remove the file .genshin-launcher-native or the whole folder, then reopen Genshin Launcher.")
       case .unsupportedSchemaVersion(let version):
-        String(localized: "The data folder was written by a newer version of Yaagl (format \(version)). Update Yaagl, then reopen it.")
+        String(localized: "The data folder was written by a newer version of Genshin Launcher (format \(version)). Update Genshin Launcher, then reopen it.")
       case .cleanupFailed(let url, let detail):
-        String(localized: "Yaagl could not remove \(url.path): \(detail). Remove it yourself, then reopen Yaagl.")
+        String(localized: "Genshin Launcher could not remove \(url.path): \(detail). Remove it yourself, then reopen Genshin Launcher.")
       case nil:
         String(localized: "The data folder could not be prepared: \(String(describing: error))")
       }
@@ -30,7 +30,7 @@ struct DataDirectoryFailureView: View {
 
   var body: some View {
     VStack(alignment: .leading, spacing: 16) {
-      Label("Yaagl can't start", systemImage: "exclamationmark.triangle.fill")
+      Label("Genshin Launcher can't start", systemImage: "exclamationmark.triangle.fill")
         .font(.title2.bold())
       Text(failure.message)
         .textSelection(.enabled)

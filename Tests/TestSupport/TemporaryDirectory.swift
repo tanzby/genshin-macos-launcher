@@ -5,7 +5,7 @@ import Foundation
 // test process removes such leftovers. The root is symlink-resolved (/private/var/...), so paths match what the code
 // under test resolves to.
 
-private let rootPrefix = "yaagl-tests-"
+private let rootPrefix = "genshin-launcher-tests-"
 private let root: URL = makeRoot()
 
 private func makeRoot() -> URL {
@@ -17,7 +17,7 @@ private func makeRoot() -> URL {
   return url.resolvingSymlinksInPath()
 }
 
-/// Roots are named `yaagl-tests-<pid>-<uuid>`; one whose process is gone was left by a crash.
+/// Roots are named `genshin-launcher-tests-<pid>-<uuid>`; one whose process is gone was left by a crash.
 private func removeRootsOfExitedProcesses(in temp: URL) {
   let names = (try? FileManager.default.contentsOfDirectory(atPath: temp.path)) ?? []
   for name in names where name.hasPrefix(rootPrefix) {
