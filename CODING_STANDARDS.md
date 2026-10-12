@@ -11,4 +11,4 @@ Judgement-call rules. Mechanical rules live in `scripts/dev/` and run in `macos-
 ## UI
 
 - Strings go in the String Catalog, zh-Hans and en only.
-- SwiftUI code follows the swiftui-specialist skill.
+- SwiftUI code follows Apple's SwiftUI guidance shipped with Xcode.
