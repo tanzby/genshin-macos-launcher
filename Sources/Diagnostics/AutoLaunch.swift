@@ -3,7 +3,7 @@ import Launcher
 import Platform
 
 /// Command-line switches that let a script (`scripts/diag/genshin-launcher-diag`) drive the app without clicks (APP-020,
-/// the replacement of the TS launcher's `GENSHIN_LAUNCHER_AUTOLAUNCH`). Each switch is a flag or an environment
+/// the replacement of the TS launcher's autolaunch environment variable). Each switch is a flag or an environment
 /// variable, so `open --env KEY=VALUE App.app` works as well as `App --autolaunch`.
 ///
 /// | Argument | Environment | Meaning |
