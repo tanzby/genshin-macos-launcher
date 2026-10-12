@@ -50,7 +50,8 @@ targets:
         # the Settings toggle overrides this through the user defaults.
         SUEnableAutomaticChecks: true
         SUScheduledCheckInterval: 86400
-        # Finder, Spotlight and Launchpad show the localized CFBundleDisplayName (原神启动器) only with this key.
+        # Without it Finder, Spotlight and Launchpad show the file name, not the localized display name.
+        # Xcode has no INFOPLIST_KEY_ build setting for it (one is silently dropped).
         LSHasLocalizedDisplayName: true
     settings:
       base:
