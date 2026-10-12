@@ -6,6 +6,7 @@ cd "$(dirname "$0")/../.."
 # SwiftPM and Xcode must agree on Package.resolved (#87): neither swift test nor the app build may rewrite it.
 resolved=$(git hash-object Package.resolved)
 scripts/dev/parity-coverage --strict
+scripts/dev/check-async-closure-default
 swift test
 xcodegen generate
 xcodebuild -project Yaagl.xcodeproj -scheme Yaagl -configuration Debug \

@@ -1,4 +1,4 @@
-> **说明**：本文描述的是旧 TS 版（[tanzby/yet-another-anime-game-launcher](https://github.com/tanzby/yet-another-anime-game-launcher)）中 Game Mode 与全屏的设计和实现。文中的 `src/…`、`yaagl-diag` 指旧仓库；`Helpers/` 下的 C 源码已迁入本仓库。原生版沿用相同的机制。
+> **说明**：Game Mode 与全屏的机制由旧 TS 版（[tanzby/yet-another-anime-game-launcher](https://github.com/tanzby/yet-another-anime-game-launcher)）设计，原生版沿用。文中的 `src/…` 路径指旧仓库；`Helpers/` 下的 C 源码与 `scripts/diag/yaagl-diag` 在本仓库。
 
 # Genshin on macOS: Game Mode and process cleanup
 
@@ -38,30 +38,22 @@ scripts/diag/yaagl-diag run --app … --screen-check     # notch: needs Screen R
 scripts/diag/yaagl-diag ps; scripts/diag/yaagl-diag kill
 ```
 
-Only one game may run at a time: the tool refuses to start when any Wine process exists. It prints `WAITING maintainer: hosts-password | game-login` when a step needs the maintainer (the admin password dialog for `/etc/hosts`, the miHoYo login). `--autoplay` and `--screen-check` load the development companion (`Helpers/build.sh --dev`) into a copy of the app. The sections below describe the old tool's modes and results; the checks keep the same meaning.
+Settings can be changed without the UI: `defaults write io.github.tanzby.yaagl gameDirectory <path>` (keys: `Key` in `Sources/Launcher/SettingsModel.swift`), or the `--game-dir` / `YAAGL_GAME_DIR` switch from `Sources/Diagnostics/AutoLaunch.swift`.
 
-## Verification (old TS tool)
+Only one game may run at a time: the tool refuses to start when any Wine process exists. It prints `WAITING maintainer: hosts-password | game-login` when a step needs the maintainer (the admin password dialog for `/etc/hosts`, the miHoYo login). `--autoplay` and `--screen-check` load the development companion (`Helpers/build.sh --dev`) into a copy of the app.
 
-
-`scripts/dev/yaagl-diag` prints text only. With `--launch`, it starts Yaagl using `YAAGL_AUTOLAUNCH=1` (no clicks). Yaagl then quits after the game exits and its patches are reverted. The tool always cleans up the prefix when it finishes.
-
-```bash
-scripts/dev/yaagl-diag watch --launch --timeout 60 --until gamemode
-scripts/dev/yaagl-diag watch --launch --timeout 150 --until exit --close-after 40
-scripts/dev/yaagl-diag ps
-scripts/dev/yaagl-diag kill --orphans
-```
+## Autoplay and screen check
 
 `--autoplay` loads `Helpers/gamehost-dev.m` into the game (`YAAGL_GAMEHOST_DEV`). It clicks into the world, then logs frame-interval statistics for an idle phase and a camera-turn phase (`frames: … p50/p99/max, hitches50`) and saves a PNG of each from the game's own drawable. The turn is driven by `turner.exe` (`SendInput` inside the prefix). Synthetic AppKit events do not turn the camera. These dev pieces are not shipped in the app: `--autoplay` builds them with `Helpers/build.sh --dev` into the data dir's sidecar. `turner.exe` needs llvm-mingw (`LLVM_MINGW=/path`).
 
 ```bash
-scripts/dev/yaagl-diag watch --launch --autoplay --timeout 200
+scripts/diag/yaagl-diag run --app … --autoplay --timeout 200
 ```
 
 `--screen-check` checks what is actually on screen. It enters the game, then runs these steps: idle in the world, hide and unhide the app, walk, attack, a control with the window held below the menu bar, and restore. After each step the dev companion saves the game's drawable and logs the screen's top safe-area inset and display number. yaagl-diag then captures that display at once (`screencapture -D`, which needs Screen Recording for the calling terminal). `screen-compare.swift` compares per-row luma profiles (scaling a non-Retina drawable to the screen) and prints `verdict=ok`, `covered` (black over the top strip while the game drew there), `shifted` (best match at a vertical offset), `mismatch` or `size-mismatch`. On a Mac with a notch the control step must report `covered`, which shows the check can fail. The last step, `other-window`, opens Notepad in the prefix: it passes when Notepad's window is on screen and the game is inactive at level 24 or lower. It runs last because a background app may not activate itself, and the check has no Accessibility access to click the game. The PNGs stay in `~/Library/Caches/yaagl-diag/shots/<time>/`.
 
 ```bash
-scripts/dev/yaagl-diag watch --launch --screen-check --timeout 200
+scripts/diag/yaagl-diag run --app … --screen-check --timeout 200
 ```
 
 Result on 2026-10-07 (14" MacBook Pro, macOS 27.0.1): every step `ok` (top strip luma within 1 between screen and game, body diff ≤ 5.7, offset 0), the control `covered` (top luma 0 on screen vs 105 in the game), and `other-window` ok (Notepad on screen, game inactive at level 0). A run where another app took the screen during a step reports that step as `mismatch`.
