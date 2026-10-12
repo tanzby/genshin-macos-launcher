@@ -60,7 +60,7 @@ targets:
         ENABLE_USER_SCRIPT_SANDBOXING: NO
         GENERATE_INFOPLIST_FILE: YES
         SWIFT_EMIT_LOC_STRINGS: YES
-        INFOPLIST_KEY_CFBundleDisplayName: Yaagl
+        INFOPLIST_KEY_CFBundleDisplayName: Genshin Launcher
         INFOPLIST_KEY_LSApplicationCategoryType: public.app-category.games
         INFOPLIST_KEY_LSMinimumSystemVersion: "26.0"
         INFOPLIST_KEY_NSHumanReadableCopyright: ""
