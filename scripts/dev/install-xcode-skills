@@ -1,7 +1,6 @@
 #!/bin/sh
-# Installs the SwiftUI guidance that ships inside Xcode as a local agent skill, by default
-# ~/.claude/skills/swiftui-specialist. Apple's text is copied from your own Xcode and never committed.
-# usage: install-xcode-skills [destination-dir]
+# usage: install-xcode-skills [dir]  (default ~/.claude/skills/swiftui-specialist)
+# Copies Apple's SwiftUI guidance from your own Xcode into a local skill; Apple's text is never committed.
 set -eu
 resources="$(xcode-select -p)/../PlugIns/IDEIntelligenceChat.framework/Versions/A/Resources"
 template="$resources/swiftui-specialist.idechatprompttemplate"
@@ -10,7 +9,7 @@ dest=${1:-$HOME/.claude/skills/swiftui-specialist}
 mkdir -p "$dest/references"
 cp "$template" "$dest/SKILL.md"
 for ref in "$resources"/swiftui-specialist-ref-*.md.packaged; do
-  name=$(basename "$ref" .md.packaged)
-  cp "$ref" "$dest/references/${name#swiftui-specialist-ref-}.md"
+  name=${ref##*-ref-}
+  cp "$ref" "$dest/references/${name%.packaged}"
 done
 echo "installed $dest"

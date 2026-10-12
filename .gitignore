@@ -4,5 +4,5 @@
 /build
 /.swiftpm
 .DS_Store
-# per-change worktrees
+# agent worktrees
 /.claude/worktrees

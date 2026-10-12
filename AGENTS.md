@@ -23,10 +23,10 @@ Setup and requirements: `CONTRIBUTING.md`.
 
 - Judgement-call rules for Swift, tests and UI strings: `CODING_STANDARDS.md`. The mechanical rule from #48 is enforced by `scripts/dev/check-async-closure-default`, part of `macos-check`.
 - `main` is protected: changes land by PR, squash-merged, with the `swift` check green.
-- Issues and labels: `docs/agents/issue-tracker.md`, `docs/agents/triage-labels.md`. Domain docs: `docs/agents/domain.md`.
-- With several git worktrees, the stash stack is shared by all of them: set work aside with a WIP commit, not a bare `git stash`.
+- Issues live in GitHub Issues (`gh`). Label meanings: `docs/agents/triage-labels.md`.
+- Never use bare `git stash`: the stash is shared by all worktrees. Use a WIP commit.
 - Only one checkout may run the game at a time. All share the installed app, `~/Library/Application Support/Yaagl` and the game files.
 
 ## Verification
 
-Verify game behaviour with deterministic, time-boxed text output, not screenshots, and always close the game afterwards. The diagnostics tool and the Game Mode and full-screen mechanism are described in `docs/genshin-macos.md`.
+Verify game behaviour with deterministic, time-boxed text output, not screenshots, and always close the game afterwards. Diagnostics tool, Game Mode and full-screen: `docs/genshin-macos.md`.
