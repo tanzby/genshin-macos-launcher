@@ -25,7 +25,7 @@ Setup and requirements: `CONTRIBUTING.md`.
 - `main` is protected: changes land by PR, squash-merged, with the `swift` check green.
 - Issues live in GitHub Issues (`gh`). Issue tracker, labels and domain docs: `docs/agents/`.
 - Never use bare `git stash`: the stash is shared by all worktrees. Use a WIP commit.
-- Only one checkout may run the game at a time. All share the installed app, `~/Library/Application Support/Yaagl` and the game files.
+- Only one checkout may run the game at a time. All share the installed app, `~/Library/Application Support/Genshin Launcher` and the game files.
 
 ## Verification
 

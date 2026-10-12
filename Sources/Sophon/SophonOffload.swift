@@ -11,7 +11,7 @@ final class CancelFlag: @unchecked Sendable {
 /// Runs blocking work on a dedicated concurrent queue and resumes when it has finished. Callers are
 /// already bounded by their task groups, so the queue never holds more than that many items.
 enum Offload {
-  static let queue = DispatchQueue(label: "yaagl.sophon.blocking", qos: .utility, attributes: .concurrent)
+  static let queue = DispatchQueue(label: "genshin-launcher.sophon.blocking", qos: .utility, attributes: .concurrent)
 
   static func run<T: Sendable>(_ work: @escaping @Sendable (CancelFlag) throws -> T) async throws -> T {
     try Task.checkCancellation()

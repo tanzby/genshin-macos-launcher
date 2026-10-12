@@ -96,7 +96,7 @@ public struct WineLayout: Sendable, Equatable {
 
   public var runtimeDirectory: URL { root.appending(path: "wine", directoryHint: .isDirectory) }
   public var prefixDirectory: URL { root.appending(path: "wineprefix", directoryHint: .isDirectory) }
-  package var stampFile: URL { runtimeDirectory.appending(path: ".yaagl-wine-stamp.json", directoryHint: .notDirectory) }
+  package var stampFile: URL { runtimeDirectory.appending(path: ".genshin-launcher-wine-stamp.json", directoryHint: .notDirectory) }
   public var wineserver: URL { runtimeDirectory.appending(path: "bin/wineserver", directoryHint: .notDirectory) }
   package var windowsLibraryDirectory: URL {
     runtimeDirectory.appending(path: "lib/wine/x86_64-windows", directoryHint: .isDirectory)
@@ -113,7 +113,7 @@ public struct WineLayout: Sendable, Equatable {
   /// Written by `GameSession` before it mutates anything; deleted after the restore. Its presence means a crash.
   package var launchJournal: URL { root.appending(path: "launch-journal.json", directoryHint: .notDirectory) }
   public var logsDirectory: URL { root.appending(path: "logs", directoryHint: .isDirectory) }
-  package var gameHostApp: URL { root.appending(path: "YaaglGame.app", directoryHint: .isDirectory) }
+  package var gameHostApp: URL { root.appending(path: "GenshinLauncherGame.app", directoryHint: .isDirectory) }
   /// `lib/wine/x86_64-unix/wine`: Wine execs this for every new Windows process. The Game Mode shim replaces it.
   package var unixWine: URL { unixLibraryDirectory.appending(path: "wine", directoryHint: .notDirectory) }
   /// The original `wine`, renamed by the Game Mode shim install.

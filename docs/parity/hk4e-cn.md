@@ -24,7 +24,7 @@
 |---|---|
 | 单元 | `swift test`：纯逻辑；Sophon 用 `URLProtocol` 打桩和离线夹具；LaunchRecipe 的 `.reg`、启动命令、环境变量表、hosts 段用 golden 文件 |
 | 组件 | `swift test`：Launcher / SettingsModel / JobCoordinator + `FakeGameClient`，不拉起 Sophon 或 Wine |
-| diag | 真机 `yaagl-diag`：看 Wine 进程、窗口、`gamehost.log`、prefix（游戏运行时行为，只能在这一层验证） |
+| diag | 真机 `genshin-launcher-diag`：看 Wine 进程、窗口、`gamehost.log`、prefix（游戏运行时行为，只能在这一层验证） |
 | 线上 | 只读的线上契约测试（getGameBranches / getBuild / getPatchBuild + 一个最小 chunk），独立 workflow，非 PR 必过项 |
 
 「对应测试」一列先留空，由各模块实现票填入。测试名带规则 ID（如 `APP_011_…`）；覆盖脚本 `scripts/dev/parity-coverage` 核对每个「照搬/改写」ID 至少被一个测试或 diag 检查项引用（见下）。
@@ -36,7 +36,7 @@
 1. 单元和组件测试全绿。
 2. 覆盖脚本显示每个「照搬/改写」ID 都有测试或 diag 检查项。
 3. 一次真机 diag 通过：首启清场 + Wine 安装 + hosts 引导；启动进主界面 + Game Mode / 全屏 / 刘海；退出还原 + 注册表验证；安装暂停 / 继续（限时）。
-4. 线上契约冒烟通过。若 CI 跑机打不通 api-takumi，改为本地 `YAAGL_LIVE=1`，作为发版前检查项。
+4. 线上契约冒烟通过。若 CI 跑机打不通 api-takumi，改为本地 `GENSHIN_LAUNCHER_LIVE=1`，作为发版前检查项。
 
 真实 CN ldiff 更新**不阻塞**发布（TS 版也做不到），靠夹具和线上契约覆盖。
 
@@ -54,8 +54,8 @@
 
 | 规则 ID | 标题 | 处置 | 依据 | 验收层 | 对应测试 |
 |---|---|---|---|---|---|
-| APP-001 | 应用启动顺序 | 改写 | [#28](https://github.com/tanzby/yet-another-anime-game-launcher/issues/28) B20 删死数据 / ADR 0002 启动顺序 | 组件 | `APP_001_*`（LauncherWineTests：Wine 就绪先于读取游戏状态；LauncherStartupTests：Rosetta 先于 Wine、`recover()` 在 Wine 就绪后且读取游戏状态前、每次运行只一次；hosts 在 OnboardingModel，清场归 DataDirectoryTests） |；diag：`yaagl-diag`
-| APP-002 | 数据目录的位置与解析 | 改写 | ADR 0001/0002 / [#27](https://github.com/tanzby/yet-another-anime-game-launcher/issues/27) (removexattr 不提权) | 组件 | `APP_002_*`（DataDirectoryTests）；diag：`yaagl-diag` |
+| APP-001 | 应用启动顺序 | 改写 | [#28](https://github.com/tanzby/yet-another-anime-game-launcher/issues/28) B20 删死数据 / ADR 0002 启动顺序 | 组件 | `APP_001_*`（LauncherWineTests：Wine 就绪先于读取游戏状态；LauncherStartupTests：Rosetta 先于 Wine、`recover()` 在 Wine 就绪后且读取游戏状态前、每次运行只一次；hosts 在 OnboardingModel，清场归 DataDirectoryTests） |；diag：`genshin-launcher-diag`
+| APP-002 | 数据目录的位置与解析 | 改写 | ADR 0001/0002 / [#27](https://github.com/tanzby/yet-another-anime-game-launcher/issues/27) (removexattr 不提权) | 组件 | `APP_002_*`（DataDirectoryTests）；diag：`genshin-launcher-diag` |
 | APP-003 | 启动时把 App bundle 同步到数据目录 | 作废 | [#17](https://github.com/tanzby/yet-another-anime-game-launcher/issues/17)/[#13](https://github.com/tanzby/yet-another-anime-game-launcher/issues/13) 无 sidecar/Neutralino | — |  |
 | APP-004 | 部分路径依赖进程当前目录 | 改写 | [#28](https://github.com/tanzby/yet-another-anime-game-launcher/issues/28) C 负面用例 | 组件 | `APP_004_*`（ParityGapTests：命令行相对路径在读取时变成绝对路径，Wine 布局全是绝对路径） |
 | APP-005 | aria2 下载服务启动 | 作废 | [#17](https://github.com/tanzby/yet-another-anime-game-launcher/issues/17)/[#13](https://github.com/tanzby/yet-another-anime-game-launcher/issues/13) 无 sidecar/Neutralino | — |  |
@@ -72,8 +72,8 @@
 | APP-016 | 是否需要更新 | 照搬 | TS 行为不变，但依 ADR 0002 在 Sophon/Launcher 重做 | 组件 | `APP_016_*`（ClientParityStatusTests、ParityGapTests） |
 | APP-017 | 主按钮的文案与动作 | 改写 | [#21](https://github.com/tanzby/yet-another-anime-game-launcher/issues/21) SwiftUI 主界面 / 设置窗口重新设计 | 组件 |`APP_017_*`（MainPresentationTests、MainControllerTests） |
 | APP-018 | 设置按钮的可见性 | 改写 | [#21](https://github.com/tanzby/yet-another-anime-game-launcher/issues/21) SwiftUI 主界面 / 设置窗口重新设计 | 组件 | `APP_018_*`（AppSourceTests：「⋯」菜单里的设置入口始终可点，启动用设置快照） |
-| APP-019 | 启动器启动时还原残留补丁（init） | 改写 | [#28](https://github.com/tanzby/yet-another-anime-game-launcher/issues/28) B12：启动时 GameSession.recover() 自愈 | 组件 | `APP_019_*`（ClientLaunchTests、LauncherClientHandoffTests；GameSession 侧见 LCH_038）；diag：`yaagl-diag` |
-| APP-020 | YAAGL_AUTOLAUNCH 自动启动 | 改写 | ADR 0002 命令行入口，diag 适配票 | 组件 | `APP_020_*`（AutoLaunchTests）；diag：`yaagl-diag` |
+| APP-019 | 启动器启动时还原残留补丁（init） | 改写 | [#28](https://github.com/tanzby/yet-another-anime-game-launcher/issues/28) B12：启动时 GameSession.recover() 自愈 | 组件 | `APP_019_*`（ClientLaunchTests、LauncherClientHandoffTests；GameSession 侧见 LCH_038）；diag：`genshin-launcher-diag` |
+| APP-020 | GENSHIN_LAUNCHER_AUTOLAUNCH 自动启动 | 改写 | ADR 0002 命令行入口，diag 适配票 | 组件 | `APP_020_*`（AutoLaunchTests）；diag：`genshin-launcher-diag` |
 | APP-021 | 启动器背景资源 | 改写 | [#21](https://github.com/tanzby/yet-another-anime-game-launcher/issues/21) SwiftUI 主界面 / 设置窗口重新设计 | 组件 |  |
 | APP-022 | 窗口关闭与终止钩子 | 改写 | [#28](https://github.com/tanzby/yet-another-anime-game-launcher/issues/28) C 负面用例 | 组件 | `APP_022_*`（LauncherJobTests：`QuitPlanTests`） |
 | CFG-001 | 设置的持久化存储 | 改写 | [#29](https://github.com/tanzby/yet-another-anime-game-launcher/issues/29)/ADR 0001 | 组件 |`CFG_001_*`（SettingsModelTests） |
@@ -93,7 +93,7 @@
 | CFG-015 | 代理主机 | 改写 | [#28](https://github.com/tanzby/yet-another-anime-game-launcher/issues/28) B17 | 组件 |`CFG_015_*`（SettingsModelTests） |
 | CFG-016 | 界面语言的默认值 | 改写 | [#28](https://github.com/tanzby/yet-another-anime-game-launcher/issues/28) A10 语言跟随系统 | 组件 | `CFG_016_*`（SettingsBehaviourTests、AppSourceTests：语言跟随系统，不存语言） |
 | CFG-017 | 界面语言的保存方式 | 改写 | [#28](https://github.com/tanzby/yet-another-anime-game-launcher/issues/28) A10 语言跟随系统 | 组件 | `CFG_017_*`（同 CFG-016） |
-| CFG-018 | YAAGL 版本显示 | 改写 | [#21](https://github.com/tanzby/yet-another-anime-game-launcher/issues/21) SwiftUI 主界面 / 设置窗口重新设计 | 组件 | `CFG_018_*`（AppSourceTests） |
+| CFG-018 | 启动器版本显示 | 改写 | [#21](https://github.com/tanzby/yet-another-anime-game-launcher/issues/21) SwiftUI 主界面 / 设置窗口重新设计 | 组件 | `CFG_018_*`（AppSourceTests） |
 | CFG-019 | FPS 解锁（不起作用） | 改写 | [#28](https://github.com/tanzby/yet-another-anime-game-launcher/issues/28) A6 删 FPS，DXMT 固定 60 | 组件 | `CFG_019_*`（FixedSwitchTests、SettingsBehaviourTests：FPS 设置已删，帧率上限固定 60） |
 | CFG-020 | ReShade | 作废 | [#28](https://github.com/tanzby/yet-another-anime-game-launcher/issues/28) A7 删 ReShade（ADR 0002 已按此修订） | — |  |
 | CFG-021 | 启用 HDR | 照搬 | [#28](https://github.com/tanzby/yet-another-anime-game-launcher/issues/28) A9 保留的用户偏好 | 组件 |`CFG_021_*`（SettingsModelTests） |
@@ -108,7 +108,7 @@
 | CFG-030 | "游戏"标签页的内容顺序 | 改写 | [#21](https://github.com/tanzby/yet-another-anime-game-launcher/issues/21) SwiftUI 主界面 / 设置窗口重新设计 | 组件 | `CFG_030_*`（AppSourceTests：游戏页 HDR、MetalFX、自定义分辨率的顺序） |
 | CFG-031 | 应用推荐设置 | 作废 | [#28](https://github.com/tanzby/yet-another-anime-game-launcher/issues/28) A8 删推荐设置按钮 | — |  |
 | CFG-032 | 打开 Wine 命令行、游戏目录、数据目录 | 改写 | [#21](https://github.com/tanzby/yet-another-anime-game-launcher/issues/21) SwiftUI 主界面 / 设置窗口重新设计 | 组件 | `CFG_032_*`（AppSourceTests）、WIN_022（CommandPromptTests） |
-| CFG-033 | 检查 YAAGL 更新 | 作废 | [#19](https://github.com/tanzby/yet-another-anime-game-launcher/issues/19) Sparkle | — |  |
+| CFG-033 | 检查启动器更新 | 作废 | [#19](https://github.com/tanzby/yet-another-anime-game-launcher/issues/19) Sparkle | — |  |
 | CFG-034 | Licenses 标签页 | 改写 | [#21](https://github.com/tanzby/yet-another-anime-game-launcher/issues/21) SwiftUI 主界面 / 设置窗口重新设计 | 组件 | `CFG_034_*`（AppSourceTests：Valve 许可证在应用内列出并随文件分发） |
 | INS-001 | 安装目录选择的校验 | 照搬 | TS 行为不变，但依 ADR 0002 在 Sophon/Launcher 重做 | 组件 |  |
 | INS-002 | 判定"已有安装"还是"全新安装" | 照搬 | TS 行为不变，但依 ADR 0002 在 Sophon/Launcher 重做 | 组件 | `INS_002_*`（ClientStatusTests） |
@@ -130,38 +130,38 @@
 | LCH-002 | 按版本下载 ReShade | 作废 | [#28](https://github.com/tanzby/yet-another-anime-game-launcher/issues/28) A7 删 ReShade（ADR 0002 已按此修订） | — |  |
 | LCH-003 | 启动前强制清理 prefix 中的残留进程 | 照搬 | TS 行为不变；LaunchRecipe/GameSession 重做 | diag | GameSessionLaunchTests、GameSessionMutationTests |
 | LCH-004 | 判断 MetalFX 是否生效 | 照搬 | TS 行为不变；LaunchRecipe/GameSession 重做 | diag | GenshinLaunchRecipeTests |
-| LCH-005 | 写入 Mac Driver 注册表（Retina / 左 Cmd） | 照搬 | TS 行为不变；LaunchRecipe/GameSession 重做 | diag | GameSessionLaunchTests、GenshinLaunchRecipeTests；diag：`yaagl-diag` |
-| LCH-006 | 写入 HDR 注册表 | 改写 | [#28](https://github.com/tanzby/yet-another-anime-game-launcher/issues/28) B13 | diag | GenshinLaunchRecipeTests；diag：`yaagl-diag` |
-| LCH-007 | 用注册表实现自定义分辨率（强制窗口化） | 改写 | [#28](https://github.com/tanzby/yet-another-anime-game-launcher/issues/28) B13 | diag | GenshinLaunchRecipeTests；diag：`yaagl-diag` |
+| LCH-005 | 写入 Mac Driver 注册表（Retina / 左 Cmd） | 照搬 | TS 行为不变；LaunchRecipe/GameSession 重做 | diag | GameSessionLaunchTests、GenshinLaunchRecipeTests；diag：`genshin-launcher-diag` |
+| LCH-006 | 写入 HDR 注册表 | 改写 | [#28](https://github.com/tanzby/yet-another-anime-game-launcher/issues/28) B13 | diag | GenshinLaunchRecipeTests；diag：`genshin-launcher-diag` |
+| LCH-007 | 用注册表实现自定义分辨率（强制窗口化） | 改写 | [#28](https://github.com/tanzby/yet-another-anime-game-launcher/issues/28) B13 | diag | GenshinLaunchRecipeTests；diag：`genshin-launcher-diag` |
 | LCH-008 | 分辨率输入校验 | 改写 | [#28](https://github.com/tanzby/yet-another-anime-game-launcher/issues/28) B16 | 单元 |  |
 | LCH-009 | 写完注册表后等待 wineserver 退出 | 照搬 | TS 行为不变；LaunchRecipe/GameSession 重做 | diag | GameSessionLaunchTests |
 | LCH-010 | 启动命令（原 config.bat 默认启动路径） | 改写 | [#28](https://github.com/tanzby/yet-another-anime-game-launcher/issues/28) B14/A9：Steam patch 固定开启。不再生成或执行 config.bat，直接 `wine C:\windows\system32\steam.exe <游戏>`：真机对照（#57）显示 `cmd.exe` 作父进程时游戏会加载 HoYoKProtect.sys，在此 Wine 上因缺 WDFLDR.SYS 以退出码 5 终止，直接启动则不会；与 TS 的 Steam patch 路径一致 | 单元 | GameSessionLaunchTests、GenshinLaunchRecipeTests |
-| LCH-011 | Steam patch 启动路径 | 改写 | [#28](https://github.com/tanzby/yet-another-anime-game-launcher/issues/28) B14：启动命令只有 `steam.exe <游戏>`，不带 `-platform_type … -is_cloud 1`、不复制驱动，与 TS 的 Steam patch 路径一致（#57 实测：多这些并无影响，经 `cmd` 才会失败） | diag | GenshinLaunchRecipeTests（启动命令 golden）；真机由 yaagl-diag 的 LCH-006/007 检查 |
+| LCH-011 | Steam patch 启动路径 | 改写 | [#28](https://github.com/tanzby/yet-another-anime-game-launcher/issues/28) B14：启动命令只有 `steam.exe <游戏>`，不带 `-platform_type … -is_cloud 1`、不复制驱动，与 TS 的 Steam patch 路径一致（#57 实测：多这些并无影响，经 `cmd` 才会失败） | diag | GenshinLaunchRecipeTests（启动命令 golden）；真机由 genshin-launcher-diag 的 LCH-006/007 检查 |
 | LCH-012 | 补丁幂等 | 改写 | [#28](https://github.com/tanzby/yet-another-anime-game-launcher/issues/28) B12：启动前准备幂等，.bak 存在则不覆盖 | 单元 | GameSessionMutationTests |
 | LCH-013 | patch-off 只跳过对游戏文件的修改 | 作废 | [#28](https://github.com/tanzby/yet-another-anime-game-launcher/issues/28) A9 删除的开关 | — |  |
-| LCH-014 | CN 版启动前移走三个文件 | 改写 | [#28](https://github.com/tanzby/yet-another-anime-game-launcher/issues/28) B12/A9：补丁永远应用（无 patch-off）；`.bak` 已存在时不覆盖，启动时自愈 | 单元 | GameSessionMutationTests、GenshinLaunchRecipeTests；diag：`yaagl-diag` |
+| LCH-014 | CN 版启动前移走三个文件 | 改写 | [#28](https://github.com/tanzby/yet-another-anime-game-launcher/issues/28) B12/A9：补丁永远应用（无 patch-off）；`.bak` 已存在时不覆盖，启动时自愈 | 单元 | GameSessionMutationTests、GenshinLaunchRecipeTests；diag：`genshin-launcher-diag` |
 | LCH-015 | workaround3 对 hk4ecn 无效果 | 作废 | [#28](https://github.com/tanzby/yet-another-anime-game-launcher/issues/28) A9 删除的开关 | — |  |
 | LCH-016 | 差分补丁和新增文件机制（CN 下列表为空） | 作废 | 死/开发便利/无版本选择 UI/空列表 | — |  |
 | LCH-017 | ReShade 注入游戏目录 | 作废 | [#28](https://github.com/tanzby/yet-another-anime-game-launcher/issues/28) A7 删 ReShade（ADR 0002 已按此修订） | — |  |
-| LCH-018 | 把 steam.exe 和 lsteamclient 部署到 prefix | 照搬 | TS 行为不变；LaunchRecipe/GameSession 重做 | diag | GameSessionMutationTests、GenshinLaunchRecipeTests；diag：`yaagl-diag` |
+| LCH-018 | 把 steam.exe 和 lsteamclient 部署到 prefix | 照搬 | TS 行为不变；LaunchRecipe/GameSession 重做 | diag | GameSessionMutationTests、GenshinLaunchRecipeTests；diag：`genshin-launcher-diag` |
 | LCH-019 | patched 标记 | 改写 | [#28](https://github.com/tanzby/yet-another-anime-game-launcher/issues/28) B12：无 patched 标记，状态只看文件系统和 journal | 单元 | GameSessionMutationTests |
 | LCH-020 | 每次启动生成一个游戏日志 | 改写 | [#28](https://github.com/tanzby/yet-another-anime-game-launcher/issues/28) B18 | 单元 | GameSessionMutationTests |
 | LCH-021 | 屏蔽网络（临时修改 hosts 10 秒） | 改写 | [#29](https://github.com/tanzby/yet-another-anime-game-launcher/issues/29)/ADR 0001 | 单元 | `LCH_021_*`（HostsBlocklistTests） |
-| LCH-022 | Game Mode 开关 | 改写 | [#28](https://github.com/tanzby/yet-another-anime-game-launcher/issues/28) A9：Game Mode 固定开启，无关闭分支；仅保留 LCH-023 的失败降级 | diag | GameHostTests；diag：`yaagl-diag` |
+| LCH-022 | Game Mode 开关 | 改写 | [#28](https://github.com/tanzby/yet-another-anime-game-launcher/issues/28) A9：Game Mode 固定开启，无关闭分支；仅保留 LCH-023 的失败降级 | diag | GameHostTests；diag：`genshin-launcher-diag` |
 | LCH-023 | game host 缺失或出错时降级 | 照搬 | TS 行为不变；LaunchRecipe/GameSession 重做 | diag | GameHostTests |
-| LCH-024 | 安装 wine 加载器 shim | 照搬 | x86_64 shim/host 原样搬 (ADR 0002)；只能 E2E | diag | GameHostTests；diag：`yaagl-diag` |
-| LCH-025 | 构建并注册 YaaglGame.app | 改写 | [#28](https://github.com/tanzby/yet-another-anime-game-launcher/issues/28) A11：游戏包装 App 使用新 bundle id，codesign 标识符必须与之相同 | diag | GameHostTests；diag：`yaagl-diag` |
-| LCH-026 | game host 的环境变量 | 照搬 | TS 行为不变；LaunchRecipe/GameSession 重做 | diag | GameHostTests、GenshinLaunchRecipeTests；diag：`yaagl-diag` |
-| LCH-027 | wine-shim 按可执行文件分流 | 照搬 | x86_64 shim/host 原样搬 (ADR 0002)；只能 E2E | diag | diag：`yaagl-diag` |
-| LCH-028 | gamehost 把游戏窗口切到原生全屏 | 照搬 | x86_64 shim/host 原样搬 (ADR 0002)；只能 E2E | diag | diag：`yaagl-diag` |
-| LCH-029 | 全屏时覆盖刘海区域 | 照搬 | x86_64 shim/host 原样搬 (ADR 0002)；只能 E2E | diag | diag：`yaagl-diag` |
-| LCH-030 | 窗口关闭 15 秒后进程仍在则自行退出 | 照搬 | x86_64 shim/host 原样搬 (ADR 0002)；只能 E2E | diag | diag：`yaagl-diag` |
-| LCH-031 | 本机主机名在本地直接解析 | 照搬 | TS 行为不变；LaunchRecipe/GameSession 重做 | diag | diag：`yaagl-diag probe`（注入 gamehost.dylib 的 x86_64 探针解析本机主机名；完整 diag 运行也会做这一项） |
+| LCH-024 | 安装 wine 加载器 shim | 照搬 | x86_64 shim/host 原样搬 (ADR 0002)；只能 E2E | diag | GameHostTests；diag：`genshin-launcher-diag` |
+| LCH-025 | 构建并注册 GenshinLauncherGame.app | 改写 | [#28](https://github.com/tanzby/yet-another-anime-game-launcher/issues/28) A11：游戏包装 App 使用新 bundle id，codesign 标识符必须与之相同 | diag | GameHostTests；diag：`genshin-launcher-diag` |
+| LCH-026 | game host 的环境变量 | 照搬 | TS 行为不变；LaunchRecipe/GameSession 重做 | diag | GameHostTests、GenshinLaunchRecipeTests；diag：`genshin-launcher-diag` |
+| LCH-027 | wine-shim 按可执行文件分流 | 照搬 | x86_64 shim/host 原样搬 (ADR 0002)；只能 E2E | diag | diag：`genshin-launcher-diag` |
+| LCH-028 | gamehost 把游戏窗口切到原生全屏 | 照搬 | x86_64 shim/host 原样搬 (ADR 0002)；只能 E2E | diag | diag：`genshin-launcher-diag` |
+| LCH-029 | 全屏时覆盖刘海区域 | 照搬 | x86_64 shim/host 原样搬 (ADR 0002)；只能 E2E | diag | diag：`genshin-launcher-diag` |
+| LCH-030 | 窗口关闭 15 秒后进程仍在则自行退出 | 照搬 | x86_64 shim/host 原样搬 (ADR 0002)；只能 E2E | diag | diag：`genshin-launcher-diag` |
+| LCH-031 | 本机主机名在本地直接解析 | 照搬 | TS 行为不变；LaunchRecipe/GameSession 重做 | diag | diag：`genshin-launcher-diag probe`（注入 gamehost.dylib 的 x86_64 探针解析本机主机名；完整 diag 运行也会做这一项） |
 | LCH-032 | Metal HUD、超时修复与 DLL 覆盖 | 改写 | [#28](https://github.com/tanzby/yet-another-anime-game-launcher/issues/28) A9：Timeout Fix 固定开启，`WINE_ENABLE_TIMEOUT_FIX` 恒为启用值 | diag | GenshinLaunchRecipeTests |
 | LCH-033 | DXMT 环境变量与 60 帧上限 | 改写 | [#28](https://github.com/tanzby/yet-another-anime-game-launcher/issues/28) A6 删 FPS，DXMT 固定 60 | 单元 | GenshinLaunchRecipeTests |
 | LCH-034 | 代理环境变量 | 改写 | [#28](https://github.com/tanzby/yet-another-anime-game-launcher/issues/28) B17 | 单元 | GenshinLaunchRecipeTests |
 | LCH-035 | 空字符串的环境变量不会传递 | 照搬 | TS 行为不变；LaunchRecipe/GameSession 重做 | 单元 | GameSessionLaunchTests |
-| LCH-036 | 游戏退出后最多等待 Wine 15 秒，超时强杀 | 改写 | [#28](https://github.com/tanzby/yet-another-anime-game-launcher/issues/28) B15 | diag | GameSessionLaunchTests（启动超时、退出等待与强杀）；`LCH_036_*`（Launcher 的 120 s 启动超时）；diag：`yaagl-diag` |
+| LCH-036 | 游戏退出后最多等待 Wine 15 秒，超时强杀 | 改写 | [#28](https://github.com/tanzby/yet-another-anime-game-launcher/issues/28) B15 | diag | GameSessionLaunchTests（启动超时、退出等待与强杀）；`LCH_036_*`（Launcher 的 120 s 启动超时）；diag：`genshin-launcher-diag` |
 | LCH-037 | 正常退出后撤销 HDR 和分辨率注册表 | 改写 | [#28](https://github.com/tanzby/yet-another-anime-game-launcher/issues/28) B16 | 单元 | GameSessionLaunchTests |
 | LCH-038 | 启动失败或崩溃时不撤销注册表 | 改写 | [#28](https://github.com/tanzby/yet-another-anime-game-launcher/issues/28) B12：崩溃残留由 recover() 与幂等写入自愈 | 单元 | GameSessionLaunchTests、GameSessionMutationTests |
 | LCH-039 | 退出后还原（原：删除 config.bat 并还原） | 改写 | [#28](https://github.com/tanzby/yet-another-anime-game-launcher/issues/28) B12：按 journal 还原游戏文件，无 DXMT/ReShade/patched 还原；不再有 config.bat 可删（见 LCH-010） | 单元 | GameSessionLaunchTests |
@@ -219,16 +219,16 @@
 | WIN-006 | 安装或切换 Wine 时先删除 prefix | 改写 | [#29](https://github.com/tanzby/yet-another-anime-game-launcher/issues/29)/ADR 0001 | 单元 | WineInstallTests（重装先下后删，prefix 一并重建）、WineInstallResumeTests（空间预检在下载与删除之前） |
 | WIN-007 | 下载 Wine 安装包并判断格式 | 照搬 | Wine 运行时行为不变 | 单元 | WineInstallTests、WineInstallResumeTests（并行下载、稳定路径）、DownloaderTests、DownloaderResumeTests（Range 续传） |
 | WIN-008 | 解压规则 | 照搬 | Wine 运行时行为不变 | 单元 | WineInstallTests、WineInstallResumeTests（失败带 tar/ditto 输出）、SystemProcessRunnerTests |
-| WIN-009 | 向 wine.inf 注入根证书 | 照搬 | [#28](https://github.com/tanzby/yet-another-anime-game-launcher/issues/28) B19 根证书（有意照搬） | diag | WineInfTests、WineInstallTests；diag：`yaagl-diag` |
-| WIN-010 | 移除 quarantine 属性（需要管理员权限） | 改写 | ADR 0001/0002 / [#27](https://github.com/tanzby/yet-another-anime-game-launcher/issues/27) (removexattr 不提权) | diag | `WIN_010_*`（QuarantineTests）；diag：`yaagl-diag` |
-| WIN-011 | 在 /etc/hosts 中维护永久屏蔽段 | 改写 | [#29](https://github.com/tanzby/yet-another-anime-game-launcher/issues/29)/ADR 0001 | diag | `WIN_011_*`（HostsBlocklistTests、TelemetryHostsTests）；真机提权写入由 diag 验收；diag：`yaagl-diag` |
-| WIN-012 | 初始化 prefix | 照搬 | Wine 运行时行为不变 | diag | WineInstallTests（wineboot / winecfg argv 与日志；真机仍走 diag）；diag：`yaagl-diag` |
+| WIN-009 | 向 wine.inf 注入根证书 | 照搬 | [#28](https://github.com/tanzby/yet-another-anime-game-launcher/issues/28) B19 根证书（有意照搬） | diag | WineInfTests、WineInstallTests；diag：`genshin-launcher-diag` |
+| WIN-010 | 移除 quarantine 属性（需要管理员权限） | 改写 | ADR 0001/0002 / [#27](https://github.com/tanzby/yet-another-anime-game-launcher/issues/27) (removexattr 不提权) | diag | `WIN_010_*`（QuarantineTests）；diag：`genshin-launcher-diag` |
+| WIN-011 | 在 /etc/hosts 中维护永久屏蔽段 | 改写 | [#29](https://github.com/tanzby/yet-another-anime-game-launcher/issues/29)/ADR 0001 | diag | `WIN_011_*`（HostsBlocklistTests、TelemetryHostsTests）；真机提权写入由 diag 验收；diag：`genshin-launcher-diag` |
+| WIN-012 | 初始化 prefix | 照搬 | Wine 运行时行为不变 | diag | WineInstallTests（wineboot / winecfg argv 与日志；真机仍走 diag）；diag：`genshin-launcher-diag` |
 | WIN-013 | hk4ecn 不安装 Media Foundation | 作废 | 死/开发便利/无版本选择 UI/空列表 | — |  |
 | WIN-014 | 安装完成后写入状态 | 改写 | [#28](https://github.com/tanzby/yet-another-anime-game-launcher/issues/28) B20：删除 wine_netbiosname、wine_update_url 等死数据；状态由 Wine 目录版本戳推导（ADR 0002） | 单元 | WineInstallTests（版本戳最后写入） |
 | WIN-015 | NetBIOS 名称 | 改写 | [#28](https://github.com/tanzby/yet-another-anime-game-launcher/issues/28) B20 删死数据 / ADR 0002 启动顺序 | 单元 | WineInstallTests（负面：不写 NetBIOS） |
-| WIN-016 | 选择 Wine 可执行文件与基础环境 | 改写 | [#28](https://github.com/tanzby/yet-another-anime-game-launcher/issues/28) C 负面用例 | diag | LoaderSelectionTests；diag：`yaagl-diag` |
+| WIN-016 | 选择 Wine 可执行文件与基础环境 | 改写 | [#28](https://github.com/tanzby/yet-another-anime-game-launcher/issues/28) C 负面用例 | diag | LoaderSelectionTests；diag：`genshin-launcher-diag` |
 | WIN-017 | 路径转换与 copy 特例 | 照搬 | Wine 运行时行为不变；copy 特例（驱动副本）随 config.bat 取消，见 LCH-010 | 单元 | GameSessionLaunchTests（Z: 路径） |
-| WIN-018 | Wine 关停与强杀 | 照搬 | Wine 运行时行为不变 | diag | GameSessionMutationTests、ProcessTableTests（prefix 清扫；真机仍走 diag）；diag：`yaagl-diag` |
+| WIN-018 | Wine 关停与强杀 | 照搬 | Wine 运行时行为不变 | diag | GameSessionMutationTests、ProcessTableTests（prefix 清扫；真机仍走 diag）；diag：`genshin-launcher-diag` |
 | WIN-019 | DXMT 版本检查与下载 | 改写 | [#28](https://github.com/tanzby/yet-another-anime-game-launcher/issues/28) C 负面用例；#63/ADR 0003：DXMT 随 App 分发，不再下载，版本不符只刷新 DXMT 文件 | 单元 | WineStatusTests（DXMT 版本不符即 dxmtOutdated）、WineInstallTests（只刷新 DXMT） |
 | WIN-020 | 把 DXMT 注入 Wine 运行时 | 改写 | [#28](https://github.com/tanzby/yet-another-anime-game-launcher/issues/28) B12：DXMT 装 Wine 时一次装好，不再注入（ADR 0002 已修订）；#63：从 App 内的 DXMT 拷贝（ADR 0003） | 单元 | WineInstallTests（DXMT 随 Wine 一次装好） |
 | WIN-021 | 还原 DXMT 注入 | 改写 | [#28](https://github.com/tanzby/yet-another-anime-game-launcher/issues/28) B12：DXMT 不再注入，因此无需还原（ADR 0002 已修订） | 单元 | WineInstallTests（无 .bak，无需还原） |

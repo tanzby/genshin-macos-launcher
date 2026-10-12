@@ -44,7 +44,7 @@ private final class Harness {
   let log: EventLog
   let directory: URL?
 
-  var jobFileURL: URL { directory!.appending(path: ".yaagl-tmp").appending(path: "job.json") }
+  var jobFileURL: URL { directory!.appending(path: ".genshin-launcher-tmp").appending(path: "job.json") }
   var jobFileExists: Bool { FileManager.default.fileExists(atPath: jobFileURL.path) }
   var jobFile: PendingJob? {
     guard let data = try? Data(contentsOf: jobFileURL) else { return nil }

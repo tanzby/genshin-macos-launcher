@@ -10,7 +10,7 @@ import TestSupport
 private func makeGame(
   ggm: String? = "\0" + "5.6.0_100_200" + "\0", config: String? = nil, executable: Bool = true, pcGameSDK: Bool = false
 ) throws -> URL {
-  let root = temporaryURL("yaagl-inst")
+  let root = temporaryURL("genshin-launcher-inst")
   let data = root.appending(path: "YuanShen_Data")
   try FileManager.default.createDirectory(at: data.appending(path: "Plugins"), withIntermediateDirectories: true)
   if executable { try Data("MZ".utf8).write(to: root.appending(path: "YuanShen.exe")) }
@@ -61,7 +61,7 @@ private func iniWith(_ version: String) -> String {
 
   @Test func UPG_005_onlyTheChinaReleaseIsRecognised() throws {
     // The global release keeps its data in GenshinImpact_Data, so nothing is found under YuanShen_Data.
-    let global = temporaryURL("yaagl-inst")
+    let global = temporaryURL("genshin-launcher-inst")
     try FileManager.default.createDirectory(
       at: global.appending(path: "GenshinImpact_Data"), withIntermediateDirectories: true)
     #expect(try SophonInstallation.installedVersion(in: global) == nil)
@@ -75,7 +75,7 @@ private func iniWith(_ version: String) -> String {
   }
 
   @Test func INS_005_anEmptyOrHalfInstalledDirectoryIsNotInstalled() throws {
-    let empty = makeTemporaryDirectory("yaagl-inst")
+    let empty = makeTemporaryDirectory("genshin-launcher-inst")
     #expect(try SophonInstallation.installedVersion(in: empty) == nil)
 
     // An interrupted install: the template still says 0.0.0, so the install can be continued.
@@ -86,7 +86,7 @@ private func iniWith(_ version: String) -> String {
 
 @Suite struct SophonInstallationConfigTests {
   @Test func INS_005_prepareWritesTheChinaTemplateWithCRLFAndCreatesTheTempDirectory() throws {
-    let root = temporaryURL("yaagl-inst")
+    let root = temporaryURL("genshin-launcher-inst")
 
     try SophonInstallation.prepareForInstall(in: root)
 
@@ -98,7 +98,7 @@ private func iniWith(_ version: String) -> String {
   }
 
   @Test func INS_005_prepareAcceptsTheTempDirectoryAndFinderLeftovers() throws {
-    let root = temporaryURL("yaagl-inst")
+    let root = temporaryURL("genshin-launcher-inst")
     try FileManager.default.createDirectory(at: SophonInstallation.tempDirectory(in: root), withIntermediateDirectories: true)
     try Data().write(to: root.appending(path: ".DS_Store"))
 
@@ -118,7 +118,7 @@ private func iniWith(_ version: String) -> String {
     #expect(throws: SophonError.installDirectoryNotEmpty) { try SophonInstallation.prepareForInstall(in: installed) }
     #expect(try String(contentsOf: installed.appending(path: "config.ini"), encoding: .utf8) == iniWith("5.6.0"))
 
-    let stranger = makeTemporaryDirectory("yaagl-inst")
+    let stranger = makeTemporaryDirectory("genshin-launcher-inst")
     try Data("x".utf8).write(to: stranger.appending(path: "photos.zip"))
     #expect(throws: SophonError.installDirectoryNotEmpty) { try SophonInstallation.prepareForInstall(in: stranger) }
     #expect(!FileManager.default.fileExists(atPath: stranger.appending(path: "config.ini").path))
@@ -127,8 +127,8 @@ private func iniWith(_ version: String) -> String {
   @Test func INS_005_validateJudgesLikePrepareButTouchesNothing() throws {
     let installed = try makeGame(config: iniWith("5.6.0"))
     let half = try makeGame(config: iniWith("0.0.0"))
-    let stranger = temporaryURL("yaagl-inst")
-    let missing = temporaryURL("yaagl-inst")
+    let stranger = temporaryURL("genshin-launcher-inst")
+    let missing = temporaryURL("genshin-launcher-inst")
     try FileManager.default.createDirectory(at: stranger, withIntermediateDirectories: true)
     try Data("x".utf8).write(to: stranger.appending(path: "photos.zip"))
 
@@ -138,8 +138,8 @@ private func iniWith(_ version: String) -> String {
     try SophonInstallation.validateInstallDirectory(missing)
 
     #expect(!FileManager.default.fileExists(atPath: missing.path))
-    #expect(!FileManager.default.fileExists(atPath: stranger.appending(path: ".yaagl-tmp").path))
-    #expect(!FileManager.default.fileExists(atPath: half.appending(path: ".yaagl-tmp").path))
+    #expect(!FileManager.default.fileExists(atPath: stranger.appending(path: ".genshin-launcher-tmp").path))
+    #expect(!FileManager.default.fileExists(atPath: half.appending(path: ".genshin-launcher-tmp").path))
     #expect(try String(contentsOf: installed.appending(path: "config.ini"), encoding: .utf8) == iniWith("5.6.0"))
   }
 
@@ -177,7 +177,7 @@ private func iniWith(_ version: String) -> String {
     #expect(!FileManager.default.fileExists(atPath: game.appending(path: "ldiff").path))
     #expect(FileManager.default.fileExists(atPath: current.appending(path: "job.json").path))
 
-    let stranger = temporaryURL("yaagl-inst")
+    let stranger = temporaryURL("genshin-launcher-inst")
     try FileManager.default.createDirectory(at: stranger.appending(path: ".tmp"), withIntermediateDirectories: true)
     SophonInstallation.removeLegacyTemporaryFolders(in: stranger)
     #expect(FileManager.default.fileExists(atPath: stranger.appending(path: ".tmp").path))

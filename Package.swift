@@ -8,10 +8,10 @@ import PackageDescription
 //   Sophon    -> swift-protobuf, CZstd (vendored facebook/zstd, decompression only),
 //                CHDiffPatch (vendored sisong/HDiffPatch v4.5.2, patching only)
 //   Updates   -> Sparkle (re-exported for the app, so Package.resolved pins it, #87)
-//   Diagnostics -> Launcher, Platform (the --autolaunch entry and launcher.log for yaagl-diag, #76)
+//   Diagnostics -> Launcher, Platform (the --autolaunch entry and launcher.log for genshin-launcher-diag, #76)
 // The SwiftUI app (project.yml) sits on top of Launcher, GenshinCN, Updates and Diagnostics.
 let package = Package(
-  name: "YaaglKit",
+  name: "GenshinLauncherKit",
   platforms: [.macOS(.v26)],
   products: [
     .library(name: "Sophon", targets: ["Sophon"]),

@@ -6,9 +6,9 @@ import UserNotifications
 /// `UNUserNotificationCenter` behind `NotificationDelivering`. Anything that goes wrong (no bundle, an
 /// ad-hoc signed app the system refuses, a denied prompt) ends as "not authorized": no notifications, no error.
 struct UserNotificationDelivery: NotificationDelivering {
-  private static let log = Logger(subsystem: "io.github.tanzby.yaagl", category: "notifications")
+  private static let log = Logger(subsystem: "io.github.tanzby.genshin-launcher", category: "notifications")
 
-  /// Shows banners while Yaagl is the frontmost app too.
+  /// Shows banners while Genshin Launcher is the frontmost app too.
   final class Presenter: NSObject, UNUserNotificationCenterDelegate {
     func userNotificationCenter(
       _ center: UNUserNotificationCenter, willPresent notification: UNNotification

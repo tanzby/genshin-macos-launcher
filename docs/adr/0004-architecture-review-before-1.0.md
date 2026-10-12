@@ -16,7 +16,7 @@
 |---|---|---|
 | `Launcher/Launcher.swift`（一个文件装了客户端协议、启动步骤、主按钮三件事，名字还和模块重名）按概念拆成 `GameClient.swift`、`StartupSteps.swift`、`PrimaryAction.swift`；`LauncherModel.swift` 里的 `LauncherPhase` / `LauncherError` / `JobEvent` 搬到 `LauncherState.swift`，`LaunchGate` 单独成文件 | 找东西不用翻 700 行文件；只移动代码，不改类型 | 本 PR |
 | `SettingsModel.Resolution` 与 `LaunchOptions.Resolution` 是一模一样的两份定义，改成类型别名 | 少一份重复和一次手工转换；`SettingsModel.Resolution` 这个名字照旧可用 | 本 PR |
-| `GenshinCNClient.bundled` 的 `bundle` 参数默认值是 `.main`，领域库里出现了 `Bundle.main` | ADR 0002 要求只有组合根知道主 bundle；去掉默认值，由 `YaaglApp` 显式传入 | 本 PR |
+| `GenshinCNClient.bundled` 的 `bundle` 参数默认值是 `.main`，领域库里出现了 `Bundle.main` | ADR 0002 要求只有组合根知道主 bundle；去掉默认值，由 `GenshinLauncherApp` 显式传入 | 本 PR |
 
 ## 决定放到 1.0.0 之后
 

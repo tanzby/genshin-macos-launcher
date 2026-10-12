@@ -6,21 +6,21 @@
 #   scripts/dev/sparkle-local-check          build, serve, install test.1 and start it (waits for your click)
 #   scripts/dev/sparkle-local-check stop     stop the server and the app, restore the user defaults, unset the env
 #
-# Isolation: everything lives in $SPARKLE_CHECK_DIR (default ~/Library/Caches/yaagl-sparkle-test). The throwaway
+# Isolation: everything lives in $SPARKLE_CHECK_DIR (default ~/Library/Caches/genshin-launcher-sparkle-test). The throwaway
 # key is a file in there, never the Keychain, and never the real release key. /Applications and the real data
-# directory are not touched: the data directory comes from YAAGL_DATA_DIR, set with launchctl so that the
+# directory are not touched: the data directory comes from GENSHIN_LAUNCHER_DATA_DIR, set with launchctl so that the
 # instance Sparkle relaunches after the update inherits it. The test copies share the bundle id (so the
 # preference domain) with the real app; `run` saves the Sparkle keys of that domain and `stop` puts them back.
 set -euo pipefail
 cd "$(dirname "$0")/../.."
 repo=$PWD
 
-work=${SPARKLE_CHECK_DIR:-$HOME/Library/Caches/yaagl-sparkle-test}
+work=${SPARKLE_CHECK_DIR:-$HOME/Library/Caches/genshin-launcher-sparkle-test}
 port=${SPARKLE_CHECK_PORT:-18765}
-domain=io.github.tanzby.yaagl
+domain=io.github.tanzby.genshin-launcher
 sparkle_version=2.10.0 # the Sparkle version in Package.swift
 sparkle_sha256=c2bf58aa8387266ac179357b1415d6f2635f044da8be41042af32425dae6da0c
-app=$work/app/Yaagl.app
+app="$work/app/Genshin Launcher.app"
 data=$work/data
 
 # Keeps or restores the Sparkle keys (SU*) of the preference domain. `save` writes the backup once per run;
@@ -57,8 +57,8 @@ stop() {
     rm -f "$work/server.pid"
   fi
   # Only the test copy: the real app and the diag app live elsewhere.
-  pkill -f "$app/Contents/MacOS/Yaagl" 2>/dev/null || true
-  launchctl unsetenv YAAGL_DATA_DIR
+  pkill -f "$app/Contents/MacOS/Genshin Launcher" 2>/dev/null || true
+  launchctl unsetenv GENSHIN_LAUNCHER_DATA_DIR
   if [ -f "$work/defaults-backup.plist" ]; then
     defaults_keys restore
     echo "Sparkle defaults of $domain restored."
@@ -107,30 +107,30 @@ rm -rf "$work/stage" "$work/serve"
 mkdir -p "$work/stage" "$work/serve"
 for n in 1 2; do
   version=1.0.0-test.$n
-  xcodebuild -project Yaagl.xcodeproj -scheme Yaagl -configuration Release \
+  xcodebuild -project GenshinLauncher.xcodeproj -scheme GenshinLauncher -configuration Release \
     -destination 'platform=macOS,arch=arm64' -derivedDataPath "$work/derived" \
     MARKETING_VERSION="$version" CURRENT_PROJECT_VERSION="900$n" build >"$work/build-$n.log" 2>&1 \
     || { tail -20 "$work/build-$n.log"; exit 1; }
   mkdir -p "$work/stage/$n"
-  ditto "$work/derived/Build/Products/Release/Yaagl.app" "$work/stage/$n/Yaagl.app"
-  plist=$work/stage/$n/Yaagl.app/Contents/Info.plist
+  ditto "$work/derived/Build/Products/Release/Genshin Launcher.app" "$work/stage/$n/Genshin Launcher.app"
+  plist="$work/stage/$n/Genshin Launcher.app/Contents/Info.plist"
   /usr/libexec/PlistBuddy -c "Set :SUPublicEDKey $pub" "$plist"
   /usr/libexec/PlistBuddy -c "Set :SUFeedURL http://127.0.0.1:$port/appcast.xml" "$plist"
   # Plain http to 127.0.0.1, in the test copies only. project.yml stays as it is.
   /usr/libexec/PlistBuddy -c "Add :NSAppTransportSecurity dict" "$plist"
   /usr/libexec/PlistBuddy -c "Add :NSAppTransportSecurity:NSAllowsLocalNetworking bool true" "$plist"
-  codesign --force --deep --sign - "$work/stage/$n/Yaagl.app"
-  codesign --verify --deep --strict "$work/stage/$n/Yaagl.app"
+  codesign --force --deep --sign - "$work/stage/$n/Genshin Launcher.app"
+  codesign --verify --deep --strict "$work/stage/$n/Genshin Launcher.app"
 done
 
 echo "== Sign test.2 and write the appcast"
-ditto -c -k --sequesterRsrc --keepParent "$work/stage/2/Yaagl.app" "$work/serve/Yaagl-1.0.0-test.2.zip"
+ditto -c -k --sequesterRsrc --keepParent "$work/stage/2/Genshin Launcher.app" "$work/serve/GenshinLauncher-1.0.0-test.2.zip"
 "$work/tools/bin/generate_appcast" --ed-key-file - <"$work/keys/ed.key" \
   --download-url-prefix "http://127.0.0.1:$port/" -o "$work/serve/appcast.xml" "$work/serve"
 grep -q 'sparkle:edSignature' "$work/serve/appcast.xml"
 grep -q '<sparkle:shortVersionString>1.0.0-test.2<' "$work/serve/appcast.xml"
 sig=$(grep -o 'sparkle:edSignature="[^"]*"' "$work/serve/appcast.xml" | head -1 | cut -d'"' -f2)
-swift scripts/release/verify-ed-signature.swift "$pub" "$sig" "$work/serve/Yaagl-1.0.0-test.2.zip"
+swift scripts/release/verify-ed-signature.swift "$pub" "$sig" "$work/serve/GenshinLauncher-1.0.0-test.2.zip"
 
 echo "== Serve the feed on 127.0.0.1:$port"
 nohup python3 -I -m http.server "$port" --bind 127.0.0.1 --directory "$work/serve" >"$work/server.log" 2>&1 &
@@ -142,25 +142,25 @@ done
 curl -fs -o /dev/null "http://127.0.0.1:$port/appcast.xml" || { echo "feed is not served" >&2; exit 1; }
 
 echo "== Install and start test.1"
-pkill -f "$app/Contents/MacOS/Yaagl" 2>/dev/null || true
+pkill -f "$app/Contents/MacOS/Genshin Launcher" 2>/dev/null || true
 rm -rf "$work/app" "$data"
 mkdir -p "$work/app" "$data"
-ditto "$work/stage/1/Yaagl.app" "$app"
+ditto "$work/stage/1/Genshin Launcher.app" "$app"
 # Fresh-install conditions for Sparkle: no saved choices, and a check time of now so the daily check does not
 # fire by itself and the click below is the only trigger.
 defaults_keys save
 defaults write "$domain" SULastCheckTime -date "$(date -u '+%Y-%m-%d %H:%M:%S +0000')"
-launchctl setenv YAAGL_DATA_DIR "$data"
+launchctl setenv GENSHIN_LAUNCHER_DATA_DIR "$data"
 open -n "$app"
 
 cat <<EOF
 
 test.1 (1.0.0-test.1, build 9001) is running from $app
 feed:  http://127.0.0.1:$port/appcast.xml  (lists 1.0.0-test.2, build 9002, EdDSA-signed with a throwaway key)
-data:  $data  (YAAGL_DATA_DIR is set with launchctl, so the relaunched app uses it too)
+data:  $data  (GENSHIN_LAUNCHER_DATA_DIR is set with launchctl, so the relaunched app uses it too)
 
 Waiting for a click. Expected:
-  1. Yaagl > Check for Updates… offers 1.0.0-test.2; Install and Relaunch installs it.
+  1. Genshin Launcher > Check for Updates… offers 1.0.0-test.2; Install and Relaunch installs it.
   2. The app relaunches as 1.0.0-test.2 (About / $app/Contents/Info.plist).
   3. Settings > "Automatically check for updates" is on at first; switched off, it stays off after a restart.
 Then: $0 stop

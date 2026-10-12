@@ -16,7 +16,7 @@ See `CONTRIBUTING.md` for setup, building and testing.
 
 ## History
 
-This app replaces the TypeScript/NeutralinoJS fork [tanzby/yet-another-anime-game-launcher](https://github.com/tanzby/yet-another-anime-game-launcher) of [Yet Another Anime Game Launcher](https://github.com/yaagl/yet-another-anime-game-launcher) by 3Shain. It does not read that launcher's data (ADR 0001).
+This app replaces the TypeScript/NeutralinoJS fork [tanzby/yet-another-anime-game-launcher](https://github.com/tanzby/yet-another-anime-game-launcher) of Yet Another Anime Game Launcher by 3Shain (credits in `THIRD_PARTY_NOTICES.md`). It does not read that launcher's data (ADR 0001).
 
 ## License
 

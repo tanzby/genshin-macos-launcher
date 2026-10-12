@@ -21,9 +21,9 @@ enum GameHostError: Error, Equatable {
   case registrationFailed(status: OSStatus)
 }
 
-private let log = Logger(subsystem: "io.github.tanzby.yaagl", category: "wine")
+private let log = Logger(subsystem: "io.github.tanzby.genshin-launcher", category: "wine")
 
-/// Prepares Game Mode (LCH-022…026): installs the loader shim, builds and signs `YaaglGame.app`, registers
+/// Prepares Game Mode (LCH-022…026): installs the loader shim, builds and signs `GenshinLauncherGame.app`, registers
 /// it. Any failure degrades to "no Game Mode" and the game still launches (LCH-023).
 struct GameHostInstaller {
   let layout: WineLayout
@@ -35,16 +35,16 @@ struct GameHostInstaller {
   var bundleHostCopy: URL { layout.gameHostApp.appending(path: "Contents/MacOS/.wine-host") }
   var infoPlist: URL { layout.gameHostApp.appending(path: "Contents/Info.plist") }
 
-  /// The four `YAAGL_*` variables, or `[:]` when Game Mode is unavailable.
+  /// The four `GENSHIN_LAUNCHER_*` variables, or `[:]` when Game Mode is unavailable.
   func prepare(for recipe: LaunchRecipe) async -> [String: String] {
     do {
       guard let helpers else { throw GameHostError.helperMissing("helpers") }
       try await install(helpers: helpers, recipe: recipe)
       return [
-        "YAAGL_GAME_HOST_EXE": bundleExecutable.path,
-        "YAAGL_GAME_HOST_MATCH": recipe.gameExecutableName,
-        "YAAGL_GAME_HOST_DYLIB": helpers.dylib.path,
-        "YAAGL_GAMEHOST_LOG": layout.logsDirectory.appending(path: "gamehost.log").path,
+        "GENSHIN_LAUNCHER_GAME_HOST_EXE": bundleExecutable.path,
+        "GENSHIN_LAUNCHER_GAME_HOST_MATCH": recipe.gameExecutableName,
+        "GENSHIN_LAUNCHER_GAME_HOST_DYLIB": helpers.dylib.path,
+        "GENSHIN_LAUNCHER_GAMEHOST_LOG": layout.logsDirectory.appending(path: "gamehost.log").path,
       ]
     } catch {
       log.error("game host unavailable: \(String(describing: error), privacy: .public)")
@@ -142,7 +142,7 @@ struct GameHostInstaller {
   /// Copies `source` next to `destination` under a temporary name, so the final step is a rename.
   private func stage(_ source: URL, beside destination: URL) throws -> URL {
     let fileManager = FileManager.default
-    let staged = destination.deletingLastPathComponent().appending(path: ".\(destination.lastPathComponent).yaagl-new")
+    let staged = destination.deletingLastPathComponent().appending(path: ".\(destination.lastPathComponent).genshin-launcher-new")
     if (try? staged.checkResourceIsReachable()) == true { try fileManager.removeItem(at: staged) }
     do {
       try fileManager.copyItem(at: source, to: staged)

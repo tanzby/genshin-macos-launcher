@@ -5,7 +5,7 @@ import TestSupport
 
 /// A fresh directory under the test root (TestSupport), removed when the test process exits.
 struct TempDir {
-  let url = makeTemporaryDirectory("yaagl-platform-tests")
+  let url = makeTemporaryDirectory("genshin-launcher-platform-tests")
 
   func path(_ components: String...) -> URL {
     components.reduce(url) { $0.appending(path: $1) }

@@ -1,4 +1,4 @@
-> **说明**：Game Mode 与全屏的机制由旧 TS 版（[tanzby/yet-another-anime-game-launcher](https://github.com/tanzby/yet-another-anime-game-launcher)）设计，原生版沿用。文中的 `src/…` 路径指旧仓库；`Helpers/` 下的 C 源码与 `scripts/diag/yaagl-diag` 在本仓库。
+> **说明**：Game Mode 与全屏的机制由旧 TS 版（[tanzby/yet-another-anime-game-launcher](https://github.com/tanzby/yet-another-anime-game-launcher)）设计，原生版沿用。文中的 `src/…` 路径指旧仓库；`Helpers/` 下的 C 源码与 `scripts/diag/genshin-launcher-diag` 在本仓库。
 
 # Genshin on macOS: Game Mode and process cleanup
 
@@ -11,9 +11,9 @@ macOS enables Game Mode only when **both** hold for the front process, as decide
 
 Implementation (setting "Native full screen + Game Mode", on by default, `config_game_mode`):
 
-- `src/wine/game-host.ts` installs `Helpers/wine-shim.c` as `<wine>/lib/wine/x86_64-unix/wine` and keeps the original host as `wine-host`. Wine execs that path for every new Windows process. When `argv[1]` contains the game executable, the shim execs `YaaglGame.app/Contents/MacOS/wine` instead. That file is a copy of `wine-host` in a bundle registered with `lsregister`. All other processes run `wine-host` unchanged.
+- `src/wine/game-host.ts` installs `Helpers/wine-shim.c` as `<wine>/lib/wine/x86_64-unix/wine` and keeps the original host as `wine-host`. Wine execs that path for every new Windows process. When `argv[1]` contains the game executable, the shim execs `GenshinLauncherGame.app/Contents/MacOS/wine` instead. That file is a copy of `wine-host` in a bundle registered with `lsregister`. All other processes run `wine-host` unchanged.
 - The bundle copy is re-signed with `-i com.3shain.yaagl.game`. If the code-signing identifier differs from the bundle identifier, every `getaddrinfo` in the process stalls for about 35 s.
-- `Helpers/gamehost.c` is injected into the game process only. The shim sets `DYLD_INSERT_LIBRARIES` from `YAAGL_GAME_HOST_DYLIB` when it execs the game and clears it for the game's child processes. It links only libSystem and attaches once `winemac.so` is loaded. It does five things:
+- `Helpers/gamehost.c` is injected into the game process only. The shim sets `DYLD_INSERT_LIBRARIES` from `GENSHIN_LAUNCHER_GAME_HOST_DYLIB` when it execs the game and clears it for the game's child processes. It links only libSystem and attaches once `winemac.so` is loaded. It does five things:
   - moves the game window (at least half the screen) into a native full-screen Space;
   - makes that window cover the whole screen, notch area included. On a Mac with a notch, a native full-screen Space showed a black strip along the top (33 pt on a 14" MacBook Pro), for two reasons:
     - AppKit lays out the window below the camera housing (1512×949 of 1512×982 pt) while the game renders at the full display size. `setFrame:` cannot get past this, because AppKit clamps the frame again. gamehost overrides four private `NSWindow` getters for the game window, `_frameForFullScreenMode` and the three full-screen tile frames, to return the screen frame. With only the first one, the window falls back below the notch when it is ordered front again, for example after the app is hidden.
@@ -29,31 +29,31 @@ Implementation (setting "Native full screen + Game Mode", on by default, `config
 
 ## Verification (native app)
 
-`scripts/diag/yaagl-diag` prints text only. It drives one built `Yaagl.app` black-box and never touches `~/Library/Application Support/Yaagl`: the app is started with `--autolaunch --data-dir <isolated dir>` (also `YAAGL_AUTOLAUNCH=1`, `YAAGL_DATA_DIR`, `YAAGL_GAME_DIR` / `--game-dir`). A missing or outdated game fails the run unless `--allow-download` is given (a full install is about 132 GB); `--hold <s>` closes the game that long after its window appears, for runs that stop at the login screen. The app prepares Wine, installs or takes over the game, launches it, quits when the game exits and writes `logs/launcher.log` in the data dir (`autolaunch: result=ok|failed reason=…`). The Python tool then checks, per parity rule ID (`docs/parity/hk4e-cn.md`), the Wine processes, windows, `gamehost.log`, the prefix registry and `/etc/hosts`, and prints `CHECK <rule> PASS|FAIL|SKIP` lines and `DIAG verdict=…`.
+`scripts/diag/genshin-launcher-diag` prints text only. It drives one built `Genshin Launcher.app` black-box and never touches `~/Library/Application Support/Genshin Launcher`: the app is started with `--autolaunch --data-dir <isolated dir>` (also `GENSHIN_LAUNCHER_AUTOLAUNCH=1`, `GENSHIN_LAUNCHER_DATA_DIR`, `GENSHIN_LAUNCHER_GAME_DIR` / `--game-dir`). A missing or outdated game fails the run unless `--allow-download` is given (a full install is about 132 GB); `--hold <s>` closes the game that long after its window appears, for runs that stop at the login screen. The app prepares Wine, installs or takes over the game, launches it, quits when the game exits and writes `logs/launcher.log` in the data dir (`autolaunch: result=ok|failed reason=…`). The Python tool then checks, per parity rule ID (`docs/parity/hk4e-cn.md`), the Wine processes, windows, `gamehost.log`, the prefix registry and `/etc/hosts`, and prints `CHECK <rule> PASS|FAIL|SKIP` lines and `DIAG verdict=…`.
 
 ```bash
-xcodebuild -project Yaagl.xcodeproj -scheme Yaagl -configuration Debug -derivedDataPath build/DerivedData build
-scripts/diag/yaagl-diag run --app build/DerivedData/Build/Products/Debug/Yaagl.app --autoplay --close-after 30 --timeout 7200
-scripts/diag/yaagl-diag run --app … --screen-check     # notch: needs Screen Recording for the calling terminal
-scripts/diag/yaagl-diag ps; scripts/diag/yaagl-diag kill
+xcodebuild -project GenshinLauncher.xcodeproj -scheme GenshinLauncher -configuration Debug -derivedDataPath build/DerivedData build
+scripts/diag/genshin-launcher-diag run --app build/DerivedData/Build/Products/Debug/Genshin Launcher.app --autoplay --close-after 30 --timeout 7200
+scripts/diag/genshin-launcher-diag run --app … --screen-check     # notch: needs Screen Recording for the calling terminal
+scripts/diag/genshin-launcher-diag ps; scripts/diag/genshin-launcher-diag kill
 ```
 
-Settings can be changed without the UI: `defaults write io.github.tanzby.yaagl gameDirectory <path>` (keys: `Key` in `Sources/Launcher/SettingsModel.swift`), or the `--game-dir` / `YAAGL_GAME_DIR` switch from `Sources/Diagnostics/AutoLaunch.swift`.
+Settings can be changed without the UI: `defaults write io.github.tanzby.genshin-launcher gameDirectory <path>` (keys: `Key` in `Sources/Launcher/SettingsModel.swift`), or the `--game-dir` / `GENSHIN_LAUNCHER_GAME_DIR` switch from `Sources/Diagnostics/AutoLaunch.swift`.
 
 Only one game may run at a time: the tool refuses to start when any Wine process exists. It prints `WAITING maintainer: hosts-password | game-login` when a step needs the maintainer (the admin password dialog for `/etc/hosts`, the miHoYo login). `--autoplay` and `--screen-check` load the development companion (`Helpers/build.sh --dev`) into a copy of the app.
 
 ## Autoplay and screen check
 
-`--autoplay` loads `Helpers/gamehost-dev.m` into the game (`YAAGL_GAMEHOST_DEV`). It clicks into the world, then logs frame-interval statistics for an idle phase and a camera-turn phase (`frames: … p50/p99/max, hitches50`) and saves a PNG of each from the game's own drawable. The turn is driven by `turner.exe` (`SendInput` inside the prefix). Synthetic AppKit events do not turn the camera. These dev pieces are not shipped in the app: `--autoplay` builds them with `Helpers/build.sh --dev` into the data dir's sidecar. `turner.exe` needs llvm-mingw (`LLVM_MINGW=/path`).
+`--autoplay` loads `Helpers/gamehost-dev.m` into the game (`GENSHIN_LAUNCHER_GAMEHOST_DEV`). It clicks into the world, then logs frame-interval statistics for an idle phase and a camera-turn phase (`frames: … p50/p99/max, hitches50`) and saves a PNG of each from the game's own drawable. The turn is driven by `turner.exe` (`SendInput` inside the prefix). Synthetic AppKit events do not turn the camera. These dev pieces are not shipped in the app: `--autoplay` builds them with `Helpers/build.sh --dev` into the data dir's sidecar. `turner.exe` needs llvm-mingw (`LLVM_MINGW=/path`).
 
 ```bash
-scripts/diag/yaagl-diag run --app … --autoplay --timeout 200
+scripts/diag/genshin-launcher-diag run --app … --autoplay --timeout 200
 ```
 
-`--screen-check` checks what is actually on screen. It enters the game, then runs these steps: idle in the world, hide and unhide the app, walk, attack, a control with the window held below the menu bar, and restore. After each step the dev companion saves the game's drawable and logs the screen's top safe-area inset and display number. yaagl-diag then captures that display at once (`screencapture -D`, which needs Screen Recording for the calling terminal). `screen-compare.swift` compares per-row luma profiles (scaling a non-Retina drawable to the screen) and prints `verdict=ok`, `covered` (black over the top strip while the game drew there), `shifted` (best match at a vertical offset), `mismatch` or `size-mismatch`. On a Mac with a notch the control step must report `covered`, which shows the check can fail. The last step, `other-window`, opens Notepad in the prefix: it passes when Notepad's window is on screen and the game is inactive at level 24 or lower. It runs last because a background app may not activate itself, and the check has no Accessibility access to click the game. The PNGs stay in `~/Library/Caches/yaagl-diag/shots/<time>/`.
+`--screen-check` checks what is actually on screen. It enters the game, then runs these steps: idle in the world, hide and unhide the app, walk, attack, a control with the window held below the menu bar, and restore. After each step the dev companion saves the game's drawable and logs the screen's top safe-area inset and display number. genshin-launcher-diag then captures that display at once (`screencapture -D`, which needs Screen Recording for the calling terminal). `screen-compare.swift` compares per-row luma profiles (scaling a non-Retina drawable to the screen) and prints `verdict=ok`, `covered` (black over the top strip while the game drew there), `shifted` (best match at a vertical offset), `mismatch` or `size-mismatch`. On a Mac with a notch the control step must report `covered`, which shows the check can fail. The last step, `other-window`, opens Notepad in the prefix: it passes when Notepad's window is on screen and the game is inactive at level 24 or lower. It runs last because a background app may not activate itself, and the check has no Accessibility access to click the game. The PNGs stay in `~/Library/Caches/genshin-launcher-diag/shots/<time>/`.
 
 ```bash
-scripts/diag/yaagl-diag run --app … --screen-check --timeout 200
+scripts/diag/genshin-launcher-diag run --app … --screen-check --timeout 200
 ```
 
 Result on 2026-10-07 (14" MacBook Pro, macOS 27.0.1): every step `ok` (top strip luma within 1 between screen and game, body diff ≤ 5.7, offset 0), the control `covered` (top luma 0 on screen vs 105 in the game), and `other-window` ok (Notepad on screen, game inactive at level 0). A run where another app took the screen during a step reports that step as `mismatch`.
@@ -67,7 +67,7 @@ Measured on 2026-10-04 (M5 Pro, DXMT, native full screen, fast continuous turn):
 | Off (1512×949) | Idle | 59.8 | 17.2 ms | 36.2 ms | 0 |
 | Off (1512×949) | Turn | 59.8 | 19.1 ms | 25.1 ms | 0 |
 
-GPTK 4 Beta 2 (`--runtime wine-gptk4`; the runtime dir is selected through `YAAGL_WINE_RUNTIME`, dev only), same spot, Retina on:
+GPTK 4 Beta 2 (`--runtime wine-gptk4`; the runtime dir is selected through `GENSHIN_LAUNCHER_WINE_RUNTIME`, dev only), same spot, Retina on:
 
 | Run | Phase | fps | p99 | Max | Hitches > 50 ms |
 | --- | --- | --- | --- | --- | --- |

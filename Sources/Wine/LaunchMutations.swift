@@ -2,7 +2,7 @@ import Foundation
 import Platform
 import os
 
-private let log = Logger(subsystem: "io.github.tanzby.yaagl", category: "wine")
+private let log = Logger(subsystem: "io.github.tanzby.genshin-launcher", category: "wine")
 
 /// Launch Mutations of a recipe (move-aside files, prefix copies, registry edits) and the journal that
 /// lets `restore()` put everything back, also after a crash (ADR 0002).

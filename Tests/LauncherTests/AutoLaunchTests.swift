@@ -7,7 +7,7 @@ import Wine
 
 @testable import Launcher
 
-// APP-020: command-line auto launch for yaagl-diag. The driver talks to the real `LauncherModel` with the
+// APP-020: command-line auto launch for genshin-launcher-diag. The driver talks to the real `LauncherModel` with the
 // Fake client and Fake Wine; what it must produce is a verdict line in `logs/launcher.log`.
 
 @MainActor
@@ -60,7 +60,7 @@ private final class Harness {
     #expect(flags.gameDirectory?.path == "/tmp/game")
 
     let env = AutoLaunchOptions.parse(
-      arguments: ["App"], environment: ["YAAGL_AUTOLAUNCH": "1", "YAAGL_DATA_DIR": "/tmp/env"])
+      arguments: ["App"], environment: ["GENSHIN_LAUNCHER_AUTOLAUNCH": "1", "GENSHIN_LAUNCHER_DATA_DIR": "/tmp/env"])
     #expect(env.enabled)
     #expect(env.dataRoot?.path == "/tmp/env")
     #expect(env.gameDirectory == nil)

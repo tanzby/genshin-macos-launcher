@@ -1,6 +1,6 @@
 #!/bin/sh
 # Builds DXMT (the third_party/dxmt submodule, pinned to a commit) into build/dxmt/, the folder that goes into
-# Yaagl.app/Contents/Resources/dxmt. Used by CI (.github/workflows/dxmt.yaml) and by hand; see docs/adr/0003.
+# Genshin Launcher.app/Contents/Resources/dxmt. Used by CI (.github/workflows/dxmt.yaml) and by hand; see docs/adr/0003.
 #
 #   build/dxmt/x86_64-windows/{d3d10core,d3d11,dxgi,winemetal}.dll
 #   build/dxmt/x86_64-unix/winemetal.so       (statically links LLVM 15 for the shader converter)

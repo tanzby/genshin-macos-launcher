@@ -95,7 +95,7 @@ private struct GeneralPage: View {
       } header: {
         Text("Network")
       } footer: {
-        Text("The proxy only applies to the game, not to downloads made by Yaagl.")
+        Text("The proxy only applies to the game, not to downloads made by Genshin Launcher.")
       }
       UpdateSettingsSection(updater: updater)
       Section("Launcher") {

@@ -16,8 +16,8 @@ private let widthName = "Screenmanager Resolution Width_h182942802"
 private let heightName = "Screenmanager Resolution Height_h2627697771"
 
 private let defaultGameDirectory = URL(filePath: "/Games/GI", directoryHint: .isDirectory)
-private let dataDirectory = URL(filePath: "/Users/test/Library/Application Support/Yaagl", directoryHint: .isDirectory)
-private let protonExtras = URL(filePath: "/Users/test/Library/Application Support/Yaagl/sidecar/protonextras", directoryHint: .isDirectory)
+private let dataDirectory = URL(filePath: "/Users/test/Library/Application Support/Genshin Launcher", directoryHint: .isDirectory)
+private let protonExtras = URL(filePath: "/Users/test/Library/Application Support/Genshin Launcher/sidecar/protonextras", directoryHint: .isDirectory)
 
 private func make(
   _ settings: GenshinLaunchSettings = .init(), gameDirectory: URL = defaultGameDirectory
@@ -38,9 +38,9 @@ private func edits(_ recipe: LaunchRecipe, key: String) -> [RegistryEdit] {
       recipe.environment == [
         "WINE_ENABLE_TIMEOUT_FIX": "1",
         "WINEESYNC": "1",
-        "DXMT_LOG_PATH": "/Users/test/Library/Application Support/Yaagl",
+        "DXMT_LOG_PATH": "/Users/test/Library/Application Support/Genshin Launcher",
         "DXMT_CONFIG": "d3d11.preferredMaxFrameRate=60;",
-        "DXMT_CONFIG_FILE": "/Users/test/Library/Application Support/Yaagl/dxmt.conf",
+        "DXMT_CONFIG_FILE": "/Users/test/Library/Application Support/Genshin Launcher/dxmt.conf",
         "GST_PLUGIN_FEATURE_RANK": "atdec:MAX,avdec_h264:MAX",
       ])
   }
@@ -225,7 +225,7 @@ private func edits(_ recipe: LaunchRecipe, key: String) -> [RegistryEdit] {
   @Test func LCH_018_deploysSteamAndLsteamclientFromProtonExtrasIntoSystem32AndSyswow64() {
     let recipe = make()
 
-    let extras = "/Users/test/Library/Application Support/Yaagl/sidecar/protonextras"
+    let extras = "/Users/test/Library/Application Support/Genshin Launcher/sidecar/protonextras"
     #expect(
       recipe.prefixCopies.map { [$0.source.path, $0.destination] } == [
         ["\(extras)/steam64.exe", "system32/steam.exe"],

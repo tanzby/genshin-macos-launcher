@@ -1633,19 +1633,19 @@
         }
       }
     },
-    "The data folder's marker file is damaged. Nothing was deleted. Remove the file .yaagl-native or the whole folder, then reopen Genshin Launcher.": {
+    "The data folder's marker file is damaged. Nothing was deleted. Remove the file .genshin-launcher-native or the whole folder, then reopen Genshin Launcher.": {
       "extractionState": "manual",
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "The data folder's marker file is damaged. Nothing was deleted. Remove the file .yaagl-native or the whole folder, then reopen Genshin Launcher."
+            "value": "The data folder's marker file is damaged. Nothing was deleted. Remove the file .genshin-launcher-native or the whole folder, then reopen Genshin Launcher."
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "数据文件夹的标记文件已损坏，未删除任何内容。请删除 .yaagl-native 文件或整个文件夹，然后重新打开 原神启动器。"
+            "value": "数据文件夹的标记文件已损坏，未删除任何内容。请删除 .genshin-launcher-native 文件或整个文件夹，然后重新打开 原神启动器。"
           }
         }
       }

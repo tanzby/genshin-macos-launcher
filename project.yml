@@ -1,4 +1,4 @@
-name: Yaagl
+name: GenshinLauncher
 options:
   bundleIdPrefix: io.github.tanzby
   deploymentTarget:
@@ -16,10 +16,10 @@ settings:
     CODE_SIGN_IDENTITY: "-"
     DEVELOPMENT_TEAM: ""
 packages:
-  YaaglKit:
+  GenshinLauncherKit:
     path: .
 targets:
-  Yaagl:
+  GenshinLauncher:
     type: application
     platform: macOS
     sources:
@@ -55,8 +55,8 @@ targets:
         LSHasLocalizedDisplayName: true
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: io.github.tanzby.yaagl
-        PRODUCT_NAME: Yaagl
+        PRODUCT_BUNDLE_IDENTIFIER: io.github.tanzby.genshin-launcher
+        PRODUCT_NAME: Genshin Launcher
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         ARCHS: arm64
         ENABLE_HARDENED_RUNTIME: NO
@@ -70,25 +70,25 @@ targets:
         MARKETING_VERSION: 0.0.0
         CURRENT_PROJECT_VERSION: 1
     dependencies:
-      - package: YaaglKit
+      - package: GenshinLauncherKit
         product: Launcher
-      - package: YaaglKit
+      - package: GenshinLauncherKit
         product: GenshinCN
-      - package: YaaglKit
+      - package: GenshinLauncherKit
         product: Platform
-      - package: YaaglKit
+      - package: GenshinLauncherKit
         product: Wine
-      - package: YaaglKit
+      - package: GenshinLauncherKit
         product: Updates
-      - package: YaaglKit
+      - package: GenshinLauncherKit
         product: Diagnostics
-      - target: YaaglWineShim
+      - target: GenshinLauncherWineShim
         embed: true
         link: false
         copy:
           destination: wrapper
           subpath: Contents/Helpers
-      - target: YaaglGameHost
+      - target: GenshinLauncherGameHost
         embed: true
         link: false
         copy:
@@ -96,28 +96,28 @@ targets:
           subpath: Contents/Helpers
 
   # x86_64 helpers injected into Wine (Rosetta). Sources are the C files in Helpers/.
-  YaaglWineShim:
+  GenshinLauncherWineShim:
     type: tool
     platform: macOS
     sources:
       - path: Helpers/wine-shim.c
     settings:
       base:
-        PRODUCT_NAME: yaagl-wine-shim
+        PRODUCT_NAME: genshin-launcher-wine-shim
         ARCHS: x86_64
         ONLY_ACTIVE_ARCH: NO
         GCC_OPTIMIZATION_LEVEL: "2"
         OTHER_CFLAGS: -Wall -Wextra
         SKIP_INSTALL: YES
 
-  YaaglGameHost:
+  GenshinLauncherGameHost:
     type: library.dynamic
     platform: macOS
     sources:
       - path: Helpers/gamehost.c
     settings:
       base:
-        PRODUCT_NAME: yaagl-gamehost
+        PRODUCT_NAME: genshin-launcher-gamehost
         EXECUTABLE_PREFIX: ""
         ARCHS: x86_64
         ONLY_ACTIVE_ARCH: NO
@@ -126,9 +126,9 @@ targets:
         SKIP_INSTALL: YES
 
 schemes:
-  Yaagl:
+  GenshinLauncher:
     build:
       targets:
-        Yaagl: all
+        GenshinLauncher: all
     run:
       config: Debug

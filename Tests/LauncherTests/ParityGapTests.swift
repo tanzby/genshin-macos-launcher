@@ -68,7 +68,7 @@ import Wine
   }
 
   @Test func APP_004_theWineLayoutOfARelativeRootIsAbsoluteToo() {
-    let layout = WineLayout(root: URL(filePath: "relative/Yaagl", directoryHint: .isDirectory))
+    let layout = WineLayout(root: URL(filePath: "relative/Genshin Launcher", directoryHint: .isDirectory))
 
     for url in [layout.prefixDirectory, layout.logsDirectory] {
       #expect(url.path.hasPrefix("/"))
@@ -82,7 +82,7 @@ import Wine
   @Test func UPD_017_theGameHostBundleIdentifierIsTheAppsPlusGame() throws {
     let appID = try AppSource.projectSetting("PRODUCT_BUNDLE_IDENTIFIER")
 
-    #expect(appID == "io.github.tanzby.yaagl")
+    #expect(appID == "io.github.tanzby.genshin-launcher")
     #expect(GameSession.gameHostBundleIdentifier == appID + ".game")
   }
 }

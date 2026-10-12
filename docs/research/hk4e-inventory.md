@@ -7,7 +7,7 @@
 ## 1. 结论摘要
 
 - **范围**：hk4ecn 实际打进包的 TS 约 62 个文件、约 7.1k 行（全仓库 TS 约 12.8k 行，不含 `neutralinojs.d.ts`）。另外还有 Python `sophon_server` 约 2.35k 行，`native/gamehost` 的 C/ObjC 约 0.77k 行（其中 dev 部分约 0.32k）。所以迁移面大约是 **7k 行 TS、2.3k 行 Python、0.45k 行 C（运行时部分）**。
-- **运行时一共两个常驻 sidecar**：`aria2c`（启动时就拉起，负责下载 Wine、DXMT、ReShade 和自更新）和 `sophon-server`（hk4e 客户端创建时拉起，负责游戏安装、更新、预下载、校验和查版本）。`sophon-server` 自己再 fork `hpatchz`。另有一组**按需执行**的 x86_64 原生件：`yaagl-wine-shim` 被复制成 Wine loader，`yaagl-gamehost.dylib` 被注入游戏进程。这两个在 Rosetta 下的 Wine 里运行，**不可能链接进 arm64 的 Swift App**。
+- **运行时一共两个常驻 sidecar**：`aria2c`（启动时就拉起，负责下载 Wine、DXMT、ReShade 和自更新）和 `sophon-server`（hk4e 客户端创建时拉起，负责游戏安装、更新、预下载、校验和查版本）。`sophon-server` 自己再 fork `hpatchz`。另有一组**按需执行**的 x86_64 原生件：`genshin-launcher-wine-shim` 被复制成 Wine loader，`genshin-launcher-gamehost.dylib` 被注入游戏进程。这两个在 Rosetta 下的 Wine 里运行，**不可能链接进 arm64 的 Swift App**。
 - **`sidecar/` 里有一半对 hk4ecn 是死的**：`xdelta3`（`server.patched` 为空）、`7zz`，以及顶层 `hpatchz`（TS 只在 bh3/hkrpg/nap 里调用它；sophon 用的是 nuitka 打进去的那份）。`protonextras` 中的 Windows PE 文件（steam.exe、lsteamclient.dll）每次启动都会复制进 prefix，属于数据文件，不是 sidecar。
 - **外部进程大量走 shell**：Neutralino 的 `os.execCommand` 和 `spawnProcess` 用来调用 `curl`、`mv`、`cp`、`tar`、`unzip`、`md5`、`df`、`cmp`、`codesign`、`lsregister`、`xattr`、`osascript`（提权改 `/etc/hosts`）、`open`、`ps`、`lsof`、`kill`，以及各种 `wine`/`wineserver` 命令。这些多数可以用 Foundation 或系统 API 原生替换。**Wine 本身、`osascript … with administrator privileges` 以及 `codesign`/`lsregister` 仍然需要外部进程**。
 - **对 hk4ecn 来说可以直接丢掉的 TS**：其他 9 个渠道的入口和 `mhy/{hkrpg,nap,bh3}`、`seasun/`，`mhy/program-check-integrity.ts`，`wine/mf.ts`，`downloadable-resource.ts` 里的 MoltenVK、DXVK、Jadeite，`unity.ts` 里两个未使用的函数，`patch.ts` 的 xdelta、added、hkrpg 分支，`hyp-connect.getLatestVersionInfo`，`wine.setNVExtension`、`wine.cmd`，`sophon.cancelOperation`，`promptUpdate`，`getMemoryInfo`，`sha1sum`，`hpatchz`/`7z` 相关工具函数，FPS 解锁设置（只存不读），Workaround #3 设置（UI 自己写着 "does nothing now"），`Server.hosts`/`cps`/`channel_id` 等字段，以及 `wine_netbiosname`、`wine_update_url` 这两个只写不读的键。详见 §7。
@@ -23,13 +23,13 @@
 
 | 环节 | 位置 | 要点 |
 |---|---|---|
-| 选渠道 | `vite.config.ts:9-15` | 构建时用 `YAAGL_CHANNEL_CLIENT` 替换 `src/clients/index.ts`，其他渠道的代码不会进入 bundle |
+| 选渠道 | `vite.config.ts:9-15` | 构建时用 `GENSHIN_LAUNCHER_CHANNEL_CLIENT` 替换 `src/clients/index.ts`，其他渠道的代码不会进入 bundle |
 | 打包 App | `build-app.js:19-24` | hk4ecn 用 `applicationId`（`com.3shain.yaagl`），`includeSophon = true` |
-| 启动脚本 | `build-app.js:208-226` | `Contents/MacOS/parameterized`（bash）：用 md5 比较 `resources.neu`，再把 `Resources/` rsync 到 `~/Library/Application Support/Yaagl`，然后 `exec Yaagl --path=$APST_DIR`；通过 `PATH_LAUNCH` 传入 .app 路径，供重启使用 |
+| 启动脚本 | `build-app.js:208-226` | `Contents/MacOS/parameterized`（bash）：用 md5 比较 `resources.neu`，再把 `Resources/` rsync 到 `~/Library/Application Support/Genshin Launcher`，然后 `exec Genshin Launcher --path=$APST_DIR`；通过 `PATH_LAUNCH` 传入 .app 路径，供重启使用 |
 | sidecar | `build-app.js:241-264` | 复制 `sophon_server/build/server.dist` 到 `sidecar/sophon_server`，复制整个 `sidecar/`，再用 `native/gamehost/build.sh` 构建 gamehost |
 | Sophon 构建 | `build-sophon.sh:2-27` | 把 `sidecar/hpatchz/hpatchz` 拷进去，用 protoc 生成 pb2，再由 nuitka standalone 打成 `sophon-server` |
-| gamehost | `native/gamehost/build.sh:14-19` | `clang -arch x86_64` 编出 `yaagl-wine-shim` 和 `yaagl-gamehost.dylib`，并做 ad-hoc codesign |
-| 发布 | `.github/workflows/build-ontag.yaml:82,98-99` | 只构建 hk4ecn：DMG、`Yaagl.app.tar.gz`、`resources_hk4ecn.neu` |
+| gamehost | `native/gamehost/build.sh:14-19` | `clang -arch x86_64` 编出 `genshin-launcher-wine-shim` 和 `genshin-launcher-gamehost.dylib`，并做 ad-hoc codesign |
+| 发布 | `.github/workflows/build-ontag.yaml:82,98-99` | 只构建 hk4ecn：DMG、`Genshin Launcher.app.tar.gz`、`resources_hk4ecn.neu` |
 | Info.plist | `build-app.js:290-323` | `LSMinimumSystemVersion 10.15`，`NSAllowsArbitraryLoads` |
 
 ## 4. 模块清单（只列 hk4ecn 可达的模块）
@@ -46,8 +46,8 @@
 | 下载 | `src/aria2.ts` | 通过 libaria2-ts WebSocket RPC 下载，用 `sha256_16(uri:dst)` 作 gid 实现续传 |
 | Wine | `src/wine/{wine,distro,wine-install-program,cert,game-host}.ts` | Wine 执行封装，发行版列表，下载解压和 prefix 初始化，wine.inf 证书，Game Mode 宿主 |
 | 附加资源 | `src/downloadable-resource.ts` | DXMT（每次启动都检查）、ReShade |
-| 自更新 | `src/updater.ts`、`src/github.ts` | 查 GitHub latest release，下载 `resources_hk4ecn.neu` 和 `Yaagl.app.tar.gz` 里的 sidecar |
-| hosts | `src/hosts.ts` | 安装 Wine 时提权重写 `/etc/hosts` 中 Yaagl 的那一段 |
+| 自更新 | `src/updater.ts`、`src/github.ts` | 查 GitHub latest release，下载 `resources_hk4ecn.neu` 和 `Genshin Launcher.app.tar.gz` 里的 sidecar |
+| hosts | `src/hosts.ts` | 安装 Wine 时提权重写 `/etc/hosts` 中 Genshin Launcher 的那一段 |
 | UI | `src/launcher/{index.tsx,task-queue.ts}`、`src/common-update-ui.tsx`、`src/config/*.tsx`、`src/accidental-complexity.ts` | 主界面、串行任务队列、设置弹窗、安装目录校验（只允许 ASCII，禁止 Desktop、Downloads、Documents） |
 | 基础 | `src/utils/{neu,unix,helper,command-builder}.ts`、`src/constants/*`、`src/locale/*` | Neutralino API 封装，shell 命令拼接（`build()`），存储，本地化 |
 
@@ -98,8 +98,8 @@ WS 事件类型：`job_start`、`chunk_progress`、`check_file`、`delete_file`�
 4. `wineserver -w`（`:124`）。
 5. 生成 `config.bat`：复制 `HoYoKProtect.sys` 到 `%WINDIR%\system32`，`cd` 到游戏目录，用 `-platform_type CLOUD_THIRD_PARTY_PC -is_cloud 1` 启动游戏（`:126-135`）。
 6. `patchProgram`（`src/clients/mhy/patch.ts:29-125`）：把 `removed` 列表里的 3 个文件改名为 `.bak`；把 Wine 自带的 d3d10core、d3d11、dxgi 换成 `./dxmt/` 里的版本，原文件改名为 `.bak`；复制 winemetal.dll/.so 到 Wine lib 和 system32；开了 ReShade 时复制 dxgi.dll 和 d3dcompiler_47.dll 到游戏目录；复制 steam64/32.exe 和 lsteamclient64/32.dll 到 system32/syswow64；最后 `setKey("patched","1")`。
-7. 可选的“屏蔽网络”：把一个脚本写到 `/tmp/yaagl_network_block_script.sh`，再用 `osascript … with administrator privileges` 后台执行。脚本往 `/etc/hosts` 追加 `0.0.0.0 <CN_BLOCK_URL>`，`sleep 10` 后删掉（`:143-174`）。
-8. Game Mode（默认开启）：`prepareGameHost`（`src/wine/game-host.ts:66-127`）。把 Wine 的 loader 改名为 `wine-host`，用 shim 顶替它；构建或更新 `YaaglGame.app`，对其 `codesign -i com.3shain.yaagl.game` 并 `lsregister -f`；返回 4 个 `YAAGL_GAME_HOST_*` 环境变量。
+7. 可选的“屏蔽网络”：把一个脚本写到 `/tmp/genshin-launcher_network_block_script.sh`，再用 `osascript … with administrator privileges` 后台执行。脚本往 `/etc/hosts` 追加 `0.0.0.0 <CN_BLOCK_URL>`，`sleep 10` 后删掉（`:143-174`）。
+8. Game Mode（默认开启）：`prepareGameHost`（`src/wine/game-host.ts:66-127`）。把 Wine 的 loader 改名为 `wine-host`，用 shim 顶替它；构建或更新 `GenshinLauncherGame.app`，对其 `codesign -i com.3shain.yaagl.game` 并 `lsregister -f`；返回 4 个 `GENSHIN_LAUNCHER_GAME_HOST_*` 环境变量。
 9. `wine.exec2`：以 `steam.exe <game exe>` 或 `cmd /c config.bat` 方式运行并等待退出（`:186-216`）。注意 **Steam 补丁打开时不会经过 `config.bat`**，也就不会复制 HoYoKProtect.sys、不会带 `-platform_type` 参数。
 10. 退出后：`wineserver -w`，15 秒超时则 `shutdown()`（`:219`）；撤销 HDR 和分辨率的注册表项（`:220-225`）；删除 `config.bat`；执行 `patchRevertProgram`（`patch.ts:127-175`）。
 
@@ -112,8 +112,8 @@ WS 事件类型：`job_start`、`chunk_progress`、`check_file`、`delete_file`�
 | `sidecar/aria2/aria2c` | App 启动时，`src/app.tsx:57-74` | `-d / --no-conf --enable-rpc --rpc-listen-port=6868 --rpc-listen-all=true --rpc-allow-origin-all --input-file aria2.session --save-session aria2.session --pause true --stop-with-process <PPID>`；终止钩子里执行 `kill <pid>`（`:75-84`） | **在用**。下载 Wine、DXMT、ReShade 和自更新 |
 | `sidecar/sophon_server/sophon-server` | hk4e 客户端创建时，`hk4e/index.tsx:88-92` | 环境变量 `TERMINATE_WITH_PID=<PPID>`、`SOPHON_PORT=<40000-65535 随机>`、`SOPHON_HOST=127.0.0.1`；uvicorn 在 `sophon_server/server.py:134-137`；psutil 每秒检查父进程，父进程消失就 SIGKILL 自己（`server.py:31-41`） | **在用** |
 | ↳ `hpatchz`（打进 sophon 包内） | 更新应用 ldiff 时，`sophon_api.py:245-249` | `hpatchz -f <old> <切出来的 patch 临时文件> <dst>`，超时 50s，失败后以 300s 重试（`:1239-1242`） | **在用**（间接） |
-| `sidecar/gamehost/yaagl-wine-shim` | 每次启动游戏前复制成 `<wine>/lib/wine/x86_64-unix/wine`（`game-host.ts:79-84`）；之后 Wine 每起一个 Windows 进程都会 exec 它 | 读取环境变量 `YAAGL_GAME_HOST_EXE/MATCH/DYLIB`；匹配到游戏 exe 时设置 `DYLD_INSERT_LIBRARIES` 并 exec `YaaglGame.app/Contents/MacOS/wine`（`native/gamehost/wine-shim.c:29-42`） | **在用**（Game Mode） |
-| `sidecar/gamehost/yaagl-gamehost.dylib` | 由 shim 注入到游戏进程 | `YAAGL_GAMEHOST_LOG`；hook winemac 实现原生全屏和刘海区域、本机主机名解析（`native/gamehost/gamehost.c:1-17`） | **在用** |
+| `sidecar/gamehost/genshin-launcher-wine-shim` | 每次启动游戏前复制成 `<wine>/lib/wine/x86_64-unix/wine`（`game-host.ts:79-84`）；之后 Wine 每起一个 Windows 进程都会 exec 它 | 读取环境变量 `GENSHIN_LAUNCHER_GAME_HOST_EXE/MATCH/DYLIB`；匹配到游戏 exe 时设置 `DYLD_INSERT_LIBRARIES` 并 exec `GenshinLauncherGame.app/Contents/MacOS/wine`（`native/gamehost/wine-shim.c:29-42`） | **在用**（Game Mode） |
+| `sidecar/gamehost/genshin-launcher-gamehost.dylib` | 由 shim 注入到游戏进程 | `GENSHIN_LAUNCHER_GAMEHOST_LOG`；hook winemac 实现原生全屏和刘海区域、本机主机名解析（`native/gamehost/gamehost.c:1-17`） | **在用** |
 | `sidecar/protonextras/*.exe/.dll` | 每次 `patchProgram` 时复制进 prefix（`patch.ts:105-122`） | 只在 Steam 补丁打开时被执行（作为 Wine 进程） | **在用**（数据文件） |
 | `sidecar/xdelta/xdelta3` | `utils/unix.ts:18-31`，只被 `patch.ts:46` 调用 | hk4ecn 的 `patched: []`（`src/clients/hk4ecn.ts:38-49`），所以永远不会执行 | **死** |
 | `sidecar/7z/7zz` | `utils/unix.ts:118-199`，只有 hkrpg/bh3 调用 | — | **死** |
@@ -130,7 +130,7 @@ WS 事件类型：`job_start`、`chunk_progress`、`check_file`、`delete_file`�
 | `wineserver -w` / `-k` | 启动前、退出后、setProps 之后 | `wine.ts:73-114` |
 | `osascript → Terminal: wine cmd` | 设置 →“打开命令行” | `wine.ts:127-153`、`config/index.tsx:233` |
 
-游戏进程的环境变量（`program-launch-game.ts:191-213`）：`MTL_HUD_ENABLED`、`WINEDLLOVERRIDES=""`、`WINE_ENABLE_TIMEOUT_FIX`、`WINEESYNC=1`、`DXMT_LOG_PATH`、`DXMT_CONFIG=d3d11.preferredMaxFrameRate=60;`、`DXMT_CONFIG_FILE=<data>/dxmt.conf`、`DXMT_METALFX_SPATIAL_SWAPCHAIN`、`GST_PLUGIN_FEATURE_RANK=atdec:MAX,avdec_h264:MAX`，开了代理时加 `HTTP(S)_PROXY`，开了 Game Mode 时加 `YAAGL_GAME_HOST_*` 和 `YAAGL_GAMEHOST_LOG`。
+游戏进程的环境变量（`program-launch-game.ts:191-213`）：`MTL_HUD_ENABLED`、`WINEDLLOVERRIDES=""`、`WINE_ENABLE_TIMEOUT_FIX`、`WINEESYNC=1`、`DXMT_LOG_PATH`、`DXMT_CONFIG=d3d11.preferredMaxFrameRate=60;`、`DXMT_CONFIG_FILE=<data>/dxmt.conf`、`DXMT_METALFX_SPATIAL_SWAPCHAIN`、`GST_PLUGIN_FEATURE_RANK=atdec:MAX,avdec_h264:MAX`，开了代理时加 `HTTP(S)_PROXY`，开了 Game Mode 时加 `GENSHIN_LAUNCHER_GAME_HOST_*` 和 `GENSHIN_LAUNCHER_GAMEHOST_LOG`。
 
 ### 6.3 其他系统命令（都经过 `utils/neu.ts:19-37` 的 `exec`，再由 Neutralino `os.execCommand` 交给 shell）
 
@@ -150,14 +150,14 @@ WS 事件类型：`job_start`、`chunk_progress`、`check_file`、`delete_file`�
 
 ## 7. 持久状态（沿用数据目录要兼容的部分）
 
-数据目录是 `~/Library/Application Support/Yaagl`（`build-app.js:211-226`），其中：
+数据目录是 `~/Library/Application Support/Genshin Launcher`（`build-app.js:211-226`），其中：
 
 - `.storage/`：Neutralino storage（`build-app.js:122-130` 预建）。读写都通过 `utils/neu.ts:139-156`。hk4ecn 用到的键如下：
   - 安装与版本：`game_install_dir`、`patched`、`predownloaded_all`、`ignore_launcher_update`、`singleton`
   - Wine：`wine_state`、`wine_tag`、`wine_update_tag`、`wine_update_url`（只写不读）、`wine_netbiosname`（只写不读）
   - 资源版本：`installed_dxmt_version`、`installed_reshade`
   - 设置：`config_uiLocale`、`config_metalHud`、`config_retina`、`left_cmd`、`config_proxyEnabled`、`config_proxyHost`、`config_advanced`、`config_fps_unlock`、`config_reshade`、`config_hk4e_enable_hdr`、`config_workaround3`、`config_patch_off`、`config_steam_patch`、`config_block_net`、`config_resolution_{custom,width,height}`、`config_timeout_fix`、`config_game_mode`（默认 true）、`config_metalfx_upscale`
-- `wine/`（运行时，其中 loader 已被 shim 替换，并有 `wine-host`），`wineprefix/`，`dxmt/`，`reshade/`，`YaaglGame.app/`，`logs/`（`game_*.log`、`gamehost.log`），`aria2.session`，`resources.neu`，`sidecar/`，`.bundle-stamp`，`dxmt.conf`（可选），`sidecar/sophon_server/gametemp`（`sophon_server/tasks.py:188`）。
+- `wine/`（运行时，其中 loader 已被 shim 替换，并有 `wine-host`），`wineprefix/`，`dxmt/`，`reshade/`，`GenshinLauncherGame.app/`，`logs/`（`game_*.log`、`gamehost.log`），`aria2.session`，`resources.neu`，`sidecar/`，`.bundle-stamp`，`dxmt.conf`（可选），`sidecar/sophon_server/gametemp`（`sophon_server/tasks.py:188`）。
 - 游戏目录里：`config.ini`（Sophon 写）、`.tmp/`（更新临时目录）、启动期间的 `*.bak`、ReShade 的 `ReShade.ini`。
 
 ## 8. 对 hk4ecn 是死代码的部分（迁移时可以不管）
@@ -181,8 +181,8 @@ WS 事件类型：`job_start`、`chunk_progress`、`check_file`、`delete_file`�
 | `sophon.ts:179-188`（`cancelOperation`） | 没人调用，UI 不能取消任务 |
 | `utils/unix.ts:18-45,118-199`（xdelta3、hpatchz、7z），`utils/neu.ts:215-245,327-346`（`promptUpdate`、`getMemoryInfo`、`sha1sum`），`locale/index.ts:71-80` | 没人调用（或只有其他渠道调用） |
 | `config/fps-unlock.tsx` | 只写 `config_fps_unlock`，启动流程从不读取 |
-| 高级设置页（FPS、ReShade） | `YAAGL_ADVANCED_ENABLE` 在发布构建里没有设置（`constants/version.ts:6-7`；`build-ontag.yaml` 不设置它），这一页根本打不开，所以 `config.reshade` 实际恒为默认 false，除非旧版本存过这个键 |
-| `updater.ts:30-39,52-69,117-123` | 只有 hk4ecn 会用到 `Yaagl.app.tar.gz`；`YAAGL_OS` 和 hk4euniversal 分支是死的 |
+| 高级设置页（FPS、ReShade） | `GENSHIN_LAUNCHER_ADVANCED_ENABLE` 在发布构建里没有设置（`constants/version.ts:6-7`；`build-ontag.yaml` 不设置它），这一页根本打不开，所以 `config.reshade` 实际恒为默认 false，除非旧版本存过这个键 |
+| `updater.ts:30-39,52-69,117-123` | 只有 hk4ecn 会用到 `Genshin Launcher.app.tar.gz`；`GENSHIN_LAUNCHER_OS` 和 hk4euniversal 分支是死的 |
 | `Server` 的 `hosts`、`cps`、`channel_id`、`subchannel_id`、`THE_REAL_COMPANY_NAME`、`product_name`、`update_url` 字段（`constants/server.ts`） | hk4ecn 路径没有读取它们（`update_url` 只给死函数 `getLatestVersionInfo` 用） |
 | `hk4ecn.ts:23-24`（`DEFAULT_WINE_DISTRO_URL`）、`hk4ecn.ts:3-4` 的注释 | 没人用 |
 | `launcher/index.tsx` 中 `iconImage`、`logo`、`launchButtonLocation` 的分支 | hk4e 的 `uiContent` 不提供这些字段（`hk4e/index.tsx:141-146`） |
@@ -204,7 +204,7 @@ WS 事件类型：`job_start`、`chunk_progress`、`check_file`、`delete_file`�
 ## 10. 对迁移的含义
 
 - “sidecar 全部替换”可以覆盖 aria2c、sophon-server（含 hpatchz，可以把 HDiffPatch 作为 C target 链接）、xdelta、7z，以及 §6.3 里大部分 shell 命令。
-- **替换不了的外部进程**：Wine（`wine`、`wineserver`，x86_64，运行在 Rosetta 下）；`yaagl-wine-shim` 和 `yaagl-gamehost.dylib`（必须是 x86_64，与 Wine 同一架构；dylib 要注入 Wine 进程，不能链接进 arm64 App）；`osascript` 提权改 `/etc/hosts`；`codesign`、`lsregister`（后者可以改用 `LSRegisterURL`）。
+- **替换不了的外部进程**：Wine（`wine`、`wineserver`，x86_64，运行在 Rosetta 下）；`genshin-launcher-wine-shim` 和 `genshin-launcher-gamehost.dylib`（必须是 x86_64，与 Wine 同一架构；dylib 要注入 Wine 进程，不能链接进 arm64 App）；`osascript` 提权改 `/etc/hosts`；`codesign`、`lsregister`（后者可以改用 `LSRegisterURL`）。
 - protonextras 中的 PE 文件需要作为资源继续随 App 分发。
 - `config.ini`、`.tmp`、ldiff 流程和 `sophon_api.py` 的版本判定规则（`sophon_api.py:459-480`，取 config.ini 和 globalgamemanagers 中较小的版本）是 Sophon Swift 重写时需要提取的业务规则。
 

@@ -27,7 +27,7 @@ final class FakeDelivery: NotificationDelivering, Sendable {
 
 @MainActor
 private func notifier(_ delivery: FakeDelivery) -> EventNotifier {
-  let suite = "yaagl-notify-\(UUID().uuidString)"
+  let suite = "genshin-launcher-notify-\(UUID().uuidString)"
   let defaults = UserDefaults(suiteName: suite)!
   defaults.removePersistentDomain(forName: suite)
   return EventNotifier(delivery: delivery, defaults: defaults)
@@ -85,7 +85,7 @@ private func notifier(_ delivery: FakeDelivery) -> EventNotifier {
   }
 
   @Test func announcementsSurviveARelaunchWithoutRepeating() async {
-    let suite = "yaagl-notify-\(UUID().uuidString)"
+    let suite = "genshin-launcher-notify-\(UUID().uuidString)"
     let defaults = UserDefaults(suiteName: suite)!
     defaults.removePersistentDomain(forName: suite)
     let update = GameStatus(localVersion: "5.0.0", remoteVersion: "5.1.0", canUpdate: true)
@@ -98,7 +98,7 @@ private func notifier(_ delivery: FakeDelivery) -> EventNotifier {
   }
 
   @Test func aDeniedAnnouncementIsNotMarkedAsSent() async {
-    let suite = "yaagl-notify-\(UUID().uuidString)"
+    let suite = "genshin-launcher-notify-\(UUID().uuidString)"
     let defaults = UserDefaults(suiteName: suite)!
     defaults.removePersistentDomain(forName: suite)
     let update = GameStatus(localVersion: "5.0.0", remoteVersion: "5.1.0", canUpdate: true)
@@ -109,7 +109,7 @@ private func notifier(_ delivery: FakeDelivery) -> EventNotifier {
   }
 
   @Test func aNotificationTheSystemRejectedIsAnnouncedAgainLater() async {
-    let suite = "yaagl-notify-\(UUID().uuidString)"
+    let suite = "genshin-launcher-notify-\(UUID().uuidString)"
     let defaults = UserDefaults(suiteName: suite)!
     defaults.removePersistentDomain(forName: suite)
     let update = GameStatus(localVersion: "5.0.0", remoteVersion: "5.1.0", canUpdate: true)

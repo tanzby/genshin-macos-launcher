@@ -20,7 +20,7 @@ package enum SophonVersion {
 /// Sophon owns `config.ini` because it writes the version only after the files are in place (ADR 0002).
 package enum SophonInstallation {
   static let configFileName = "config.ini"
-  static let tempDirectoryName = ".yaagl-tmp"
+  static let tempDirectoryName = ".genshin-launcher-tmp"
   static let dataFolder = "YuanShen_Data"
   static let executableName = "YuanShen.exe"
   static let emptyVersion = "0.0.0"

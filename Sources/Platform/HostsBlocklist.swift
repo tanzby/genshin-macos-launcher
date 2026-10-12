@@ -1,6 +1,6 @@
 import Foundation
 
-/// The `# Added by Yaagl` … `# End of section` block of `/etc/hosts` that sends telemetry domains
+/// The `# Added by Genshin Launcher` … `# End of section` block of `/etc/hosts` that sends telemetry domains
 /// to 0.0.0.0. The domain list is game-specific and injected (GenshinCN owns it). Reading needs no
 /// privileges; `apply()` asks for the administrator password once, and only when a change is needed.
 public struct HostsBlocklist: Sendable {
@@ -14,9 +14,9 @@ public struct HostsBlocklist: Sendable {
     public var allowsLaunch: Bool { self == .current }
   }
 
-  static let beginMarker = "# Added by Yaagl"
+  static let beginMarker = "# Added by Genshin Launcher"
   static let endMarker = "# End of section"
-  static let warning = "# Warning: managed by Yaagl. Edits inside this section are overwritten."
+  static let warning = "# Warning: managed by Genshin Launcher. Edits inside this section are overwritten."
   package static let systemHostsFile = URL(filePath: "/etc/hosts")
 
   public let domains: [String]
@@ -65,8 +65,8 @@ public struct HostsBlocklist: Sendable {
       let snapshot = try currentContents()
       let updated = Self.merged(section: Self.section(for: domains), into: snapshot)
       let id = UUID().uuidString
-      let stagedNew = scratchDirectory.appending(path: "yaagl-hosts-\(id)")
-      let stagedOld = scratchDirectory.appending(path: "yaagl-hosts-\(id).orig")
+      let stagedNew = scratchDirectory.appending(path: "genshin-launcher-hosts-\(id)")
+      let stagedOld = scratchDirectory.appending(path: "genshin-launcher-hosts-\(id).orig")
       try updated.write(to: stagedNew, atomically: true, encoding: .utf8)
       try snapshot.write(to: stagedOld, atomically: true, encoding: .utf8)
       defer {
@@ -114,7 +114,7 @@ public struct HostsBlocklist: Sendable {
   }
 
   /// Sections run from a begin marker to the next end marker. Without an end marker the section is
-  /// only the contiguous lines Yaagl itself writes, so unrelated lines after it survive.
+  /// only the contiguous lines Genshin Launcher itself writes, so unrelated lines after it survive.
   static func sections(in lines: [String]) -> [FoundSection] {
     var found: [FoundSection] = []
     var index = 0

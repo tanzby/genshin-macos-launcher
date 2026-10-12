@@ -71,7 +71,7 @@ final class ClientRig: @unchecked Sendable {
   let client: GenshinCNClient
 
   init(main: FakeRelease, pre: FakeRelease? = nil, withGameDirectory: Bool = true) {
-    root = temporaryURL("yaagl-client")
+    root = temporaryURL("genshin-launcher-client")
     game = root.appending(path: "Game", directoryHint: .isDirectory)
     data = root.appending(path: "Data", directoryHint: .isDirectory)
     protonExtras = root.appending(path: "protonextras", directoryHint: .isDirectory)

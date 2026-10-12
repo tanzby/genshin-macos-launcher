@@ -46,7 +46,7 @@ enum AppSource {
 
     #expect(!lines[entry].contains(".disabled"))
     #expect(!lines[entry + 1].hasPrefix(".disabled"))
-    #expect(try AppSource.text("App/YaaglApp.swift").contains("Settings {"))
+    #expect(try AppSource.text("App/GenshinLauncherApp.swift").contains("Settings {"))
   }
 
   @MainActor @Test func APP_018_aSettingChangedWhileTheGameRunsOnlyAffectsTheNextLaunch() async throws {

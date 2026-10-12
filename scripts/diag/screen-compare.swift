@@ -1,5 +1,5 @@
 // Compares what the game rendered (its drawable, saved by gamehost-dev) with
-// what is on screen, as `key=value` text for yaagl-diag.
+// what is on screen, as `key=value` text for genshin-launcher-diag.
 // Usage: screen-compare <drawable.png> <screen.png> <strip px>
 //
 // Both images are reduced to a per-row mean luma profile; a drawable smaller

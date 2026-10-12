@@ -6,7 +6,7 @@ import TestSupport
 
 @MainActor
 private func freshDefaults() -> UserDefaults {
-  let suite = "yaagl-tests-\(UUID().uuidString)"
+  let suite = "genshin-launcher-tests-\(UUID().uuidString)"
   let defaults = UserDefaults(suiteName: suite)!
   defaults.removePersistentDomain(forName: suite)
   return defaults
@@ -102,24 +102,24 @@ private func freshDefaults() -> UserDefaults {
   private let supported: @Sendable (URL) -> Bool = { !$0.path.contains("\"") }
 
   @Test func CFG_010_emptyDirectoryIsAnInstallTarget() throws {
-    let dir = makeTemporaryDirectory("yaagl-dir")
+    let dir = makeTemporaryDirectory("genshin-launcher-dir")
     #expect(try GameDirectoryValidator.validate(dir, gameExecutable: "YuanShen.exe", isSupportedPath: supported) == .empty)
   }
 
   @Test func CFG_010_interruptedInstallLeftoversStillCount() throws {
-    let dir = makeTemporaryDirectory("yaagl-dir")
-    try FileManager.default.createDirectory(at: dir.appending(path: ".yaagl-tmp"), withIntermediateDirectories: true)
+    let dir = makeTemporaryDirectory("genshin-launcher-dir")
+    try FileManager.default.createDirectory(at: dir.appending(path: ".genshin-launcher-tmp"), withIntermediateDirectories: true)
     #expect(try GameDirectoryValidator.validate(dir, gameExecutable: "YuanShen.exe", isSupportedPath: supported) == .empty)
   }
 
   @Test func CFG_010_existingGameIsRecognised() throws {
-    let dir = makeTemporaryDirectory("yaagl-dir")
+    let dir = makeTemporaryDirectory("genshin-launcher-dir")
     try Data().write(to: dir.appending(path: "YuanShen.exe"))
     #expect(try GameDirectoryValidator.validate(dir, gameExecutable: "YuanShen.exe", isSupportedPath: supported) == .existingGame)
   }
 
   @Test func CFG_010_otherContentIsRefused() throws {
-    let dir = makeTemporaryDirectory("yaagl-dir")
+    let dir = makeTemporaryDirectory("genshin-launcher-dir")
     try Data().write(to: dir.appending(path: "photos.zip"))
     #expect(throws: GameDirectoryProblem.notEmpty) {
       try GameDirectoryValidator.validate(dir, gameExecutable: "YuanShen.exe", isSupportedPath: supported)
@@ -127,7 +127,7 @@ private func freshDefaults() -> UserDefaults {
   }
 
   @Test func CFG_010_aFileNamedLikeTheTempFolderIsNotIgnored() throws {
-    let dir = makeTemporaryDirectory("yaagl-dir")
+    let dir = makeTemporaryDirectory("genshin-launcher-dir")
     let tmp = dir.appending(path: PendingJobStore.directoryName)
     try Data().write(to: tmp)
     #expect(throws: GameDirectoryProblem.notEmpty) {
@@ -139,7 +139,7 @@ private func freshDefaults() -> UserDefaults {
   }
 
   @Test func CFG_010_aFolderThatCannotBeListedIsNotTreatedAsEmpty() throws {
-    let dir = makeTemporaryDirectory("yaagl-dir")
+    let dir = makeTemporaryDirectory("genshin-launcher-dir")
     // Readable again, so TestSupport can remove it.
     defer { try? FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: dir.path) }
     try FileManager.default.setAttributes([.posixPermissions: 0o000], ofItemAtPath: dir.path)
@@ -149,7 +149,7 @@ private func freshDefaults() -> UserDefaults {
   }
 
   @Test func CFG_010_missingOrFileOrUnsupportedPathsAreRefused() throws {
-    let dir = makeTemporaryDirectory("yaagl-dir")
+    let dir = makeTemporaryDirectory("genshin-launcher-dir")
     #expect(throws: GameDirectoryProblem.missing) {
       try GameDirectoryValidator.validate(dir.appending(path: "nope"), gameExecutable: "x", isSupportedPath: supported)
     }
@@ -226,7 +226,7 @@ private func freshDefaults() -> UserDefaults {
 
   /// The keys this app itself wrote into a private defaults domain.
   private func storedKeys(afterEverythingOn body: (SettingsModel) -> Void) -> Set<String> {
-    let suite = "yaagl-tests-\(UUID().uuidString)"
+    let suite = "genshin-launcher-tests-\(UUID().uuidString)"
     let defaults = UserDefaults(suiteName: suite)!
     defer { defaults.removePersistentDomain(forName: suite) }
     body(SettingsModel(defaults: defaults))

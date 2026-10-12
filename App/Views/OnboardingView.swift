@@ -9,14 +9,14 @@ struct OnboardingView: View {
   var body: some View {
     let onboarding = controller.onboarding
     VStack(alignment: .leading, spacing: 20) {
-      Text("Welcome to Yaagl")
+      Text("Welcome to Genshin Launcher")
         .font(.largeTitle.bold())
       Text("Two quick steps before the game can start.")
         .foregroundStyle(.secondary)
 
       StepRow(
         number: 1, title: "Block telemetry",
-        detail: "Yaagl adds a marked section to /etc/hosts that sends the game's telemetry domains to 0.0.0.0. The game will not start without it. macOS asks for your administrator password.",
+        detail: "Genshin Launcher adds a marked section to /etc/hosts that sends the game's telemetry domains to 0.0.0.0. The game will not start without it. macOS asks for your administrator password.",
         isDone: onboarding.allowsLaunch
       ) {
         if !onboarding.allowsLaunch {

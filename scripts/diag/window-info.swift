@@ -1,5 +1,5 @@
 // Prints the frontmost app, current Space type per display, and on-screen
-// windows owned by the given pids, as `key=value` lines for yaagl-diag.
+// windows owned by the given pids, as `key=value` lines for genshin-launcher-diag.
 // Usage: window-info <pid> [<pid> ...]
 import AppKit
 import CoreGraphics

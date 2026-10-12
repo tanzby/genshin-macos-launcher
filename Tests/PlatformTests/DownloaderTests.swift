@@ -65,7 +65,7 @@ private func withDownloaderFixture(
   status: Int = 200, body: Data = Data((0..<200_000).map { UInt8($0 % 251) }), includeLength: Bool = true,
   _ test: (Downloader, URL, Data, URL) async throws -> Void
 ) async throws {
-  let dir = makeTemporaryDirectory("yaagl-downloader-test")
+  let dir = makeTemporaryDirectory("genshin-launcher-downloader-test")
   let url = URL(string: "https://downloads.invalid/\(UUID().uuidString)/file.bin")!
   DownloaderStubProtocol.register(
     .init(status: status, body: body, chunkSize: 50_000, includeLength: includeLength), for: url)

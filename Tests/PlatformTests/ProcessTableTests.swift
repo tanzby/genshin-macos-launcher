@@ -15,7 +15,7 @@ import TestSupport
   }
 
   @Test func WIN_018_systemTableListsOpenFiles() throws {
-    let url = temporaryURL("yaagl-open")
+    let url = temporaryURL("genshin-launcher-open")
     try Data("x".utf8).write(to: url)
     let handle = try FileHandle(forReadingFrom: url)
     defer { try? handle.close() }

@@ -7,7 +7,7 @@ import TestSupport
 
 @Suite struct QuarantineTests {
   private func setQuarantine(_ url: URL) throws {
-    let value = "0081;00000000;Yaagl;"
+    let value = "0081;00000000;Genshin Launcher;"
     let status = value.withCString { setxattr(url.path, "com.apple.quarantine", $0, strlen($0), 0, 0) }
     try #require(status == 0)
   }

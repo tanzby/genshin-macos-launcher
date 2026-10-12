@@ -1,7 +1,7 @@
 name: Release
 
 # A semver tag (1.0.0-rc.1, 1.0.0, ...) builds the app and publishes a regular
-# release with Yaagl-<ver>.zip (Sparkle enclosure), Yaagl-<ver>.dmg and appcast.xml.
+# release with GenshinLauncher-<ver>.zip (Sparkle enclosure), GenshinLauncher-<ver>.dmg and appcast.xml.
 # It stays a dry run (artifacts only, nothing published) until the secret
 # SPARKLE_ED_PRIVATE_KEY exists and SUPublicEDKey is set in project.yml.
 # Run it by hand from the Actions tab to dry-run on any branch.
@@ -99,10 +99,10 @@ jobs:
         run: |
           set -eu
           xcodegen generate
-          xcodebuild -project Yaagl.xcodeproj -scheme Yaagl -configuration Release \
+          xcodebuild -project GenshinLauncher.xcodeproj -scheme GenshinLauncher -configuration Release \
             -destination 'platform=macOS,arch=arm64' -derivedDataPath build/DerivedData \
             MARKETING_VERSION="$VERSION" CURRENT_PROJECT_VERSION="$BUILD" build
-          app=build/DerivedData/Build/Products/Release/Yaagl.app
+          app="build/DerivedData/Build/Products/Release/Genshin Launcher.app"
           codesign --verify --deep --strict --verbose=2 "$app"
           REQUIRE_DXMT=1 scripts/dev/check-bundle "$app"
           plist="$app/Contents/Info.plist"
@@ -116,7 +116,7 @@ jobs:
             echo "::warning::SUPublicEDKey is empty in the built app; dry run, nothing is published"
             echo "PUBLISH=false" >> "$GITHUB_ENV"
           fi
-          lipo -archs "$app/Contents/MacOS/Yaagl"
+          lipo -archs "$app/Contents/MacOS/Genshin Launcher"
           echo "APP=$PWD/$app" >> "$GITHUB_ENV"
 
       - name: Package zip and dmg
@@ -124,10 +124,10 @@ jobs:
           set -eu
           mkdir -p dist/updates dmg-root
           # ditto keeps symlinks, so the framework signatures stay valid.
-          ditto -c -k --sequesterRsrc --keepParent "$APP" "dist/updates/Yaagl-$VERSION.zip"
+          ditto -c -k --sequesterRsrc --keepParent "$APP" "dist/updates/GenshinLauncher-$VERSION.zip"
           cp -R "$APP" dmg-root/
           ln -s /Applications dmg-root/Applications
-          hdiutil create -volname Yaagl -srcfolder dmg-root -fs APFS -format ULFO "dist/Yaagl-$VERSION.dmg"
+          hdiutil create -volname "Genshin Launcher" -srcfolder dmg-root -fs APFS -format ULFO "dist/GenshinLauncher-$VERSION.dmg"
           ls -l dist dist/updates
 
       - name: Generate appcast
@@ -152,7 +152,7 @@ jobs:
           # The secret must pair with the SUPublicEDKey built into the app, or every
           # client would reject this update. Check before anything is published.
           sig=$(grep -o 'sparkle:edSignature="[^"]*"' dist/appcast.xml | head -1 | cut -d'"' -f2)
-          swift scripts/release/verify-ed-signature.swift "$ED_PUBLIC_KEY" "$sig" "dist/updates/Yaagl-$VERSION.zip" \
+          swift scripts/release/verify-ed-signature.swift "$ED_PUBLIC_KEY" "$sig" "dist/updates/GenshinLauncher-$VERSION.zip" \
             || { echo "::error::SPARKLE_ED_PRIVATE_KEY does not match SUPublicEDKey"; exit 1; }
           cat dist/appcast.xml
 
@@ -160,7 +160,7 @@ jobs:
         if: env.PUBLISH != 'true'
         uses: actions/upload-artifact@v4
         with:
-          name: Yaagl-${{ env.VERSION }}
+          name: GenshinLauncher-${{ env.VERSION }}
           path: dist
           retention-days: 7
 
@@ -171,7 +171,7 @@ jobs:
         run: |
           set -eu
           cat > notes.md <<'NOTES'
-          First install: drag Yaagl to Applications, then allow it once under System Settings > Privacy & Security > Open Anyway. The app is ad-hoc signed and not notarized. Later updates arrive through the built-in updater.
+          First install: drag Genshin Launcher to Applications, then allow it once under System Settings > Privacy & Security > Open Anyway. The app is ad-hoc signed and not notarized. Later updates arrive through the built-in updater.
           NOTES
           gh release create "$VERSION" --verify-tag --title "$VERSION" --generate-notes --notes-file notes.md \
-            "dist/Yaagl-$VERSION.dmg" "dist/updates/Yaagl-$VERSION.zip" dist/appcast.xml
+            "dist/GenshinLauncher-$VERSION.dmg" "dist/updates/GenshinLauncher-$VERSION.zip" dist/appcast.xml

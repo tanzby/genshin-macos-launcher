@@ -13,7 +13,7 @@
 6. 更新包：**Sparkle 用 zip**（`ditto -c -k --sequesterRsrc --keepParent`），首次安装继续用 DMG。
 7. appcast：作为 release 资产上传 `appcast.xml`，`SUFeedURL` 设为 `https://github.com/tanzby/yet-another-anime-game-launcher/releases/latest/download/appcast.xml`。不需要开 Pages，也不需要往受保护分支写入。
 8. CI：用 Sparkle 发布包里的 `bin/generate_appcast`，私钥从 GitHub secret 经 stdin 传入（`--ed-key-file -`）。
-9. **TS 版用户没法被现有 updater 直接升级到原生版**：TS updater 只会替换数据目录里的 `resources.neu` 和 `sidecar`，不会换 `.app`。需要发一个「桥接版」TS release，由它下载原生 App 并替换 `PATH_LAUNCH` 指向的 `.app`。此外，原生版的 release 里**绝不能**出现名为 `Yaagl.app.tar.gz` 的资产。
+9. **TS 版用户没法被现有 updater 直接升级到原生版**：TS updater 只会替换数据目录里的 `resources.neu` 和 `sidecar`，不会换 `.app`。需要发一个「桥接版」TS release，由它下载原生 App 并替换 `PATH_LAUNCH` 指向的 `.app`。此外，原生版的 release 里**绝不能**出现名为 `Genshin Launcher.app.tar.gz` 的资产。
 
 ---
 
@@ -54,7 +54,7 @@
 ## 2. quarantine、Gatekeeper、安装器 XPC
 
 - **更新路径不触发 Gatekeeper**：`SUPlainInstaller` 在把新 App 移到位后会执行「Release our new app from quarantine」（[L48](https://github.com/sparkle-project/Sparkle/blob/e95f42b15686ad547a919ddaef18d75eac9bf5d9/Autoupdate/SUPlainInstaller.m#L48)），递归删除 `com.apple.quarantine`（[`SUFileManager.m`](https://github.com/sparkle-project/Sparkle/blob/e95f42b15686ad547a919ddaef18d75eac9bf5d9/Sparkle/SUFileManager.m#L120)）。在 macOS 14.4+ 它还会用 `/usr/bin/gktool scan` 预热 Gatekeeper，失败也不影响安装（[L95](https://github.com/sparkle-project/Sparkle/blob/e95f42b15686ad547a919ddaef18d75eac9bf5d9/Autoupdate/SUPlainInstaller.m#L95)）。所以更新后的 ad-hoc App 可以直接启动。
-- **首次安装仍然要手动放行**：macOS 15 起「users will no longer be able to Control-click to override Gatekeeper」，必须去「系统设置 › 隐私与安全性」点「仍要打开」（[Apple Developer News](https://developer.apple.com/news/?id=saqachfa)、[Apple 支持：安全地打开 App](https://support.apple.com/en-us/102445)）。这和现在的 TS 版一样，README 和 release 说明里要写清楚（也可以写 `xattr -dr com.apple.quarantine /Applications/Yaagl.app`）。
+- **首次安装仍然要手动放行**：macOS 15 起「users will no longer be able to Control-click to override Gatekeeper」，必须去「系统设置 › 隐私与安全性」点「仍要打开」（[Apple Developer News](https://developer.apple.com/news/?id=saqachfa)、[Apple 支持：安全地打开 App](https://support.apple.com/en-us/102445)）。这和现在的 TS 版一样，README 和 release 说明里要写清楚（也可以写 `xattr -dr com.apple.quarantine /Applications/Genshin Launcher.app`）。
 - **App Translocation**：如果用户直接在 DMG 或「下载」文件夹里运行带 quarantine 的 App，Sparkle 会中止更新并提示「can't be updated if it's running from the location it was downloaded to」（[`SPUUpdateDriver.m` L198](https://github.com/sparkle-project/Sparkle/blob/e95f42b15686ad547a919ddaef18d75eac9bf5d9/Sparkle/SPUUpdateDriver.m#L198)）。用户把 App 拖进 `/Applications` 并放行后，这个问题就不存在了。
 - **XPC 服务**：非沙盒 App「should skip this guide unless you are interested in Removing the XPC Services」。`Installer.xpc` 和 `Downloader.xpc` 只给沙盒 App 用（[Sandboxing](https://sparkle-project.org/documentation/sandboxing/)）。我们不开沙盒（要拉起 Wine），所以不设 `SUEnableInstallerLauncherService`，可以在构建后删掉 `Sparkle.framework/…/XPCServices` 以减小体积。删完要重新 ad-hoc 签名，见第 1 节。Sparkle 自带的 helper 已经是「signed with an ad-hoc signature and Hardened Runtime enabled」，Xcode 拷贝 framework 时会重签。
 - 如果 `/Applications` 不可写（非管理员用户），Sparkle 会向 launchd 提交一个独立的特权安装进程，并弹出授权框（[Security & reliability](https://sparkle-project.org/documentation/security-and-reliability/)）。这和是否签名无关。
@@ -67,9 +67,9 @@ Sparkle 支持 dmg、zip、tar、Apple Archive（`.aar`）和 pkg（[Documentati
 |---|---|---|
 | Sparkle 更新 | 推荐：解压快，不需要挂载 | 可以，但要挂载；官方建议用 APFS + lzfse |
 | 首次手动安装 | 不直观 | 拖拽到 Applications，体验好 |
-| 符号链接 | `ditto -c -k --sequesterRsrc --keepParent Yaagl.app Yaagl-x.y.z.zip` 能保留 | 能保留 |
+| 符号链接 | `ditto -c -k --sequesterRsrc --keepParent Genshin Launcher.app GenshinLauncher-x.y.z.zip` 能保留 | 能保留 |
 
-建议 release 同时附两个资产：`Yaagl-x.y.z.dmg` 给人下载，`Yaagl-x.y.z.zip` 作为 appcast 的 enclosure。官方特别提醒「Make sure symlinks are preserved」，否则 framework 的签名会被破坏，Sparkle 会把更新当成签名损坏拒绝。所以**不要用 `zip -r`**。
+建议 release 同时附两个资产：`GenshinLauncher-x.y.z.dmg` 给人下载，`GenshinLauncher-x.y.z.zip` 作为 appcast 的 enclosure。官方特别提醒「Make sure symlinks are preserved」，否则 framework 的签名会被破坏，Sparkle 会把更新当成签名损坏拒绝。所以**不要用 `zip -r`**。
 
 delta 更新：`generate_appcast` 能根据目录里的旧归档自动生成 delta（[Publishing](https://sparkle-project.org/documentation/publishing/)）。原生 App 本身不含 Wine（Wine 放在数据目录），体积小，**第一阶段不做 delta**，CI 也就不需要保存历史归档。
 
@@ -99,11 +99,11 @@ delta 更新：`generate_appcast` 能根据目录里的旧归档自动生成 del
 
 ```bash
 mkdir -p updates
-ditto -c -k --sequesterRsrc --keepParent Yaagl.app "updates/Yaagl-$YAAGL_VERSION.zip"
+ditto -c -k --sequesterRsrc --keepParent Genshin Launcher.app "updates/GenshinLauncher-$GENSHIN_LAUNCHER_VERSION.zip"
 echo "$SPARKLE_ED_PRIVATE_KEY" | sparkle/bin/generate_appcast --ed-key-file - \
-  --download-url-prefix "https://github.com/$GITHUB_REPOSITORY/releases/download/$YAAGL_VERSION/" \
+  --download-url-prefix "https://github.com/$GITHUB_REPOSITORY/releases/download/$GENSHIN_LAUNCHER_VERSION/" \
   -o updates/appcast.xml updates/
-gh release create "$YAAGL_VERSION" "Yaagl-$YAAGL_VERSION.dmg" "updates/Yaagl-$YAAGL_VERSION.zip" updates/appcast.xml …
+gh release create "$GENSHIN_LAUNCHER_VERSION" "GenshinLauncher-$GENSHIN_LAUNCHER_VERSION.dmg" "updates/GenshinLauncher-$GENSHIN_LAUNCHER_VERSION.zip" updates/appcast.xml …
 ```
 
 `generate_appcast` 会从 bundle 里读出 `LSMinimumSystemVersion` 和是否仅 arm64，写进 appcast（见其 `--help` 说明）。它也会校验 ad-hoc 签名是否完整：签名的 bundle 必须通过 `codeSignatureIsValid`（[`ArchiveItem.swift` L219](https://github.com/sparkle-project/Sparkle/blob/e95f42b15686ad547a919ddaef18d75eac9bf5d9/generate_appcast/ArchiveItem.swift#L219)），相当于在 CI 里顺带做了一次签名检查。
@@ -120,7 +120,7 @@ packages:
     url: https://github.com/sparkle-project/Sparkle
     from: 2.10.0
 targets:
-  Yaagl:
+  Genshin Launcher:
     type: application
     platform: macOS
     deploymentTarget: "15.0"
@@ -134,7 +134,7 @@ targets:
         ENABLE_HARDENED_RUNTIME: NO      # 否则库验证拒绝加载 ad-hoc 的 Sparkle
         ARCHS: arm64
     info:
-      path: Yaagl/Info.plist
+      path: Genshin Launcher/Info.plist
       properties:
         SUFeedURL: https://github.com/tanzby/yet-another-anime-game-launcher/releases/latest/download/appcast.xml
         SUPublicEDKey: <generate_keys 打印的公钥>
@@ -150,20 +150,20 @@ targets:
 读 `src/updater.ts`、`src/github.ts` 和 `build-app.js` 得到：
 
 - 它请求 `GET /repos/tanzby/yet-another-anime-game-launcher/releases/latest`，只有**同时满足** `semver.gt(tag, 当前版本)` **并且**存在名为 `resources_hk4ecn.neu` 的资产时，才认为有更新。否则一律当作「已是最新」，不提示任何东西。
-- 如果还有 `Yaagl.app.tar.gz`，它会下载并从中解出 `Yaagl.app/Contents/Resources/sidecar`，写到**数据目录**的 `./sidecar`。然后把新的 `resources.neu` 写到数据目录。
-- `.app` 本身（Neutralino 二进制、Info.plist）**从不被替换**。启动脚本 `Contents/MacOS/parameterized` 把 bundle 的 Resources rsync 到 `~/Library/Application Support/Yaagl`，然后以 `PATH_LAUNCH=<.app 所在目录>` 启动 Neutralino。
+- 如果还有 `Genshin Launcher.app.tar.gz`，它会下载并从中解出 `Genshin Launcher.app/Contents/Resources/sidecar`，写到**数据目录**的 `./sidecar`。然后把新的 `resources.neu` 写到数据目录。
+- `.app` 本身（Neutralino 二进制、Info.plist）**从不被替换**。启动脚本 `Contents/MacOS/parameterized` 把 bundle 的 Resources rsync 到 `~/Library/Application Support/Genshin Launcher`，然后以 `PATH_LAUNCH=<.app 所在目录>` 启动 Neutralino。
 
 所以**现有 updater 无法把用户直接升级成原生 App**，有两个坑：
 
 1. 原生版 release 不带 `resources_hk4ecn.neu` 时，老用户会**静默停在旧版**，永远不会收到提示。
-2. 原生版 release 如果带了名为 `Yaagl.app.tar.gz` 的资产，老 updater 会去里面找 `sidecar` 目录，找不到就报错。**原生版不要用这个资产名。**
+2. 原生版 release 如果带了名为 `Genshin Launcher.app.tar.gz` 的资产，老 updater 会去里面找 `sidecar` 目录，找不到就报错。**原生版不要用这个资产名。**
 
 ### 推荐路径：桥接版 TS release
 
-1. 发**最后一个 TS 版本**（例如 `0.x.y`），它的 `resources.neu` 带「迁移到原生版」逻辑：检查到原生版的 release 后，在 UI 里提示用户，用 aria2 下载原生 `Yaagl-x.y.z.zip`，`ditto -x -k` 解压到临时目录，然后用一个 detached 的 shell 脚本等当前进程退出、替换 `PATH_LAUNCH` 指向的 `Yaagl.app`、`open` 新 App。下载由 aria2 完成，CLI 下载默认不会打 quarantine；脚本里再 `xattr -dr com.apple.quarantine` 一次作为保险。这样原生 App 首次启动不会弹 Gatekeeper。
+1. 发**最后一个 TS 版本**（例如 `0.x.y`），它的 `resources.neu` 带「迁移到原生版」逻辑：检查到原生版的 release 后，在 UI 里提示用户，用 aria2 下载原生 `GenshinLauncher-x.y.z.zip`，`ditto -x -k` 解压到临时目录，然后用一个 detached 的 shell 脚本等当前进程退出、替换 `PATH_LAUNCH` 指向的 `Genshin Launcher.app`、`open` 新 App。下载由 aria2 完成，CLI 下载默认不会打 quarantine；脚本里再 `xattr -dr com.apple.quarantine` 一次作为保险。这样原生 App 首次启动不会弹 Gatekeeper。
 2. 原生版的每个 release 在过渡期内**额外附一个 `resources_hk4ecn.neu`**，内容就是桥接版的 neu（从桥接 release 用 `gh release download` 拷过来即可，不需要 TS 源码还在仓库里）。这样不管老用户停在哪个 TS 版本，都会先升到桥接版，再迁移到原生版。过渡期结束后去掉这个资产。
 3. 原生 App 首次启动时需要容忍数据目录里残留的 TS 文件（`resources.neu`、`sidecar/`、`.bundle-stamp` 等）：沿用 Wine、prefix、设置，清理不再需要的文件。**沿用 bundle id `com.3shain.yaagl`**，这样 Sparkle 和 LaunchServices 会把它当成同一个 App。
-4. 兜底：release 说明里写手动方式，即下载 DMG、替换 `/Applications/Yaagl.app`、首次在「隐私与安全性」里放行。
+4. 兜底：release 说明里写手动方式，即下载 DMG、替换 `/Applications/Genshin Launcher.app`、首次在「隐私与安全性」里放行。
 
 不做桥接的话，只能在最后一个 TS 版本里弹「请手动下载原生版」的提示。这样更简单，但每个老用户都要手动走一遍 Gatekeeper 放行。
 

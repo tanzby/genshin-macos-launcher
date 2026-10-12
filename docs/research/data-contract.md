@@ -1,12 +1,12 @@
 # 数据目录与设置契约（原神 CN）
 
-研究票 #18，属于地图 #13「原生 macOS 迁移（原神 CN）」。问题：原生 Swift App 要无缝沿用 `~/Library/Application Support/Yaagl`，用户升级后不用重下游戏、不用重建 prefix，需要满足什么契约，哪些东西可以清理。
+研究票 #18，属于地图 #13「原生 macOS 迁移（原神 CN）」。问题：原生 Swift App 要无缝沿用 `~/Library/Application Support/Genshin Launcher`，用户升级后不用重下游戏、不用重建 prefix，需要满足什么契约，哪些东西可以清理。
 
 依据：本仓库源码（`origin/main` f38cda4）、NeutralinoJS v4.11.0 源码（本项目锁定的版本，`neutralino.config.json:49`），以及对维护者本机数据目录的只读查看（2026-10-08，App 版本 0.1.3）。设置值只记录 key 和类型，不记录内容。
 
 ## 结论摘要
 
-1. **数据目录是硬编码的 `~/Library/Application Support/Yaagl`**。目录名来自发行名 `Yaagl`（`appDistributionName`），与 bundle id 无关。所有相对路径都以它为根，因为 Neutralino 用 `--path` 指向它，进程 cwd 也是它。
+1. **数据目录是硬编码的 `~/Library/Application Support/Genshin Launcher`**。目录名来自发行名 `Genshin Launcher`（`appDistributionName`），与 bundle id 无关。所有相对路径都以它为根，因为 Neutralino 用 `--path` 指向它，进程 cwd 也是它。
 2. **设置就是 `.storage/<key>.neustorage` 文件**，每个 key 一个文件，内容是原始 UTF-8 字符串（不是 JSON，没有换行），文件不存在就表示用默认值。布尔值写成字面量 `true`/`false`。原生 App 直接按这个格式读写即可，不需要迁移。
 3. **最危险的契约是 `wine_tag`**：TS 版启动时如果 `wine_tag` 不在内置发行版列表里，就会重装 Wine，而重装会先 `rm -rf wineprefix`。原生 App 的 Wine 列表必须认得现有的 tag（本机是 `11.0-1-crossover-signed-experimental`），否则用户的 prefix 会被删掉。
 4. `wine/` 不是原样的发行包：Game Mode 把 `lib/wine/x86_64-unix/wine` 换成了 shim（原文件改名为 `wine-host`），DXMT 的 DLL 也拷进了 `lib/wine/`。原生 App 要么原样接管这些改动，要么用同样的幂等逻辑重做，不能假设 `wine/` 是干净的。
@@ -23,7 +23,7 @@
 - TS 侧 `resolve()` 在生产环境把相对路径拼到 `NL_PATH` 上（`src/utils/neu.ts:4-17`）。shell 出去的命令（如 `./sidecar/aria2/aria2c`，`src/app.tsx:58`）靠的是 cwd 等于数据目录。
 - 开发模式（`pnpm start`）下 `NL_PATH` 相对于 `NL_CWD`（`src/utils/neu.ts:7-9`），所以数据在仓库目录里，与生产数据分开。
 
-**原生契约**：直接用 `FileManager` 的 `.applicationSupportDirectory` + `"Yaagl"` 拼路径（这个 URL 本身与 bundle id 无关），不要用 bundle id 当子目录名；启动 Wine 和子进程时把 cwd 设成数据目录，因为 DXMT 的 `*_d3d11.log` / `*_dxgi.log` 就写在 cwd 下（见第 2 节）。
+**原生契约**：直接用 `FileManager` 的 `.applicationSupportDirectory` + `"Genshin Launcher"` 拼路径（这个 URL 本身与 bundle id 无关），不要用 bundle id 当子目录名；启动 Wine 和子进程时把 cwd 设成数据目录，因为 DXMT 的 `*_d3d11.log` / `*_dxgi.log` 就写在 cwd 下（见第 2 节）。
 
 ## 2. 目录布局（本机实测 + 源码）
 
@@ -33,8 +33,8 @@
 | `wine/` | 2.0 GB | Wine 运行时。下载解压位置在 `src/wine/wine-install-program.ts:35,56-68`，运行时路径见 `src/wine/wine.ts:24-28` | **必须保留**；里面有 shim 和 DXMT 改动（见下） |
 | `wineprefix/` | 589 MB | `WINEPREFIX`（`src/app.tsx:104`、`src/wine/wine.ts:120-124`）。`dosdevices/` 里有 `c:`、`z:` 和用户挂载卷的符号链接 | **必须保留**，不能重建 |
 | `dxmt/` | 42 MB | DXMT 构件。按 `installed_dxmt_version` 判断是否需要重下（`src/downloadable-resource.ts:142-212`） | 保留；版本对不上时可以重下 |
-| `YaaglGame.app/` | 436 KB | Game Mode 用的游戏 bundle，`com.3shain.yaagl.game`，`MacOS/wine` 是 `wine-host` 的副本，已用 `lsregister` 注册（`src/wine/game-host.ts:17-21,86-115`） | 保留，或用同样的幂等逻辑重建 |
-| `icon.icns` | 380 KB | 从 bundle rsync 而来，`YaaglGame.app` 会拷它（`src/wine/game-host.ts:103-105`） | 原生 App 改为从自己的 bundle 取 |
+| `GenshinLauncherGame.app/` | 436 KB | Game Mode 用的游戏 bundle，`com.3shain.yaagl.game`，`MacOS/wine` 是 `wine-host` 的副本，已用 `lsregister` 注册（`src/wine/game-host.ts:17-21,86-115`） | 保留，或用同样的幂等逻辑重建 |
+| `icon.icns` | 380 KB | 从 bundle rsync 而来，`GenshinLauncherGame.app` 会拷它（`src/wine/game-host.ts:103-105`） | 原生 App 改为从自己的 bundle 取 |
 | `logs/` | 很小 | `game_<ms>.log`（`src/clients/mhy/hk4e/program-launch-game.ts:137-141`）、`gamehost.log`（`src/wine/game-host.ts:121`） | 可继续沿用；旧日志可删 |
 | `sidecar/` | 92 MB | aria2、7z、hpatchz、xdelta、sophon_server、gamehost（shim/dylib）、protonextras（steam*.exe、lsteamclient*.dll） | 外部二进制全部替换后可删；**protonextras 的 4 个文件仍是 Steam patch 的输入**（`src/clients/mhy/patch.ts:107-119`），要改为由原生 bundle 提供 |
 | `resources.neu` | 1 MB | Neutralino 前端包（resources.cpp:17）；应用内更新器写到这里（`src/updater.ts:137,151`） | Neutralino 残留，可删 |
@@ -43,7 +43,7 @@
 | `aria2.session` | 0 B | aria2 会话（`src/app.tsx:54-55`） | 不再用 aria2 后可删 |
 | `winedrv_config.bat` | 很小 | 写 Retina/LeftCmd 注册表时的临时脚本（`src/wine/wine.ts:173-176,190-193`） | 临时文件，可删 |
 | `decompress.log`、`*_d3d11.log`、`*_dxgi.log` | 很小或 0 | 解压日志；DXMT 写在 cwd 下的日志 | 可删 |
-| `wine-gptk4/`、`gptk4/` | 2.1 GB + 68 MB | 只给开发诊断用（`YAAGL_WINE_RUNTIME`，`src/wine/wine.ts:24-28`；`scripts/dev/yaagl-diag:173,567`） | 生产代码不读；属于用户，不要自动删 |
+| `wine-gptk4/`、`gptk4/` | 2.1 GB + 68 MB | 只给开发诊断用（`GENSHIN_LAUNCHER_WINE_RUNTIME`，`src/wine/wine.ts:24-28`；`scripts/dev/genshin-launcher-diag:173,567`） | 生产代码不读；属于用户，不要自动删 |
 
 只会临时出现的文件（启动或安装结束时删除）：`config.bat`、`hk4e_enable_hdr.reg`、`hk4e_resolution.reg`、`hk4e_revert_*.reg`（`src/clients/mhy/hk4e/program-launch-game.ts:39,81,135,234,262,292`），`wine.tar.xz`、`wineboot.log`、`winecfg.log`（`src/wine/wine-install-program.ts:40,89-90`），`sidecar.tar.gz`、`resources.neu.update`（`src/updater.ts:105,137`）。原生 App 启动时可以顺手清掉这些残留。
 
@@ -51,7 +51,7 @@
 
 ### `wine/` 被改动过
 
-- **Game Mode shim**：`prepareGameHost` 第一次运行时把 `wine/lib/wine/x86_64-unix/wine` 改名为 `wine-host`，再把 `sidecar/gamehost/yaagl-wine-shim` 拷到 `wine` 的位置（`src/wine/game-host.ts:77-84`）。本机实测这两个文件都在。之后每次只比较 shim 是否相同。原生 App 必须：发现 `wine-host` 已经存在时，不能再把当前的 `wine`（也就是 shim）当成原始 host；更新 shim 时只覆盖 `wine`。
+- **Game Mode shim**：`prepareGameHost` 第一次运行时把 `wine/lib/wine/x86_64-unix/wine` 改名为 `wine-host`，再把 `sidecar/gamehost/genshin-launcher-wine-shim` 拷到 `wine` 的位置（`src/wine/game-host.ts:77-84`）。本机实测这两个文件都在。之后每次只比较 shim 是否相同。原生 App 必须：发现 `wine-host` 已经存在时，不能再把当前的 `wine`（也就是 shim）当成原始 host；更新 shim 时只覆盖 `wine`。
 - **DXMT**：patch 时把 `dxmt/` 里的 DLL 拷进 `wine/lib/wine/x86_64-windows/`（先备份成 `.bak`），把 `winemetal.so` 拷进 `x86_64-unix/`，把 `winemetal.dll`、`nvngx.dll` 拷进 prefix 的 `system32`（`src/clients/mhy/patch.ts:66-95`）；revert 时把 `.bak` 恢复回来（`src/clients/mhy/patch.ts:159-169`）。
 
 ## 3. 设置存储：Neutralino storage
@@ -112,18 +112,18 @@
 
 ## 4. bundle id、渠道与数据目录
 
-- 渠道在构建时由 `YAAGL_CHANNEL_CLIENT` 决定。它同时决定 bundle id 和发行名（`build-app.js:19-74`）：hk4ecn 是 `com.3shain.yaagl` / `Yaagl`，hk4eos 是 `.os` / `Yaagl OS`，依此类推；`YAAGL_TEST` 会再加 `.test` / ` Test`。
-- **数据目录名来自发行名，不是 bundle id**（`build-app.js:222`）。所以只要发行名还叫 `Yaagl`，改 bundle id 不影响数据目录；反过来，把发行名改成别的就会换到一个新目录。
+- 渠道在构建时由 `GENSHIN_LAUNCHER_CHANNEL_CLIENT` 决定。它同时决定 bundle id 和发行名（`build-app.js:19-74`）：hk4ecn 是 `com.3shain.yaagl` / `Genshin Launcher`，hk4eos 是 `.os` / `Genshin Launcher OS`，依此类推；`GENSHIN_LAUNCHER_TEST` 会再加 `.test` / ` Test`。
+- **数据目录名来自发行名，不是 bundle id**（`build-app.js:222`）。所以只要发行名还叫 `Genshin Launcher`，改 bundle id 不影响数据目录；反过来，把发行名改成别的就会换到一个新目录。
 - bundle id 实际影响的东西：
   - `Info.plist` 的 `CFBundleIdentifier`（`build-app.js:327-328`）；
   - `~/Library/Caches/com.3shain.yaagl`（8.7 MB）和 `~/Library/WebKit/com.3shain.yaagl`：Neutralino 的 WKWebView 缓存。代码不使用 `localStorage` 或 IndexedDB，所以里面没有设置数据；
   - 原生 App 的 `UserDefaults` 域（Sparkle 状态会放在这里）。本机还没有 `~/Library/Preferences/com.3shain.yaagl.plist`，不会冲突；
-  - `YaaglGame.app` 用的是另一个 id `com.3shain.yaagl.game`，而且 codesign 的 identifier 必须与它一致，否则每次 `getaddrinfo` 会卡大约 35 秒（`src/wine/game-host.ts:21,99-102`，`docs/genshin-macos.md:13`）。
-- 结论：沿用 `com.3shain.yaagl` 能让 macOS 把它当作同一个 App 升级（Dock、登录项、隐私授权都保留），但这不是读到数据的前提。数据目录只认 `Yaagl` 这个名字。
+  - `GenshinLauncherGame.app` 用的是另一个 id `com.3shain.yaagl.game`，而且 codesign 的 identifier 必须与它一致，否则每次 `getaddrinfo` 会卡大约 35 秒（`src/wine/game-host.ts:21,99-102`，`docs/genshin-macos.md:13`）。
+- 结论：沿用 `com.3shain.yaagl` 能让 macOS 把它当作同一个 App 升级（Dock、登录项、隐私授权都保留），但这不是读到数据的前提。数据目录只认 `Genshin Launcher` 这个名字。
 
 ## 5. 原生 App 必须满足的契约
 
-1. 数据根目录固定为 `~/Library/Application Support/Yaagl`；App 不开沙盒；子进程的 cwd 设为数据根目录。
+1. 数据根目录固定为 `~/Library/Application Support/Genshin Launcher`；App 不开沙盒；子进程的 cwd 设为数据根目录。
 2. 按第 3 节的格式读写 `.storage/*.neustorage`（原始字符串、文件不存在就用默认值、删除就删文件）。保留所有 key 名和取值，这样用户回退到 TS 版仍然能用。
 3. Wine 发行版列表必须认得现有的 `wine_tag`（至少 `11.0-1-crossover-signed-experimental` 和 hk4ecn 默认的 `11.0-dxmt-signed-with-patches`）。遇到不认识的 tag 时不能照搬 TS 的“删 prefix 重装”（`src/wine/wine-install-program.ts:37`），否则就违反了“不重建 prefix”的决策。
 4. 沿用 `wine/` 和 `wineprefix/`，用 `WINEPREFIX=<root>/wineprefix`。接管 Game Mode shim 时遵守 `wine-host` 规则（第 2 节）。
@@ -145,4 +145,4 @@
 ## 7. 数据目录之外的副作用
 
 - TS 版会用管理员权限改写 `/etc/hosts`（`src/hosts.ts:3-28`，由 `src/wine/wine-install-program.ts:82` 调用）。这不在数据目录里，原生 App 需要决定是否保留这个行为。
-- `YaaglGame.app` 注册在 LaunchServices 里（`src/wine/game-host.ts:115`）。如果原生 App 换了 bundle 的位置或 id，要重新注册。
+- `GenshinLauncherGame.app` 注册在 LaunchServices 里（`src/wine/game-host.ts:115`）。如果原生 App 换了 bundle 的位置或 id，要重新注册。

@@ -1,18 +1,18 @@
 /*
  * Development-only companion of gamehost.dylib, loaded (dlopen) into the game
- * process when YAAGL_GAMEHOST_DEV is set. Used by scripts/dev/yaagl-diag to
+ * process when GENSHIN_LAUNCHER_GAMEHOST_DEV is set. Used by scripts/dev/genshin-launcher-diag to
  * measure the game deterministically without screen capture permissions:
  *
  *  - frame statistics: every -[CAMetalLayer nextDrawable] is timestamped and
  *    intervals are summarised per phase (p50/p99/max, hitches > 50 ms);
- *  - a scripted session (YAAGL_GAMEHOST_DEV=autoplay): click into the
+ *  - a scripted session (GENSHIN_LAUNCHER_GAMEHOST_DEV=autoplay): click into the
  *    window for a minute to enter the game, then time an idle and a
- *    camera-turn phase (length YAAGL_GAMEHOST_TURN seconds)
+ *    camera-turn phase (length GENSHIN_LAUNCHER_GAMEHOST_TURN seconds)
  *    (the turn itself is driven by turner.exe via SendInput);
  *  - screenshots: the previous drawable is copied to a PNG
- *    (YAAGL_GAMEHOST_SHOT_DIR), at the end of each phase;
- *  - a screen check (YAAGL_GAMEHOST_DEV=screen): enter the game, then save
- *    the drawable after each step (see screenCheck). yaagl-diag captures the
+ *    (GENSHIN_LAUNCHER_GAMEHOST_SHOT_DIR), at the end of each phase;
+ *  - a screen check (GENSHIN_LAUNCHER_GAMEHOST_DEV=screen): enter the game, then save
+ *    the drawable after each step (see screenCheck). genshin-launcher-diag captures the
  *    screen at each "shot:" line and compares the two.
  */
 #import <AppKit/AppKit.h>
@@ -133,7 +133,7 @@ static id hookNextDrawable(CAMetalLayer *self, SEL _cmd) {
 }
 
 static void requestShot(const char *name) {
-  const char *dir = getenv("YAAGL_GAMEHOST_SHOT_DIR");
+  const char *dir = getenv("GENSHIN_LAUNCHER_GAMEHOST_SHOT_DIR");
   if (!dir || !*dir) return;
   os_unfair_lock_lock(&frameLock);
   pendingShot = [NSString stringWithFormat:@"%s/%s.png", dir, name];
@@ -173,7 +173,7 @@ static void enterGame(void) {
  * seconds standing still and the turn phase. */
 static void autoplay(void) {
   const double settle = 20, idle = 10;
-  const char *turnEnv = getenv("YAAGL_GAMEHOST_TURN");
+  const char *turnEnv = getenv("GENSHIN_LAUNCHER_GAMEHOST_TURN");
   double turn = turnEnv && *turnEnv ? atof(turnEnv) : 12;
   enterGame();
   double t0 = ENTER_SECONDS + settle;
@@ -191,7 +191,7 @@ static void autoplay(void) {
     resetFrames();
   });
   // The camera is turned from inside Wine by turner.exe (SendInput), started
-  // by yaagl-diag when it sees the "turn phase" line.
+  // by genshin-launcher-diag when it sees the "turn phase" line.
   after(t0 + idle + 1.5 + turn, ^{
     reportFrames("turn");
     requestShot("turn");
@@ -274,7 +274,7 @@ static void screenCheck(void) {
     t += steps[i].settle + 2;
   }
   /* Last, as the game stays in the background after it (an app in the
-   * background may not activate itself): yaagl-diag opens a window of
+   * background may not activate itself): genshin-launcher-diag opens a window of
    * another Wine program at "open-other", checks at the step line that it is
    * on screen and the game below it, then closes it. */
   after(t, ^{ gamehost_say("screen: open-other"); });
@@ -290,7 +290,7 @@ void gamehost_dev_start(void *window) {
   Method m = class_getInstanceMethod([CAMetalLayer class], @selector(nextDrawable));
   if (m) origNextDrawable = method_setImplementation(m, (IMP)hookNextDrawable);
   gamehost_say("dev: frame stats %s", m ? "on" : "unavailable");
-  const char *mode = getenv("YAAGL_GAMEHOST_DEV");
+  const char *mode = getenv("GENSHIN_LAUNCHER_GAMEHOST_DEV");
   if (mode && !strcmp(mode, "autoplay")) autoplay();
   if (mode && !strcmp(mode, "screen")) screenCheck();
 }

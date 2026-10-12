@@ -5,11 +5,11 @@ import TestSupport
 
 @testable import Sophon
 
-/// Read-only checks against the real CN servers. Skipped unless `YAAGL_LIVE=1`; the
+/// Read-only checks against the real CN servers. Skipped unless `GENSHIN_LAUNCHER_LIVE=1`; the
 /// `live-contract` workflow runs them, they are not part of the required `swift` check.
 @Suite(
   .serialized,
-  .enabled(if: ProcessInfo.processInfo.environment["YAAGL_LIVE"] == "1", "set YAAGL_LIVE=1")
+  .enabled(if: ProcessInfo.processInfo.environment["GENSHIN_LAUNCHER_LIVE"] == "1", "set GENSHIN_LAUNCHER_LIVE=1")
 )
 struct SophonLiveContractTests {
   private let api = SophonAPI()

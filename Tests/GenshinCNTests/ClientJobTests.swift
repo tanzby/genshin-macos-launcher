@@ -302,7 +302,7 @@ private func isError(_ error: (any Error)?, _ expected: SophonError) -> Bool {
 
     _ = await rig.run(.update)
 
-    #expect(!rig.exists(".yaagl-tmp/predownload.json"))
+    #expect(!rig.exists(".genshin-launcher-tmp/predownload.json"))
   }
 }
 
@@ -327,7 +327,7 @@ private func isError(_ error: (any Error)?, _ expected: SophonError) -> Bool {
     #expect(rig.configText == config)
     #expect(rig.read("pkg_version") == pkg)
     #expect(!rig.exists("fresh.bin"))
-    #expect(rig.exists(".yaagl-tmp"))
+    #expect(rig.exists(".genshin-launcher-tmp"))
     #expect(try await rig.client.status().localVersion == "5.6.0")
   }
 
