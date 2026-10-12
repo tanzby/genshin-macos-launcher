@@ -25,9 +25,9 @@ fi
 # Sparkle reaches the app through the Updates package product (#87); Xcode must still embed the framework.
 sparkle="$app/Contents/Frameworks/Sparkle.framework"
 codesign --verify --deep --strict "$sparkle" || { echo "missing or badly signed: $sparkle"; fail=1; }
-# Sparkle defaults: check on its own without the first-launch permission prompt, once a day.
 plist="$app/Contents/Info.plist"
 want() { [ "$(/usr/libexec/PlistBuddy -c "Print :$1" "$plist" 2>/dev/null)" = "$2" ] || { echo "Info.plist: $1 must be $2"; fail=1; }; }
+# Sparkle defaults: check on its own without the first-launch permission prompt, once a day.
 want SUEnableAutomaticChecks true
 want SUScheduledCheckInterval 86400
 # Finder shows the localized display name only with this key.
