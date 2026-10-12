@@ -2,7 +2,7 @@ import Foundation
 import Observation
 import Synchronization
 
-// Waiting in tests: never a fixed `Task.sleep` (AGENTS.md); CI runners are slow and uneven.
+// Waiting in tests: never a fixed `Task.sleep` (CODING_STANDARDS.md); CI runners are slow and uneven.
 
 public struct TestTimeout: Error, CustomStringConvertible {
   public var what: String

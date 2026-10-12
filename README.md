@@ -4,20 +4,15 @@ A native macOS (SwiftUI) launcher for Genshin Impact (CN server) on Apple Silico
 
 > **Unofficial.** This project is not affiliated with, endorsed by, or connected to miHoYo / HoYoverse / COGNOSPHERE. "Genshin Impact" is their trademark.
 
-Status: early development. Planning and decisions are tracked on the wayfinder map in this repo's issues; see `docs/adr/` and `docs/research/`.
+Planning happens in this repo's GitHub issues; decisions are in `docs/adr/` and `docs/research/`.
 
 ## Requirements
 
-- macOS 26 or later, Apple Silicon
-- Xcode 26+, `brew install xcodegen`
+- Apple Silicon Mac, macOS 26 or later
 
 ## Build
 
-```bash
-scripts/dev/macos-check
-```
-
-This runs `swift test`, generates `Yaagl.xcodeproj` with XcodeGen and builds the app with `xcodebuild`.
+See `CONTRIBUTING.md` for setup, building and testing.
 
 ## History
 
