@@ -10,11 +10,13 @@ private func snapshot(
   phase: LauncherPhase = .idle, preDownloading: Bool = false, pausing: Bool = false,
   progress: JobProgress? = nil, pending: PendingJob? = nil, error: LauncherError? = nil,
   status: GameStatus? = GameStatus(localVersion: "5.0.0", remoteVersion: "5.0.0"),
-  online: Bool = true, hostsOK: Bool = true
+  online: Bool = true, launchRefusal: LauncherError? = nil, repairRefusal: LauncherError? = nil,
+  preDownloadRefusal: LauncherError? = nil
 ) -> MainSnapshot {
   MainSnapshot(
     phase: phase, isPreDownloading: preDownloading, isPausing: pausing, progress: progress,
-    pendingJob: pending, lastError: error, status: status, isOnline: online, hostsAllowLaunch: hostsOK)
+    pendingJob: pending, lastError: error, status: status, isOnline: online,
+    launchRefusal: launchRefusal, repairRefusal: repairRefusal, preDownloadRefusal: preDownloadRefusal)
 }
 
 @Suite struct APP_017_MainButtonTests {
@@ -77,6 +79,7 @@ private func snapshot(
     let status = GameStatus(
       localVersion: "5.0.0", remoteVersion: "5.0.0", canPreDownload: true, preDownloadVersion: "5.1.0")
     let offer = MainPresentation.derive(snapshot(status: status))
+    #expect(offer.canPreDownload)
     #expect(offer.button == .launch)
     #expect(offer.status == .preDownloadAvailable(version: "5.1.0"))
 
@@ -96,24 +99,8 @@ private func snapshot(
     #expect(failed.status == .error(.client(.network)))
     #expect(failed.canPreDownload)
     let running = MainPresentation.derive(
-      snapshot(phase: .preDownloading, preDownloading: true, status: status))
+      snapshot(phase: .preDownloading, preDownloading: true, status: status, preDownloadRefusal: .busy))
     #expect(!running.canPreDownload)
-    #expect(!MainPresentation.derive(snapshot()).canPreDownload)
-  }
-
-  @Test func APP_015_preDownloadStaysAvailableWhileTheGameStartsOrRuns() {
-    let status = GameStatus(localVersion: "5.0.0", remoteVersion: "5.0.0", canPreDownload: true)
-    for phase in [LauncherPhase.launching, .running] {
-      #expect(MainPresentation.derive(snapshot(phase: phase, status: status)).canPreDownload)
-    }
-    for phase in [LauncherPhase.installing, .updating, .repairing] {
-      #expect(!MainPresentation.derive(snapshot(phase: phase, status: status)).canPreDownload)
-    }
-  }
-
-  @Test func APP_010_preDownloadIsNotOfferedOffline() {
-    let status = GameStatus(localVersion: "5.0.0", remoteVersion: "5.0.0", canPreDownload: true)
-    #expect(!MainPresentation.derive(snapshot(status: status, online: false)).canPreDownload)
   }
 
   @Test func APP_015_aRunningPreDownloadIsReportedAlongsideLaunchingAndRunning() {
@@ -158,13 +145,15 @@ private func snapshot(
   }
 
   @Test func APP_010_offlineDisablesLaunchAndUpdateButKeepsTheKnownState() {
-    let offline = MainPresentation.derive(snapshot(online: false))
+    let offline = MainPresentation.derive(snapshot(online: false, launchRefusal: .offline))
     #expect(offline.button == .launch)
     #expect(!offline.buttonEnabled)
     #expect(offline.status == .offline)
     let update = MainPresentation.derive(
       snapshot(status: GameStatus(localVersion: "5.0.0", remoteVersion: "5.1.0", canUpdate: true), online: false))
     #expect(!update.buttonEnabled)
+    #expect(!MainPresentation.derive(snapshot(online: false, repairRefusal: .offline)).canRepair)
+    #expect(!MainPresentation.derive(snapshot(online: false, preDownloadRefusal: .offline)).canPreDownload)
   }
 
   @Test func APP_010_installIsDisabledWhileOfflineAndNothingIsKnown() {
@@ -180,7 +169,7 @@ private func snapshot(
   }
 
   @Test func APP_017_launchNeedsTheHostsBlocklist() {
-    let p = MainPresentation.derive(snapshot(hostsOK: false))
+    let p = MainPresentation.derive(snapshot(launchRefusal: .hostsRequired))
     #expect(p.button == .launch)
     #expect(!p.buttonEnabled)
     #expect(p.status == .hostsRequired)
@@ -194,7 +183,7 @@ private func snapshot(
   }
 
   @Test func APP_017_wineIsPreparedBeforeAnythingElse() {
-    var s = snapshot(status: nil)
+    var s = snapshot(status: nil, repairRefusal: .wineNotReady)
     s.wineNotReady = true
     let needed = MainPresentation.derive(s)
     #expect(needed.button == .prepareWine)
@@ -224,14 +213,12 @@ private func snapshot(
     #expect(unknown.counts == nil, "an unknown total is not shown as '5 B / 0 B'")
   }
 
-  @Test func APP_017_menuActionsFollowTheState() {
+  @Test func APP_017_menuActionsFollowTheLaunchersAnswer() {
     #expect(MainPresentation.derive(snapshot()).canRepair)
-    #expect(!MainPresentation.derive(snapshot(status: nil)).canRepair)
-    #expect(!MainPresentation.derive(snapshot(phase: .installing)).canRepair)
-    #expect(!MainPresentation.derive(snapshot(phase: .running)).canRepair)
-    let update = GameStatus(localVersion: "5.0.0", remoteVersion: "5.1.0", canUpdate: true)
-    #expect(!MainPresentation.derive(snapshot(status: update)).canRepair)
-    #expect(!MainPresentation.derive(snapshot(online: false)).canRepair, "verifying needs the remote manifest")
+    #expect(!MainPresentation.derive(snapshot(repairRefusal: .notInstalled)).canRepair)
+    #expect(!MainPresentation.derive(snapshot(phase: .installing, repairRefusal: .busy)).canRepair)
+    // A paused job is continued with its own button, not by starting a repair beside it.
+    #expect(!MainPresentation.derive(snapshot(pending: PendingJob(kind: .install))).canRepair)
   }
 }
 

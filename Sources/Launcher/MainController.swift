@@ -1,8 +1,8 @@
 import Foundation
 import Observation
 
-/// Glue between the main window and the models: routes button taps, remembers refused starts, and keeps
-/// the launcher's game directory in step with the settings. Everything with a decision in it lives here or in
+/// Glue between the main window and the models: routes button taps and keeps the launcher's game directory in
+/// step with the settings. Everything with a decision in it lives here or in
 /// `MainPresentation`, so the SwiftUI views stay plain.
 @MainActor @Observable
 public final class MainController {
@@ -10,8 +10,6 @@ public final class MainController {
   public let settings: SettingsModel
   public let onboarding: OnboardingModel
 
-  /// A start the launcher refused (no space, busy, offline…). Job failures live in `launcher.lastError`.
-  package private(set) var actionError: LauncherError?
   /// Set once the first status query has returned, so "offline" is only claimed after a real attempt.
   package private(set) var hasLoaded = false
 
@@ -22,13 +20,14 @@ public final class MainController {
   }
 
   public var presentation: MainPresentation {
-    var snapshot = MainSnapshot(
-      phase: launcher.phase, isPreDownloading: launcher.isPreDownloading, isPausing: launcher.isPausing,
-      progress: launcher.progress, pendingJob: launcher.pendingJob, lastError: launcher.lastError,
-      status: launcher.status, isOnline: launcher.isOnline, hostsAllowLaunch: onboarding.allowsLaunch,
-      hasLoaded: hasLoaded, wineNotReady: launcher.primaryAction == .prepareWine)
-    if let actionError { snapshot.lastError = actionError }
-    return .derive(snapshot)
+    .derive(
+      MainSnapshot(
+        phase: launcher.phase, isPreDownloading: launcher.isPreDownloading, isPausing: launcher.isPausing,
+        progress: launcher.progress, pendingJob: launcher.pendingJob, lastError: launcher.lastError,
+        status: launcher.status, isOnline: launcher.isOnline,
+        launchRefusal: launcher.refusal(for: .launch), repairRefusal: launcher.refusal(for: .start(.repair)),
+        preDownloadRefusal: launcher.refusal(for: .start(.preDownload)), hasLoaded: hasLoaded,
+        wineNotReady: launcher.isWineNotReady))
   }
 
   /// Re-reads everything the window shows. The first call runs the launcher's startup sequence (Wine, then the
@@ -73,9 +72,7 @@ public final class MainController {
       case .prepareWine: try await self.launcher.prepareWine()
       case .install: try await self.launcher.start(.install)
       case .update: try await self.launcher.start(.update)
-      case .launch:
-        guard self.onboarding.allowsLaunch else { return }
-        try await self.launcher.launch()
+      case .launch: try await self.launcher.launch()
       case .pause: await self.launcher.pause()
       case .resume, .retry: try await self.launcher.resume()
       case .pausing, .launching, .running: break
@@ -99,18 +96,16 @@ public final class MainController {
     await run { try await self.launcher.start(.repair) }
   }
 
+  /// Asks for the administrator password, then has the launcher look at `/etc/hosts` again.
+  public func applyHosts() async {
+    await onboarding.applyHosts()
+    launcher.refreshHosts()
+  }
+
+  /// A refusal is already in `launcher.lastError`; the window reads it from there.
   private func run(_ work: () async throws -> Void) async {
-    actionError = nil
     // A folder picked a moment ago has not reached the launcher yet when the install button is tapped right after.
     syncGameDirectory()
-    do {
-      try await work()
-    } catch let error as LauncherError {
-      actionError = error
-    } catch let error as GameClientError {
-      actionError = .client(error)
-    } catch {
-      actionError = .unexpected(String(describing: error))
-    }
+    try? await work()
   }
 }

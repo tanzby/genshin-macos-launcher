@@ -17,14 +17,19 @@ private final class Harness {
   let model: LauncherModel
   let logs: URL
   let log: DiagLog
+  let hosts: FakeHosts
 
-  init(wine wineStatus: WineStatus = .ready, game: GameStatus = GameStatus(localVersion: "5.0.0", remoteVersion: "5.0.0")) {
+  init(
+    wine wineStatus: WineStatus = .ready, game: GameStatus = GameStatus(localVersion: "5.0.0", remoteVersion: "5.0.0"),
+    hosts: FakeHosts = FakeHosts(.current)
+  ) {
+    self.hosts = hosts
     wine = FakeWinePreparer(status: wineStatus)
     fake = FakeGameClient(status: game)
     let directory = temporaryURL("AutoLaunchTests")
     logs = directory.appending(path: "logs")
     log = DiagLog(logsDirectory: logs)
-    model = LauncherModel(client: fake, wine: wine, gameDirectory: directory, chunkTempMargin: 0)
+    model = LauncherModel(client: fake, wine: wine, hosts: hosts, gameDirectory: directory, chunkTempMargin: 0)
   }
 
   var lines: [String] {
@@ -38,7 +43,7 @@ private final class Harness {
 
   func autoLaunch(allowDownload: Bool = true) -> AutoLaunch {
     AutoLaunch(
-      model: model, log: log, pollInterval: .milliseconds(5), progressInterval: .milliseconds(5), allowDownload: allowDownload)
+      model: model, hosts: hosts, log: log, pollInterval: .milliseconds(5), progressInterval: .milliseconds(5), allowDownload: allowDownload)
   }
 }
 
@@ -111,6 +116,36 @@ private final class Harness {
     #expect(await run.value == .ok)
     #expect(h.lines.first == "autolaunch: start")
     #expect(h.lines.last == "autolaunch: result=ok")
+  }
+
+  @Test func APP_020_aMissingHostsBlocklistIsAppliedBeforeLaunching() async throws {
+    let h = Harness(hosts: FakeHosts(.missing))
+    let run = Task { @MainActor in await h.autoLaunch().run() }
+    try await h.fake.nextLaunch()
+    h.fake.fireStarted()
+    h.fake.finishLaunch(.exited)
+    #expect(await run.value == .ok)
+    #expect(h.hosts.applyCalls == 1)
+    #expect(h.lines.contains { $0.hasPrefix("autolaunch: hosts blocklist missing") })
+  }
+
+  @Test func APP_020_aBlocklistThatIsInPlaceIsNotAppliedAgain() async throws {
+    let h = Harness()
+    let run = Task { @MainActor in await h.autoLaunch().run() }
+    try await h.fake.nextLaunch()
+    h.fake.fireStarted()
+    h.fake.finishLaunch(.exited)
+    #expect(await run.value == .ok)
+    #expect(h.hosts.applyCalls == 0)
+  }
+
+  @Test func APP_020_aRefusedHostsApplyEndsWithHostsRequiredAndNeverLaunches() async {
+    let h = Harness(hosts: FakeHosts(.missing, applyError: PasswordCancelled()))
+    let result = await h.autoLaunch().run()
+    #expect(result == .failed("launch hostsRequired"))
+    #expect(h.hosts.applyCalls == 1)
+    #expect(h.fake.launchOptions.isEmpty)
+    #expect(h.lines.last == "autolaunch: result=failed reason=launch hostsRequired")
   }
 
   @Test func APP_020_failedLaunchReportsTheReason() async throws {

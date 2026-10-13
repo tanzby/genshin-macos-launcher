@@ -73,7 +73,7 @@
 | APP-017 | 主按钮的文案与动作 | 改写 | [#21](https://github.com/tanzby/yet-another-anime-game-launcher/issues/21) SwiftUI 主界面 / 设置窗口重新设计 | 组件 |`APP_017_*`（MainPresentationTests、MainControllerTests） |
 | APP-018 | 设置按钮的可见性 | 改写 | [#21](https://github.com/tanzby/yet-another-anime-game-launcher/issues/21) SwiftUI 主界面 / 设置窗口重新设计 | 组件 | `APP_018_*`（AppSourceTests：「⋯」菜单里的设置入口始终可点，启动用设置快照） |
 | APP-019 | 启动器启动时还原残留补丁（init） | 改写 | [#28](https://github.com/tanzby/yet-another-anime-game-launcher/issues/28) B12：启动时 GameSession.recover() 自愈 | 组件 | `APP_019_*`（ClientLaunchTests、LauncherClientHandoffTests；GameSession 侧见 LCH_038）；diag：`genshin-launcher-diag` |
-| APP-020 | GENSHIN_LAUNCHER_AUTOLAUNCH 自动启动 | 改写 | ADR 0002 命令行入口，diag 适配票 | 组件 | `APP_020_*`（AutoLaunchTests）；diag：`genshin-launcher-diag` |
+| APP-020 | GENSHIN_LAUNCHER_AUTOLAUNCH 自动启动 | 改写 | ADR 0002 命令行入口，diag 适配票 | 组件 | `APP_020_*`（AutoLaunchTests；缺 hosts 屏蔽段时先写入再启动，写入被拒则 `hostsRequired` 失败）；diag：`genshin-launcher-diag` |
 | APP-021 | 启动器背景资源 | 改写 | [#21](https://github.com/tanzby/yet-another-anime-game-launcher/issues/21) SwiftUI 主界面 / 设置窗口重新设计 | 组件 |  |
 | APP-022 | 窗口关闭与终止钩子 | 改写 | [#28](https://github.com/tanzby/yet-another-anime-game-launcher/issues/28) C 负面用例 | 组件 | `APP_022_*`（LauncherJobTests：`QuitPlanTests`） |
 | CFG-001 | 设置的持久化存储 | 改写 | [#29](https://github.com/tanzby/yet-another-anime-game-launcher/issues/29)/ADR 0001 | 组件 |`CFG_001_*`（SettingsModelTests） |
@@ -221,7 +221,7 @@
 | WIN-008 | 解压规则 | 照搬 | Wine 运行时行为不变 | 单元 | WineInstallTests、WineInstallResumeTests（失败带 tar/ditto 输出）、SystemProcessRunnerTests |
 | WIN-009 | 向 wine.inf 注入根证书 | 照搬 | [#28](https://github.com/tanzby/yet-another-anime-game-launcher/issues/28) B19 根证书（有意照搬） | diag | WineInfTests、WineInstallTests；diag：`genshin-launcher-diag` |
 | WIN-010 | 移除 quarantine 属性（需要管理员权限） | 改写 | ADR 0001/0002 / [#27](https://github.com/tanzby/yet-another-anime-game-launcher/issues/27) (removexattr 不提权) | diag | `WIN_010_*`（QuarantineTests）；diag：`genshin-launcher-diag` |
-| WIN-011 | 在 /etc/hosts 中维护永久屏蔽段 | 改写 | [#29](https://github.com/tanzby/yet-another-anime-game-launcher/issues/29)/ADR 0001 | diag | `WIN_011_*`（HostsBlocklistTests、TelemetryHostsTests）；真机提权写入由 diag 验收；diag：`genshin-launcher-diag` |
+| WIN-011 | 在 /etc/hosts 中维护永久屏蔽段 | 改写 | [#29](https://github.com/tanzby/yet-another-anime-game-launcher/issues/29)/ADR 0001 | diag | `WIN_011_*`（HostsBlocklistTests、TelemetryHostsTests；没有屏蔽段时拒绝启动归 LauncherAvailabilityTests、MainControllerTests）；真机提权写入由 diag 验收；diag：`genshin-launcher-diag` |
 | WIN-012 | 初始化 prefix | 照搬 | Wine 运行时行为不变 | diag | WineInstallTests（wineboot / winecfg argv 与日志；真机仍走 diag）；diag：`genshin-launcher-diag` |
 | WIN-013 | hk4ecn 不安装 Media Foundation | 作废 | 死/开发便利/无版本选择 UI/空列表 | — |  |
 | WIN-014 | 安装完成后写入状态 | 改写 | [#28](https://github.com/tanzby/yet-another-anime-game-launcher/issues/28) B20：删除 wine_netbiosname、wine_update_url 等死数据；状态由 Wine 目录版本戳推导（ADR 0002） | 单元 | WineInstallTests（版本戳最后写入） |
