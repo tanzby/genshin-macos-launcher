@@ -165,16 +165,15 @@ public struct AutoLaunch {
   /// maintainer's hand-off, see `genshin-launcher-diag`). A refused or failed apply ends the run as `hostsRequired`.
   private func launchApplyingHostsIfNeeded() async throws {
     do {
-      try await model.launch()
-    } catch LauncherError.hostsRequired {
-      guard let hosts else { throw LauncherError.hostsRequired }
-      log.say("autolaunch: hosts blocklist missing, applying (administrator password)")
-      do { try await hosts.apply() } catch {
-        log.say("autolaunch: hosts apply failed: \(error)")
-        throw LauncherError.hostsRequired
-      }
-      try await model.launch()
+      return try await model.launch()
+    } catch LauncherError.hostsRequired {}
+    guard let hosts else { throw LauncherError.hostsRequired }
+    log.say("autolaunch: hosts blocklist missing, applying (administrator password)")
+    do { try await hosts.apply() } catch {
+      log.say("autolaunch: hosts apply failed: \(error)")
+      throw LauncherError.hostsRequired
     }
+    try await model.launch()
   }
 
   private func waitUntilIdle() async {

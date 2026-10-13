@@ -228,8 +228,6 @@ public final class LauncherModel {
     gameDirectory.map { PendingJobStore(gameDirectory: $0) }
   }
 
-  // MARK: Jobs
-
   // MARK: Availability
 
   /// Why `action` may not run now; nil = allowed. The one place that decides this: `start`, `launch`,
@@ -290,10 +288,8 @@ public final class LauncherModel {
   private func recordingFailure<T>(_ work: () async throws -> T) async throws -> T {
     do {
       return try await work()
-    } catch is CancellationError {
-      throw CancellationError()
     } catch {
-      lastError = LauncherError(error)
+      if !(error is CancellationError) { lastError = LauncherError(error) }
       throw error
     }
   }
@@ -452,6 +448,7 @@ public final class LauncherModel {
 
   public func resume() async throws {
     try await recordingFailure {
+      if let refusal = refusal(for: .resume) { throw refusal }
       if isWineMissing { return try await startWinePreparation() }
       guard let pendingJob else { return }
       try await startJob(pendingJob.kind)
