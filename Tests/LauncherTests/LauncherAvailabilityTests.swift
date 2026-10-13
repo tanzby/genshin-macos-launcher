@@ -127,6 +127,21 @@ private func makeModel(
     await model.shutdown()
   }
 
+  @Test func APP_015_preDownloadStaysAllowedWhileTheGameStartsButRepairDoesNot() async throws {
+    let (model, fake, _) = await makeModel(
+      status: GameStatus(localVersion: "5.0.0", remoteVersion: "5.0.0", canPreDownload: true))
+    try await model.launch()
+    try await fake.nextLaunch()
+    #expect(model.phase == .launching)
+    #expect(model.refusal(for: .start(.preDownload)) == nil)
+    #expect(model.refusal(for: .start(.repair)) == .busy)
+    fake.fireStarted()
+    await pollUntil { model.phase == .running }
+    #expect(model.refusal(for: .start(.preDownload)) == nil)
+    #expect(model.refusal(for: .start(.repair)) == .busy)
+    await model.shutdown()
+  }
+
   @Test func APP_013_aRefusedStartIsTheLastErrorAndTheNextGoodStartClearsIt() async throws {
     let (model, fake, _) = await makeModel(status: GameStatus(localVersion: nil, remoteVersion: "5.0.0"))
     await #expect(throws: LauncherError.notInstalled) { try await model.start(.repair) }

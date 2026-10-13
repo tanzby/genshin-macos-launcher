@@ -218,7 +218,7 @@ public final class LauncherModel {
 
   /// Re-reads `/etc/hosts` (no privileges needed). An unreadable file counts as "not in place". Call it after
   /// the blocklist was applied elsewhere.
-  public func refreshHosts() {
+  package func refreshHosts() {
     guard let hosts else { return }
     hostsStatus = try? hosts.status()
     if hostsAllowLaunch, lastError == .hostsRequired { lastError = nil }
