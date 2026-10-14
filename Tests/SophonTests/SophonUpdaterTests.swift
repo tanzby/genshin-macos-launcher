@@ -921,17 +921,6 @@ private func withRig(_ body: (Rig) async throws -> Void) async throws {
     }
   }
 
-  @Test func PRE_001_aCleanedCacheIsNotReportedAsPredownloaded() async throws {
-    try await withRig { rig in
-      try rig.installOldVersion()
-      let plan = try await rig.plan()
-      try await rig.predownload(plan)
-      #expect(SophonUpdater.isPredownloaded(World.target, plan: plan, in: rig.temp))
-      try FileManager.default.removeItem(at: rig.temp.appendingPathComponent("ldiff/\(World.ldiffID)"))
-      #expect(!SophonUpdater.isPredownloaded(World.target, plan: plan, in: rig.temp))
-    }
-  }
-
   @Test func PRE_002_aCachedChunkOfTheRightLengthButWrongContentIsFetchedAgain() async throws {
     try await withRig { rig in
       try rig.installOldVersion()

@@ -81,23 +81,6 @@ package struct SophonUpdater: Sendable {
     return record.complete && record.targetVersion == targetVersion && record.fromVersion == installedVersion
   }
 
-  /// Like `isPredownloaded(_:from:in:)`, and also checks that every ldiff file and chunk `plan` needs is
-  /// still in `tempDirectory` with its size, so a cleaned cache is not reported as done.
-  package static func isPredownloaded(_ targetVersion: String, plan: SophonUpdatePlan, in tempDirectory: URL) -> Bool {
-    guard isPredownloaded(targetVersion, from: plan.fromVersion, in: tempDirectory) else { return false }
-    for ldiff in plan.ldiffs
-    where ldiffDirectory(in: tempDirectory).appending(path: ldiff.id).fileSize != ldiff.size {
-      return false
-    }
-    for file in plan.downloads {
-      let directory = SophonDownloaderLayout.chunkDirectory(for: file.path, in: tempDirectory)
-      for chunk in file.chunks where directory.appending(path: chunk.id).fileSize != Int64(chunk.compressedSize) {
-        return false
-      }
-    }
-    return true
-  }
-
   // MARK: - Plan
 
   /// Decides, file by file, how to get from `installedVersion` to the version of `diff` (UPG-008).
