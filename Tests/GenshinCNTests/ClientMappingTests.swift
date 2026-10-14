@@ -100,17 +100,25 @@ import Testing
     await #expect(throws: SophonError.notInstalled) { for try await _ in second {} }
   }
 
-  @Test func LCH_014_aRepairBringsMovedAsideFilesBackBeforeItTouchesTheNetwork() async throws {
-    let rig = ClientRig()
+  @Test func LCH_014_repairAndUpdateRecoverTheSessionBeforeTheyTouchTheGame() async throws {
+    let rig = ClientRig(branches: ClientRig.branches(main: "5.6.0"))
     rig.install("5.6.0")
-    let crash = "YuanShen_Data/upload_crash.exe"
-    try FileManager.default.moveItem(at: rig.url(crash), to: rig.url(crash + ".bak"))
-    let vulkan = "YuanShen_Data/Plugins/vulkan-1.dll"
-    rig.write(vulkan + ".bak", Data("old".utf8))
 
-    await #expect(throws: GameClientError.network) { for try await _ in rig.client.run(.repair, in: rig.game) {} }
+    // Whatever the job then does with the network, the recovery came first.
+    _ = try? await { for try await _ in rig.client.run(.repair, in: rig.game) {} }()
+    #expect(rig.launcher.recoveries.withLock { $0 } == 1)
+    _ = try? await { for try await _ in rig.client.run(.update, in: rig.game) {} }()
+    #expect(rig.launcher.recoveries.withLock { $0 } == 2)
+  }
 
-    #expect(rig.exists(crash) && !rig.exists(crash + ".bak"))
-    #expect(!rig.exists(vulkan + ".bak"))
+  @Test func LCH_014_installAndPreDownloadLeaveTheSessionAlone() async throws {
+    // The game may be running during a pre-download: recovery would shut its prefix down.
+    let rig = ClientRig(branches: ClientRig.branches(main: "5.6.0", pre: "5.7.0", preFrom: ["5.6.0"]))
+    rig.install("5.6.0")
+
+    _ = try? await { for try await _ in rig.client.run(.preDownload, in: rig.game) {} }()
+    _ = try? await { for try await _ in rig.client.run(.install, in: rig.game) {} }()
+
+    #expect(rig.launcher.recoveries.withLock { $0 } == 0)
   }
 }

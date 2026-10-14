@@ -88,7 +88,7 @@ protocol GameClient: Sendable {
 ## Wine 与启动会话
 
 - `Wine` 对外两个东西。`WineRuntime`（actor）：确保已安装固定版本（Wine 与 DXMT 在同一次安装里一起装好）、重装、prefix 初始化、shutdown。`GameSession`：`launch(recipe:game:)` 一次调用里执行 `LaunchRecipe`：写注册表、Launch Mutations、启动、等待退出、清理。**清理不放 `defer`**：它是异步的（`wineserver -w`、15 秒竞速、`reg delete`），已取消的 Task 里子 await 会立即抛错，所以清理跑在不受取消影响、不抛错的独立上下文里，错误只记日志。
-- **崩溃恢复**：改动前先写 mutations journal（数据目录里的小文件，记录要还原的文件改名和注册表原值），正常还原后删除。`Launcher` 启动时调用 `GameSession.recover()`（见启动顺序）重放 journal，取代 TS 的 `patched` 标记。重放按磁盘的实际状态逐项幂等；`.bak` 已存在时拒绝覆盖，避免干净备份被覆盖；DXMT 不在其中：它在安装 Wine 时一次装好，运行时不注入、不还原，所以没有「崩溃丢原版 DLL」；注册表项记录原值，或「原本不存在」。这样「异常退出时是否撤销 HDR / 分辨率注册表」只是 #28 可以直接选的策略，不再是架构问题。
+- **崩溃恢复**：改动前先写 mutations journal（数据目录里的小文件，记录要还原的文件改名和注册表原值），正常还原后删除。`Launcher` 启动时调用 `GameSession.recover()`（见启动顺序）重放 journal，取代 TS 的 `patched` 标记。重放按磁盘的实际状态逐项幂等；`.bak` 与原文件并存时，原文件优先（修复可能重新下载了原版）：改名前删除过期的 `.bak`，还原时丢弃 `.bak`（架构评审 #6 修订：此前写作「拒绝覆盖」，与代码不符）；journal 是唯一的还原机制，没有按固定文件名扫描 `.bak` 的第二套逻辑；修复/更新前由 `GenshinCNClient` 先调用 `recover()`；DXMT 不在其中：它在安装 Wine 时一次装好，运行时不注入、不还原，所以没有「崩溃丢原版 DLL」；注册表项记录原值，或「原本不存在」。这样「异常退出时是否撤销 HDR / 分辨率注册表」只是 #28 可以直接选的策略，不再是架构问题。
 - Game Mode、全屏、刘海区域全在注入 Wine 的 x86_64 shim 与 dylib 里，Swift 不重写；`Wine` 只负责准备 `GenshinLauncherGame.app`、`codesign`、`LSRegisterURL` 和传四个 `GENSHIN_LAUNCHER_GAME_HOST*` 环境变量。
 
 ## 测试缝

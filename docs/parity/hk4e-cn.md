@@ -139,7 +139,7 @@
 | LCH-011 | Steam patch 启动路径 | 改写 | [#28](https://github.com/tanzby/yet-another-anime-game-launcher/issues/28) B14：启动命令只有 `steam.exe <游戏>`，不带 `-platform_type … -is_cloud 1`、不复制驱动，与 TS 的 Steam patch 路径一致（#57 实测：多这些并无影响，经 `cmd` 才会失败） | diag | GenshinLaunchRecipeTests（启动命令 golden）；真机由 genshin-launcher-diag 的 LCH-006/007 检查 |
 | LCH-012 | 补丁幂等 | 改写 | [#28](https://github.com/tanzby/yet-another-anime-game-launcher/issues/28) B12：启动前准备幂等，.bak 存在则不覆盖 | 单元 | GameSessionMutationTests |
 | LCH-013 | patch-off 只跳过对游戏文件的修改 | 作废 | [#28](https://github.com/tanzby/yet-another-anime-game-launcher/issues/28) A9 删除的开关 | — |  |
-| LCH-014 | CN 版启动前移走三个文件 | 改写 | [#28](https://github.com/tanzby/yet-another-anime-game-launcher/issues/28) B12/A9：补丁永远应用（无 patch-off）；`.bak` 已存在时不覆盖，启动时自愈 | 单元 | GameSessionMutationTests、GenshinLaunchRecipeTests、SophonClientRepairTests（自愈钩子）、ClientJobMappingTests（接线）；diag：`genshin-launcher-diag` |
+| LCH-014 | CN 版启动前移走三个文件 | 改写 | [#28](https://github.com/tanzby/yet-another-anime-game-launcher/issues/28) B12/A9：补丁永远应用（无 patch-off）；原文件与 `.bak` 并存时原文件优先；只由 mutations journal 还原（`recover()`，启动与修复/更新前） | 单元 | GameSessionMutationTests、GenshinLaunchRecipeTests、ClientMappingTests（修复/更新前 recover）；diag：`genshin-launcher-diag` |
 | LCH-015 | workaround3 对 hk4ecn 无效果 | 作废 | [#28](https://github.com/tanzby/yet-another-anime-game-launcher/issues/28) A9 删除的开关 | — |  |
 | LCH-016 | 差分补丁和新增文件机制（CN 下列表为空） | 作废 | 死/开发便利/无版本选择 UI/空列表 | — |  |
 | LCH-017 | ReShade 注入游戏目录 | 作废 | [#28](https://github.com/tanzby/yet-another-anime-game-launcher/issues/28) A7 删 ReShade（ADR 0002 已按此修订） | — |  |

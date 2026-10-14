@@ -117,32 +117,6 @@ private func isError(_ error: (any Error)?, _ expected: SophonError) -> Bool {
     #expect(rig.exists("YuanShen_Data/StreamingAssets/AudioAssets/English(US)/voice.pck"))
   }
 
-  @Test func LCH_014_repairAndUpdateHealMovedAsideFilesOnlyOnceTheInstallIsKnown() async throws {
-    let release = FakeRelease.game("5.6.0")
-    let rig = SophonRig(main: release)
-
-    _ = await rig.run(.repair)  // nothing installed yet: refused before the game is touched
-    #expect(rig.healed.directories.withLock { $0 }.isEmpty)
-
-    rig.install(release)
-    _ = await rig.run(.repair)
-    _ = await rig.run(.update)  // already current: still healed first, then refused (UPG-006)
-
-    #expect(rig.healed.directories.withLock { $0 } == [rig.game, rig.game])
-  }
-
-  @Test func LCH_014_installAndPreDownloadLeaveTheMovedAsideFilesAlone() async throws {
-    let pre = FakeRelease.game("5.7.0", diffTags: ["5.6.0"])
-    let rig = SophonRig(main: .game("5.6.0"), pre: pre)
-    rig.cdn.setDeletions(from: "5.6.0", [:])
-
-    _ = await rig.run(.install)
-    // The game may be running, with files legitimately aside.
-    _ = await rig.run(.preDownload)
-
-    #expect(rig.healed.directories.withLock { $0 }.isEmpty)
-  }
-
   @Test func INS_016_legacyTemporaryFoldersGoWhenAJobStarts() async throws {
     let release = FakeRelease.game("5.6.0")
     let rig = SophonRig(main: release)

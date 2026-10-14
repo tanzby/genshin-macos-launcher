@@ -1,9 +1,6 @@
 import Foundation
 import Launcher
 import Sophon
-import os
-
-let log = Logger(subsystem: "io.github.tanzby.genshin-launcher", category: "genshin")
 
 public enum GenshinCN {
   package static let channel = "hk4ecn"
@@ -21,6 +18,5 @@ public enum GenshinCN {
     executableName: executableName,
     // Bilibili builds carry PCGameSDK.dll; only the China official release is supported.
     foreignBuildMarkers: ["YuanShen_Data/Plugins/PCGameSDK.dll"],
-    tempDirectoryName: PendingJobStore.directoryName,
-    healBackups: { GenshinGameFiles.healBackups(in: $0) })
+    tempDirectoryName: PendingJobStore.directoryName)
 }

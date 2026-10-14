@@ -84,7 +84,6 @@ package struct SophonClient: Sendable {
 
   private func repair(in directory: URL, progress: @escaping @Sendable (SophonProgress) -> Void) async throws {
     let installed = try installedVersion(in: directory)
-    game.healBackups(directory)
     let (main, ref, manifest) = try await mainReleaseWithManifest()
     guard installed == main.tag else { throw SophonError.outdated(installed: installed, latest: main.tag) }
     let damaged = try await downloader.findDamagedFiles(in: manifest.files, gameDirectory: directory, progress: progress)
@@ -97,7 +96,6 @@ package struct SophonClient: Sendable {
 
   private func update(in directory: URL, progress: @escaping @Sendable (SophonProgress) -> Void) async throws {
     let installed = try installedVersion(in: directory)
-    game.healBackups(directory)
     let (main, ref) = try await mainRelease()
     guard SophonVersion.isOlder(installed, than: main.tag) else { throw SophonError.noUpdate }
     let temp = installation.tempDirectory(in: directory)

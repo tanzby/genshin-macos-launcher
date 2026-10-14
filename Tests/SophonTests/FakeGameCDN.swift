@@ -75,11 +75,10 @@ final class FakeGameCDN: @unchecked Sendable {
   static let endpoints = SophonEndpoints(
     hypConnectBase: URL(string: hyp)!, downloaderBase: URL(string: downloader)!, gameID: "game", launcherID: "launcher")
   /// A game named like the one the fake releases hold, so `SophonGame` is exercised with real-looking names.
-  static func game(healBackups: @escaping @Sendable (URL) -> Void = { _ in }) -> SophonGame {
+  static func game() -> SophonGame {
     SophonGame(
       endpoints: endpoints, dataFolder: "YuanShen_Data", executableName: "YuanShen.exe",
-      foreignBuildMarkers: ["YuanShen_Data/Plugins/PCGameSDK.dll"], tempDirectoryName: ".genshin-launcher-tmp",
-      healBackups: healBackups)
+      foreignBuildMarkers: ["YuanShen_Data/Plugins/PCGameSDK.dll"], tempDirectoryName: ".genshin-launcher-tmp")
   }
 
   private let lock = NSLock()
