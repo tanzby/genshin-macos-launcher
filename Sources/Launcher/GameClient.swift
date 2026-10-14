@@ -107,7 +107,9 @@ public enum GameClientError: Error, Sendable, Equatable {
 public protocol GameClient: Sendable {
   /// `directory` is the Game Directory, `nil` when none is chosen yet: the remote state is still reported.
   func status(in directory: URL?) async throws -> GameStatus
-  func run(_ job: GameJob, in directory: URL) -> AsyncThrowingStream<JobProgress, Error>
+  /// Runs `job` and returns once all its work has stopped: when it is done, when it fails, or after a cancellation
+  /// (throwing `CancellationError`). `progress` may be called from any thread until then.
+  func run(_ job: GameJob, in directory: URL, progress: @escaping @Sendable (JobProgress) -> Void) async throws
   /// Bytes the job will write after decompression, excluding the chunk-cache margin the launcher adds.
   /// Install: unpacked total. Update and pre-download: download size plus new files. 0 when nothing is written.
   /// This is the launcher's preflight, run before it writes anything, so it also refuses a folder the job could
@@ -118,9 +120,6 @@ public protocol GameClient: Sendable {
   /// Cancellation does the same cleanup before returning.
   func launch(_ options: LaunchOptions, onStarted: @escaping @Sendable () -> Void) async throws -> LaunchOutcome
   func backgroundImage() async -> BackgroundImage
-  /// Returns once nothing the client started is still running. A job's stream ends as soon as its consumer is
-  /// cancelled; this is how the launcher learns the work behind it has really stopped (pause, shutdown).
-  func quiesce() async
   /// Opens an interactive Wine command prompt with the environment of a launch with `options` (CFG-032).
   /// Returns when the prompt is closed.
   func openWineCommandPrompt(_ options: LaunchOptions) async
@@ -128,5 +127,4 @@ public protocol GameClient: Sendable {
 
 extension GameClient {
   public func openWineCommandPrompt(_ options: LaunchOptions) async {}
-  public func quiesce() async {}
 }

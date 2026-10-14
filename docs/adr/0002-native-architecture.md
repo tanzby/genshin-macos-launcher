@@ -39,7 +39,7 @@ x86_64 helper（XcodeGen target，放进 Contents/Helpers/）: GenshinLauncherWi
 protocol GameClient: Sendable {
   func status(in directory: URL?) async throws -> GameStatus     // 本地版本、远端版本、可更新、可预下载；离线时 remoteVersion 为 nil
   func requiredDiskSpace(for job: GameJob, in directory: URL) async throws -> Int64 // 解压后要写入的字节数；Launcher 加余量后与剩余空间比较
-  func run(_ job: GameJob, in directory: URL) -> AsyncThrowingStream<JobProgress, Error>   // install / update / preDownload / repair
+  func run(_ job: GameJob, in directory: URL, progress: @escaping @Sendable (JobProgress) -> Void) async throws   // install / update / preDownload / repair
   func launch(_ options: LaunchOptions, onStarted: @escaping @Sendable () -> Void) async throws -> LaunchOutcome
   func backgroundImage() async -> BackgroundImage                // 失败不致命，返回内置默认图
 }
@@ -63,12 +63,12 @@ protocol GameClient: Sendable {
 ## 暂停、继续与进度
 
 - **暂停 = 取消 Task，继续 = 用同样参数重跑同一个操作。** 每个 Sophon 操作幂等。断点就是磁盘上已有的东西：完整 chunk 缓存、已校验的文件、已下完的 ldiff。不维护 chunk 级进度日志，继续时开头有一次磁盘扫描，是接受的代价。唯一持久化的是「有一个未完成作业（种类 + 目标版本）」，存在 `<game>/.genshin-launcher-tmp/job.json`，重启后主按钮据此显示「继续」。
-- **取消必须等停稳。** `JobCoordinator` 持有作业的 Task：暂停是 cancel 之后 `await task.value`，作业真正停下后才允许重跑，等待期间 UI 显示「正在暂停…」。`AsyncThrowingStream` 用 `onTermination` 取消内部 Task。zstd 解压、MD5、HDiffPatch 是阻塞的 C 调用，不占协作线程池，放在专用队列执行；在文件边界和 HPatch 输入流的读回调处检查取消（读回调能否作为中断点，由 Sophon 实现票验证）。
+- **取消必须等停稳。** `JobCoordinator` 持有作业的 Task：暂停是 cancel 之后 `await task.value`，作业真正停下后才允许重跑，等待期间 UI 显示「正在暂停…」。作业在槽位的 Task 里直接 `await client.run(...)`（修订，跨模块整理 2026-10-15：此前 `run` 返回流，靠 `onTermination`、`quiesce()` 与 `JobSerializer` 补偿「流结束了但工作还在跑」；现在取消是结构化的，`run` 返回即工作已停）。zstd 解压、MD5、HDiffPatch 是阻塞的 C 调用，不占协作线程池，放在专用队列执行；在文件边界和 HPatch 输入流的读回调处检查取消（读回调能否作为中断点，由 Sophon 实现票验证）。
 - **「已完成」的判据**：续传时，目标文件大小一致即跳过（与 TS 一致）；整文件 MD5 只在 `repair(reliable)` 做。`config.ini` 的版本号在下完并校验之后才写。
 - **安装的前置条件**：目录为空，或只含 `.genshin-launcher-tmp`（带 `job.json`）和中断安装留下的半成品。TS 的「必须为空」与幂等重跑冲突，因此放宽。
 - **Wine 准备不是持久化的 Pending Job。** 它发生在游戏目录存在之前，状态由 `<data>/wine/` 的版本戳推导：版本戳缺失或与固定版本不一致，就重新准备（下载走 `Downloader` 的 Range 续传，半成品留在 `<destination>.part`）。只有游戏作业（install、update、preDownload、repair）写 `job.json`。`LauncherModel` 通过 `WinePreparing` 缝（生产实现 `WineRuntime`，测试用 Fake）把它接进状态机：`LauncherPhase.preparingWine` 占用独占槽，暂停 = 取消并等停稳，出错回空闲、`primaryAction == .prepareWine`、可重试；Wine 未就绪时 install、update、repair、预下载和启动都返回 `wineNotReady`。`bootstrap()` 按启动顺序先准备 Wine，就绪后才读取游戏状态。
 - **长作业与睡眠**：下载、更新、修复期间持有 `ProcessInfo.beginActivity`，避免 App Nap 和空闲睡眠打断。
-- **进度**：`Sophon` 对外只暴露收窄枚举 `SophonProgress`（`preparing`、`downloading(done,total)`、`verifying(done,total)`、`patching(done,total)`、`finalizing`）。操作形状是 `SophonClient.run(_:in:progress:) async throws`（修订，架构评审 2026-10-14：不返回流，进度走闭包；排队与流在 `GenshinCNClient` 里，它把闭包接到 `AsyncThrowingStream<JobProgress, Error>`，并串行化作业），取消语义见下。生产端限流，每秒最多 4 条。速度和剩余时间由 `Launcher` 用滑动窗口计算，`Sophon` 不算。`Platform` 的下载（Wine 与 DXMT）有自己的进度类型，`Launcher` 把它们和 `SophonProgress` 一起映射成统一的 `JobProgress`。
+- **进度**：`Sophon` 对外只暴露收窄枚举 `SophonProgress`（`preparing`、`downloading(done,total)`、`verifying(done,total)`、`patching(done,total)`、`finalizing`）。操作形状是 `SophonClient.run(_:in:progress:) async throws`（修订，架构评审 2026-10-14：不返回流，进度走闭包；`GameClient.run` 同样形状，`GenshinCNClient` 只把 `SophonProgress` 映射成 `JobProgress`，作业的先后由 `JobCoordinator` 的槽位决定），取消语义见下。生产端限流，每秒最多 4 条。速度和剩余时间由 `Launcher` 用滑动窗口计算，`Sophon` 不算。`Platform` 的下载（Wine 与 DXMT）有自己的进度类型，`Launcher` 把它们和 `SophonProgress` 一起映射成统一的 `JobProgress`。
 - **Sophon 接口**（修订，架构评审 2026-10-14）：`SophonClient` 是 Sophon 的唯一入口，端到端持有 Job。`status(in:) -> SophonStatus`（已装版本、最新版本、可更新、预下载版本、可预下载；分支为 null 的预下载是 `nil`，不是异常；离线时远端为空）、`requiredDiskSpace(for:in:)`、`run(_:in:progress:)`。install / update / repair / preDownload 的顺序（INS-006 等）、ldiff 与整体同步的分支、「已预下载」的判定都只在这里写一次；一个 `SophonDownloader` 由 `SophonUpdater` 共用。游戏相关的事实由调用方以值类型 `SophonGame` 传入（端点与 game_id、数据目录名、可执行文件名、外服构建标记如 `PCGameSDK.dll`、临时目录名，以及启动移走文件的自愈钩子），Sophon 里没有任何 `YuanShen` 字样；`GenshinCN` 从自己的常量构造它。原先的 `SophonClient` 协议、`onlineInfo()` 与 `SophonOnlineInfo` 删除（只有测试用到）。已装版本检测（`globalgamemanagers` 正则与 `config.ini` 取较小值）也在 `Sophon`，因为 `config.ini` 由它写。
 - **临时目录**：`<game>/.genshin-launcher-tmp`（名字只在 `Launcher` 的 `PendingJobStore.directoryName` 定义一处，`GenshinCN` 把它放进 `SophonGame`；`Sophon` 不依赖 `Launcher`。内容：chunk 缓存、ldiff、组装中文件、`job.json`）。放在游戏目录内，是因为游戏目录可能在外置盘，只有同卷才能原子 rename 移入。TS 的位置也是游戏目录内（`.tmp`、`ldiff`），这里换新名字，并在 Sophon 首次运行时删掉遗留的 `<game>/.tmp` 和 `<game>/ldiff`，但只在该目录里存在 `config.ini` 或 `YuanShen.exe`（即确认是游戏目录）时才删。文件名用完整相对路径，修掉 TS 里按 basename 命名导致撞名的问题。
 

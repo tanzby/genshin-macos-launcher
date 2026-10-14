@@ -316,22 +316,21 @@ public final class LauncherModel {
     lastError = nil
     let (ready, readySink) = AsyncThrowingStream<Void, Error>.makeStream()
     let body: @MainActor () async -> Void = {
-      let stream: AsyncThrowingStream<JobProgress, Error>
       do {
         try await preflight()
-        stream = try self.begin(job, store: store)
+        try self.begin(job, store: store)
       } catch {
         readySink.finish(throwing: error)
         return
       }
       readySink.finish()
-      await self.drive(job, stream: stream, store: store)
+      await self.drive(job, store: store)
     }
     if job == .preDownload { jobs.startPreDownload(body: body) } else { jobs.startExclusive(job.exclusivePhase, body: body) }
     do { for try await _ in ready {} } catch is CancellationError { return }  // paused before the job began
   }
 
-  private func begin(_ job: GameJob, store: PendingJobStore) throws -> AsyncThrowingStream<JobProgress, Error> {
+  private func begin(_ job: GameJob, store: PendingJobStore) throws {
     let pending = PendingJob(kind: job, targetVersion: job == .preDownload ? status?.preDownloadTarget : status?.remoteVersion)
     // A pre-download must not replace the marker of an unfinished install/update/repair: that one blocks launch.
     if !Self.leavesMarkerAlone(job, store: store) {
@@ -340,22 +339,19 @@ public final class LauncherModel {
       pendingJob = pending
     }
     progress = .preparing
-    return client.run(job, in: store.gameDirectory)
   }
 
-  private func drive(
-    _ job: GameJob, stream: AsyncThrowingStream<JobProgress, Error>, store: PendingJobStore
-  ) async {
+  /// Runs the job in this (the slot's) Task, so cancelling the slot cancels the work and awaiting the slot waits for it.
+  private func drive(_ job: GameJob, store: PendingJobStore) async {
     let activity = ProcessInfo.processInfo.beginActivity(
       options: [.userInitiated, .idleSystemSleepDisabled], reason: "Genshin Launcher game job")
-    var failure: Error?
-    do {
-      for try await update in stream { progress = update }
-    } catch {
-      failure = error
-    }
-    // An AsyncThrowingStream iteration may end normally on cancellation, so classify by cancellation state.
-    let paused = Task.isCancelled || failure is CancellationError || (failure as? GameClientError) == .cancelled
+    // Progress arrives on worker threads. One ordered stream brings it to the main actor, and it ends when the job
+    // returns, so no late update can land after the final state below.
+    let (updates, sink) = AsyncStream<JobProgress>.makeStream(bufferingPolicy: .bufferingNewest(1))
+    async let outcome = Self.run(job, client: client, in: store.gameDirectory, progress: sink)
+    for await update in updates { progress = update }
+    let failure = await outcome
+    let paused = Task.isCancelled || failure is CancellationError
     if paused {
       // Keep job.json: the job is resumable.
     } else if let failure {
@@ -381,20 +377,26 @@ public final class LauncherModel {
     progress = nil
   }
 
+  /// The job's error, `nil` when it finished. Ends `progress` either way.
+  private nonisolated static func run(
+    _ job: GameJob, client: any GameClient, in directory: URL, progress: AsyncStream<JobProgress>.Continuation
+  ) async -> (any Error)? {
+    defer { progress.finish() }
+    do {
+      try await client.run(job, in: directory) { progress.yield($0) }
+      return nil
+    } catch {
+      return error
+    }
+  }
+
   /// A pre-download running beside an unfinished install/update/repair neither writes nor clears its marker.
   private static func leavesMarkerAlone(_ job: GameJob, store: PendingJobStore) -> Bool {
     job == .preDownload && store.load()?.blocksLaunch == true
   }
 
-  /// Cancels the chosen slots' Tasks, returns once all of them have stopped and the client is quiet.
-  private func cancelAndWait(exclusive: Bool, preDownload: Bool) async {
-    await jobs.cancelAndWait(exclusive: exclusive, preDownload: preDownload)
-    // The streams are over, but the work behind them may still be finishing a file.
-    await client.quiesce()
-  }
-
   private func stopPreDownload() async {
-    await cancelAndWait(exclusive: false, preDownload: true)
+    await jobs.cancelAndWait(exclusive: false, preDownload: true)
   }
 
   private func checkDiskSpace(for job: GameJob, in directory: URL) async throws {
@@ -415,7 +417,7 @@ public final class LauncherModel {
     let exclusivePause = pausable.contains(jobs.exclusive)
     guard jobs.isHolding(exclusive: exclusivePause) else { return }
     isPausing = true
-    await cancelAndWait(exclusive: exclusivePause, preDownload: !exclusivePause)
+    await jobs.cancelAndWait(exclusive: exclusivePause, preDownload: !exclusivePause)
     isPausing = false
   }
 
@@ -451,7 +453,7 @@ public final class LauncherModel {
     isShuttingDown = true  // before the first suspension, so nothing new can start while we wait
     launchWork?.cancel()
     statusRead?.cancel()
-    await cancelAndWait(exclusive: true, preDownload: true)
+    await jobs.cancelAndWait(exclusive: true, preDownload: true)
     // The recovery is cleanup (kills the prefix, replays the journal): never cancel it, but do not quit mid-way.
     await recovery?.value
   }

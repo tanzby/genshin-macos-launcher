@@ -15,15 +15,14 @@ extension GameSession: GameLaunching {}
 
 /// Composes Sophon, Wine and Platform into the `GameClient` for Genshin Impact, China server.
 ///
-/// The client holds no game folder: each operation gets it as a parameter. `run(_:in:)` jobs are serialized: a job starts only after the
-/// previous one, paused or not, has really returned.
+/// The client holds no game folder: each operation gets it as a parameter. It does not order jobs: the launcher's job
+/// slots do (`JobCoordinator`), and `run` returns only after its work has stopped.
 public final class GenshinCNClient: GameClient {
   let dataDirectory: URL
   let protonExtras: URL
   let launcher: any GameLaunching
   let sophon: SophonClient
   let background: BackgroundImageProvider?
-  let serializer = JobSerializer()
 
   package init(
     dataDirectory: URL,
@@ -73,8 +72,6 @@ public final class GenshinCNClient: GameClient {
 
   /// `GameSession.recover()` for the launcher's startup sequence (`StartupSteps.recoverSession`).
   public func recover() async { await launcher.recover() }
-
-  public func quiesce() async { await serializer.waitUntilIdle() }
 
   // MARK: - Status
 

@@ -201,10 +201,10 @@ private func jobJSON(kind: String, target: String? = nil, extra: String = "") ->
     }
   }
 
-  @Test func APP_013_clientCancelledErrorCountsAsPauseNotError() async throws {
+  @Test func APP_013_aRunThatThrowsCancellationCountsAsPauseNotError() async throws {
     let h = await Harness(status: Status.notInstalled)
     let index = try await h.begin(.install)
-    h.fake.finish(run: index, throwing: GameClientError.cancelled)
+    h.fake.finish(run: index, throwing: CancellationError())
     await h.model.waitUntilIdle()
 
     #expect(h.model.phase == .idle)
