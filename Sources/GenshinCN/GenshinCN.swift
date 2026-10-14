@@ -3,7 +3,6 @@ import Launcher
 import Sophon
 
 public enum GenshinCN {
-  package static let channel = "hk4ecn"
   public static let executableName = "YuanShen.exe"
 
   /// What Sophon needs to know about Genshin Impact, CN server. The ids are public identifiers (from

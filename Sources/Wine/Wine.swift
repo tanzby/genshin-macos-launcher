@@ -45,19 +45,11 @@ public actor WineRuntime {
   public nonisolated var runtimeDirectory: URL { layout.runtimeDirectory }
   public nonisolated var prefixDirectory: URL { layout.prefixDirectory }
 
-  /// The DXMT build in the app, if it has one.
-  package nonisolated var bundledDXMT: DXMTBundle? { dxmt }
-
-  /// Whether the pinned Wine and the app's DXMT are installed and intact. Looks at the disk, not just the stamp.
-  public func status() -> WineStatus {
-    currentStatus()
-  }
-
   /// Installs Wine + DXMT + prefix when `status()` is not `.ready`; when only DXMT is outdated (an app update
   /// brought a newer one) it just copies the new files. Concurrent callers share one install.
   public func ensureInstalled(progress: @escaping @Sendable (WineInstallProgress) -> Void = { _ in }) async throws {
     if installation == nil {
-      switch currentStatus() {
+      switch status() {
       case .ready: return
       case .needsInstall(.dxmtOutdated): return try await runRefresh(progress: progress)
       case .needsInstall: break

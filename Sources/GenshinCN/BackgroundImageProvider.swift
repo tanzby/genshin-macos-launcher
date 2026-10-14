@@ -2,15 +2,15 @@ import CryptoKit
 import Foundation
 import ImageIO
 import Launcher
+import Sophon
 
 /// Fetches the official launcher background (APP-021) and keeps one copy in the data directory.
 /// Never throws: any failure yields the last cached image, or `.bundledDefault` when there is none.
 /// The static image only; the video the same entry carries is not played (old repo #30).
 package struct BackgroundImageProvider: Sendable {
-  package static let infoURL = URL(
-    string: "https://hyp-api.mihoyo.com/hyp/hyp-connect/api/getAllGameBasicInfo")!
+  package static let infoURL = GenshinCN.sophonGame.endpoints.hypConnectBase.appending(path: "getAllGameBasicInfo")
   static let biz = "hk4e_cn"
-  static let launcherID = "jGHBHlcOq1"
+  static let launcherID = GenshinCN.sophonGame.endpoints.launcherID
   static let language = "zh-cn"
   static let requestTimeout: TimeInterval = 15
 

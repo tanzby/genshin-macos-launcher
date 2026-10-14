@@ -5,7 +5,6 @@ import SwiftUI
 
 struct MainView: View {
   @Environment(MainController.self) private var controller
-  @Environment(ProgressMeter.self) private var meter
   let notifier: EventNotifier
   /// `--autolaunch` drives the launcher itself (APP-020); the window must not start Wine preparation in parallel.
   let drivenByAutoLaunch: Bool

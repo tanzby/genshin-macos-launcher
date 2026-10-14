@@ -93,8 +93,7 @@ package struct SophonAPI: Sendable {
     do {
       (data, response) = try await session.data(for: request)
     } catch let error as URLError {
-      if error.code == .cancelled { throw CancellationError() }
-      throw SophonError.transport(code: error.code.rawValue)
+      throw SophonError.from(error)
     }
     guard let http = response as? HTTPURLResponse else { throw SophonError.malformedResponse }
     guard http.statusCode == 200 else { throw SophonError.http(status: http.statusCode) }

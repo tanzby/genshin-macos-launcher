@@ -33,7 +33,7 @@ package struct SophonUpdatePlan: Sendable, Equatable {
 
   /// Compressed bytes of every chunk of the files in `downloads`.
   package var chunkSize: Int64 {
-    downloads.reduce(Int64(0)) { sum, file in file.chunks.reduce(sum) { $0 + Int64($1.compressedSize) } }
+    downloads.reduce(Int64(0)) { $0 + SophonManifestValidator.compressedSize(of: $1) }
   }
 
   /// Nothing to download or patch (deletions may still be left).
@@ -89,10 +89,8 @@ package struct SophonUpdater: Sendable {
     where ldiffDirectory(in: tempDirectory).appending(path: ldiff.id).fileSize != ldiff.size {
       return false
     }
-    let chunkRoot = tempDirectory.appending(path: "chunks", directoryHint: .isDirectory)
     for file in plan.downloads {
-      let directory = chunkRoot.appending(
-        path: SophonDownloaderLayout.fileKey(for: file.path), directoryHint: .isDirectory)
+      let directory = SophonDownloaderLayout.chunkDirectory(for: file.path, in: tempDirectory)
       for chunk in file.chunks where directory.appending(path: chunk.id).fileSize != Int64(chunk.compressedSize) {
         return false
       }
@@ -172,10 +170,18 @@ package struct SophonUpdater: Sendable {
     // A deletion names a file. One that is a folder holding new files would wipe them (and `removeItem`
     // is recursive), so a hostile manifest is refused before the first request.
     let caseSensitive = Self.isCaseSensitive(gameDirectory)
-    let newPaths = try diff.files.map { try Self.key($0.path, in: gameDirectory, caseSensitive: caseSensitive) }
+    var newFolders = Set<String>()
+    for file in diff.files {
+      var path = try Self.key(file.path, in: gameDirectory, caseSensitive: caseSensitive)[...]
+      // Every ancestor of a seen folder is already in the set.
+      while let slash = path.lastIndex(of: "/") {
+        path = path[..<slash]
+        guard newFolders.insert(String(path)).inserted else { break }
+      }
+    }
     for deleted in diff.deletions[installedVersion] ?? [] {
       let folder = try Self.key(deleted.path, in: gameDirectory, caseSensitive: caseSensitive)
-      if newPaths.contains(where: { $0.hasPrefix(folder + "/") }) {
+      if newFolders.contains(folder) {
         throw SophonError.invalidManifest("\(deleted.path) is a folder of the new version")
       }
     }
@@ -230,11 +236,13 @@ package struct SophonUpdater: Sendable {
     var seenNew = Set<String>()
     let uniqueNew = newFiles.filter { seenNew.insert($0.path).inserted }
     let destinations = try uniqueNew.map { ($0, try SophonPathPolicy.resolve($0.path, in: gameDirectory)) }
-    let missing: [SophonFile] = try await Offload.run { cancelled in
-      try destinations.filter { file, url in
-        !(try Self.matches(url, size: file.size, md5: file.md5, cancelled: cancelled))
-      }.map(\.0)
-    }
+    let missing: [SophonFile] = try await mapBounded(destinations, limit: SophonDownloaderLayout.verifyWorkers) {
+      item -> SophonFile? in
+      let (file, url) = item
+      return try await Offload.run { cancelled in
+        try Self.matches(url, size: file.size, md5: file.md5, cancelled: cancelled) ? nil : file
+      }
+    }.compactMap { $0 }
     try Self.validate(patches: patches)
     return SophonUpdatePlan(
       fromVersion: installedVersion, patches: patches, downloads: downloads + missing,
@@ -261,7 +269,7 @@ package struct SophonUpdater: Sendable {
     if let record = SophonPredownloadRecord.read(from: tempDirectory), record.targetVersion != targetVersion {
       // Data of an older target is useless now; the same target keeps what it has (resume).
       try? fileManager.removeItem(at: Self.ldiffDirectory(in: tempDirectory))
-      try? fileManager.removeItem(at: tempDirectory.appending(path: "chunks", directoryHint: .isDirectory))
+      try? fileManager.removeItem(at: SophonDownloaderLayout.chunkRoot(in: tempDirectory))
     }
     try SophonPredownloadRecord(targetVersion: targetVersion, fromVersion: plan.fromVersion, complete: false)
       .write(to: tempDirectory)

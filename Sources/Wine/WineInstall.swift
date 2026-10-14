@@ -94,8 +94,10 @@ public struct WineLayout: Sendable, Equatable {
     self.root = root
   }
 
-  public var runtimeDirectory: URL { root.appending(path: "wine", directoryHint: .isDirectory) }
-  public var prefixDirectory: URL { root.appending(path: "wineprefix", directoryHint: .isDirectory) }
+  /// The data-directory entries are named once, in `DataDirectory`.
+  private var dataDirectory: DataDirectory { DataDirectory(root: root) }
+  public var runtimeDirectory: URL { dataDirectory.wine }
+  public var prefixDirectory: URL { dataDirectory.winePrefix }
   package var stampFile: URL { runtimeDirectory.appending(path: ".genshin-launcher-wine-stamp.json", directoryHint: .notDirectory) }
   public var wineserver: URL { runtimeDirectory.appending(path: "bin/wineserver", directoryHint: .notDirectory) }
   package var windowsLibraryDirectory: URL {
@@ -112,7 +114,7 @@ public struct WineLayout: Sendable, Equatable {
 
   /// Written by `GameSession` before it mutates anything; deleted after the restore. Its presence means a crash.
   package var launchJournal: URL { root.appending(path: "launch-journal.json", directoryHint: .notDirectory) }
-  public var logsDirectory: URL { root.appending(path: "logs", directoryHint: .isDirectory) }
+  public var logsDirectory: URL { dataDirectory.logs }
   package var gameHostApp: URL { root.appending(path: "GenshinLauncherGame.app", directoryHint: .isDirectory) }
   /// `lib/wine/x86_64-unix/wine`: Wine execs this for every new Windows process. The Game Mode shim replaces it.
   package var unixWine: URL { unixLibraryDirectory.appending(path: "wine", directoryHint: .notDirectory) }

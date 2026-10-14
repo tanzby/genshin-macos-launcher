@@ -10,12 +10,12 @@ struct FileWorker: Sendable {
   let gameDirectory: URL
   let tempDirectory: URL
 
-  var chunkRoot: URL { tempDirectory.appending(path: "chunks", directoryHint: .isDirectory) }
+  var chunkRoot: URL { SophonDownloaderLayout.chunkRoot(in: tempDirectory) }
   var assemblyRoot: URL { tempDirectory.appending(path: "assembling", directoryHint: .isDirectory) }
 
   func fetch(_ file: SophonFile, to destination: URL, reporter: ChunkProgress) async throws {
     let key = SophonDownloaderLayout.fileKey(for: file.path)
-    let chunkDirectory = chunkRoot.appending(path: key, directoryHint: .isDirectory)
+    let chunkDirectory = SophonDownloaderLayout.chunkDirectory(for: file.path, in: tempDirectory)
     let assembly = assemblyRoot.appending(path: key + ".part")
     let fileManager = FileManager.default
     try fileManager.createDirectory(at: chunkDirectory, withIntermediateDirectories: true)

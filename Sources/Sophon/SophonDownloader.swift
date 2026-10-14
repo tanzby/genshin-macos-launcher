@@ -118,7 +118,7 @@ package struct SophonDownloader: Sendable {
       reporter.add(SophonManifestValidator.compressedSize(of: file))
       // Chunks a pre-download left for this file are not needed any more.
       try? FileManager.default.removeItem(
-        at: worker.chunkRoot.appending(path: SophonDownloaderLayout.fileKey(for: file.path), directoryHint: .isDirectory))
+        at: SophonDownloaderLayout.chunkDirectory(for: file.path, in: worker.tempDirectory))
       return
     }
     let chunkProgress = reporter.chunkProgress()

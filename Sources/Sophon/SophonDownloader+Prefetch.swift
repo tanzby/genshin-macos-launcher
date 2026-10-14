@@ -28,8 +28,7 @@ extension SophonDownloader {
         reporter.add(SophonManifestValidator.compressedSize(of: item.file))
         return
       }
-      let key = SophonDownloaderLayout.fileKey(for: item.file.path)
-      let directory = worker.chunkRoot.appending(path: key, directoryHint: .isDirectory)
+      let directory = SophonDownloaderLayout.chunkDirectory(for: item.file.path, in: worker.tempDirectory)
       try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
       let progress = reporter.chunkProgress()
       let file = item.file
