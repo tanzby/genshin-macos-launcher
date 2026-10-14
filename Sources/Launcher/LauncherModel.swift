@@ -242,13 +242,14 @@ public final class LauncherModel {
     case .repair:
       if let pending = pendingJob, pending.blocksLaunch, pending.kind != .repair { return .pendingJob(pending.kind) }
       if status?.canUpdate == true { return .updateRequired }
-      if !isOnline { return .offline }
     case .preDownload:
       if !isOnline { return .offline }
       if status?.canPreDownload != true { return .preDownloadUnavailable }
     case .install, .update:
       break
     }
+    // Every job downloads.
+    if !isOnline { return .offline }
     return store == nil ? .noGameDirectory : nil
   }
 

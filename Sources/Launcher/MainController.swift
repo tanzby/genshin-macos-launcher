@@ -24,7 +24,9 @@ public final class MainController {
         phase: launcher.phase, isPreDownloading: launcher.isPreDownloading, isPausing: launcher.isPausing,
         progress: launcher.progress, pendingJob: launcher.pendingJob, lastError: launcher.lastError,
         status: launcher.status, isOnline: launcher.isOnline,
-        launchRefusal: launcher.refusal(for: .launch), repairRefusal: launcher.refusal(for: .start(.repair)),
+        launchRefusal: launcher.refusal(for: .launch), installRefusal: launcher.refusal(for: .start(.install)),
+        updateRefusal: launcher.refusal(for: .start(.update)), resumeRefusal: launcher.refusal(for: .resume),
+        repairRefusal: launcher.refusal(for: .start(.repair)),
         preDownloadRefusal: launcher.refusal(for: .start(.preDownload)), hasLoaded: hasLoaded,
         wineNotReady: launcher.isWineNotReady))
   }

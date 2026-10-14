@@ -85,6 +85,15 @@ private func makeModel(
     #expect(fake.runs.isEmpty)
   }
 
+  @Test func APP_010_installUpdateAndResumeAreRefusedOffline() async {
+    let (empty, fake, _) = await makeModel(status: GameStatus(remoteVersion: nil))
+    #expect(empty.refusal(for: .start(.install)) == .offline)
+    await #expect(throws: LauncherError.offline) { try await empty.start(.install) }
+    #expect(fake.runs.isEmpty)
+    let (outdated, _, _) = await makeModel(status: GameStatus(localVersion: "4.9.0", remoteVersion: nil))
+    #expect(outdated.refusal(for: .start(.update)) == .offline)
+  }
+
   @Test func APP_010_launchIsRefusedOffline() async {
     let (model, _, _) = await makeModel(status: GameStatus(localVersion: "5.0.0", remoteVersion: nil))
     #expect(model.refusal(for: .launch) == .offline)

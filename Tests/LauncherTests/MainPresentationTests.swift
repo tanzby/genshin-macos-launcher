@@ -13,10 +13,13 @@ private func snapshot(
   online: Bool = true, launchRefusal: LauncherError? = nil, repairRefusal: LauncherError? = nil,
   preDownloadRefusal: LauncherError? = nil
 ) -> MainSnapshot {
-  MainSnapshot(
+  // Like `LauncherModel.refusal(for:)`: every download is refused offline.
+  let downloadRefusal: LauncherError? = online ? nil : .offline
+  return MainSnapshot(
     phase: phase, isPreDownloading: preDownloading, isPausing: pausing, progress: progress,
     pendingJob: pending, lastError: error, status: status, isOnline: online,
-    launchRefusal: launchRefusal, repairRefusal: repairRefusal, preDownloadRefusal: preDownloadRefusal)
+    launchRefusal: launchRefusal, installRefusal: downloadRefusal, updateRefusal: downloadRefusal,
+    resumeRefusal: downloadRefusal, repairRefusal: repairRefusal, preDownloadRefusal: preDownloadRefusal)
 }
 
 @Suite struct APP_017_MainButtonTests {
