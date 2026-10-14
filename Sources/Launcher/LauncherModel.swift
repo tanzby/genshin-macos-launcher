@@ -133,8 +133,8 @@ public final class LauncherModel {
       // Someone else (the user pressing "prepare Wine") got the slot while the status was being read.
       guard jobs.exclusive == .preparingWine else { return }
     }
-    guard jobs.exclusive == .preparingWine, let task = jobs.exclusiveTask else { return }
-    await task.value  // the preparation reads the game status itself once Wine is ready
+    guard jobs.exclusive == .preparingWine else { return }
+    await jobs.waitForExclusive()  // the preparation reads the game status itself once Wine is ready
   }
 
   /// Re-reads the Wine state from the disk. Without a `WinePreparing` the launcher assumes Wine is fine.
@@ -290,8 +290,7 @@ public final class LauncherModel {
 
   private func startExclusive(_ job: GameJob) async throws {
     guard let store else { throw LauncherError.noGameDirectory }
-    jobs.claim(job.exclusivePhase)  // claim before any await so nothing else can slip in
-    try await spawn(job, store: store, preDownload: false) {
+    try await spawn(job, store: store) {
       await self.stopPreDownload()
       try Task.checkCancellation()
       try await self.checkDiskSpace(for: job, in: store.gameDirectory)
@@ -301,8 +300,7 @@ public final class LauncherModel {
 
   private func startPreDownload() async throws {
     guard let store else { throw LauncherError.noGameDirectory }
-    jobs.claimPreDownload()
-    try await spawn(.preDownload, store: store, preDownload: true) {
+    try await spawn(.preDownload, store: store) {
       try await self.checkDiskSpace(for: .preDownload, in: store.gameDirectory)
       try Task.checkCancellation()
       // Starting install/update/repair during the check would have claimed the slot first.
@@ -311,26 +309,25 @@ public final class LauncherModel {
   }
 
   /// Runs `preflight`, then the job, in one Task, so pause()/shutdown() always find a handle to cancel and
-  /// await. Returns once the job has begun; a failed preflight releases the slot and throws.
+  /// await. Returns once the job has begun; a failed preflight frees the slot and throws.
   private func spawn(
-    _ job: GameJob, store: PendingJobStore, preDownload: Bool, preflight: @escaping () async throws -> Void
+    _ job: GameJob, store: PendingJobStore, preflight: @escaping () async throws -> Void
   ) async throws {
     lastError = nil
     let (ready, readySink) = AsyncThrowingStream<Void, Error>.makeStream()
-    let task = Task {
+    let body: @MainActor () async -> Void = {
       let stream: AsyncThrowingStream<JobProgress, Error>
       do {
         try await preflight()
         stream = try self.begin(job, store: store)
       } catch {
-        self.jobs.release(preDownload: preDownload)
         readySink.finish(throwing: error)
         return
       }
       readySink.finish()
       await self.drive(job, stream: stream, store: store)
     }
-    if preDownload { jobs.preDownloadTask = task } else { jobs.exclusiveTask = task }
+    if job == .preDownload { jobs.startPreDownload(body: body) } else { jobs.startExclusive(job.exclusivePhase, body: body) }
     do { for try await _ in ready {} } catch is CancellationError { return }  // paused before the job began
   }
 
@@ -382,7 +379,6 @@ public final class LauncherModel {
     }
     ProcessInfo.processInfo.endActivity(activity)
     progress = nil
-    jobs.release(preDownload: job == .preDownload)
   }
 
   /// A pre-download running beside an unfinished install/update/repair neither writes nor clears its marker.
@@ -417,7 +413,7 @@ public final class LauncherModel {
     // Only download jobs are pausable; cancelling a launch Task alone would leave `await` hanging until the game exits.
     let pausable: Set<LauncherPhase> = [.preparingWine, .installing, .updating, .repairing]
     let exclusivePause = pausable.contains(jobs.exclusive)
-    guard exclusivePause ? jobs.exclusiveTask != nil : jobs.preDownloadTask != nil else { return }
+    guard jobs.isHolding(exclusive: exclusivePause) else { return }
     isPausing = true
     await cancelAndWait(exclusive: exclusivePause, preDownload: !exclusivePause)
     isPausing = false
@@ -473,10 +469,9 @@ public final class LauncherModel {
     if !hasBootstrapped, !(await rosettaIsAvailable()) { throw LauncherError.rosettaMissing }
     if let refusal = refusal(for: .prepareWine) { throw refusal }
     guard let wine, wineStatus != .ready else { return }
-    jobs.claim(.preparingWine)  // claim before any await so nothing else can slip in
     lastError = nil
     progress = .preparing
-    jobs.exclusiveTask = Task {
+    jobs.startExclusive(.preparingWine) {
       await self.stopPreDownload()  // shares the launcher's cancel-and-await rule with install/update/repair
       await self.runWinePreparation(wine)
     }
@@ -526,7 +521,6 @@ public final class LauncherModel {
     }
     ProcessInfo.processInfo.endActivity(activity)
     progress = nil
-    jobs.release(preDownload: false)
   }
 
   // MARK: Launch
@@ -550,7 +544,6 @@ public final class LauncherModel {
     refreshHosts()
     if let refusal = refusal(for: .launch) { throw refusal }
     guard let gameDirectory else { throw LauncherError.noGameDirectory }
-    jobs.claim(.launching)
     lastError = nil
     let client = client
     let options = makeLaunchOptions(gameDirectory)
@@ -560,7 +553,7 @@ public final class LauncherModel {
     }
     let work = Task { try await client.launch(options, onStarted: onStarted) }
     launchWork = work
-    jobs.exclusiveTask = Task { await self.finishLaunch(work: work) }
+    jobs.startExclusive(.launching) { await self.finishLaunch(work: work) }
   }
 
   private func noteStarted() {
@@ -586,7 +579,6 @@ public final class LauncherModel {
       await refreshWine()
     }
     launchWork = nil
-    jobs.release(preDownload: false)
   }
 
   /// Test hook: returns once no job or launch Task is outstanding.

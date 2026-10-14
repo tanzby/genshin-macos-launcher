@@ -5,48 +5,118 @@ import Testing
 
 @MainActor
 @Suite struct JobCoordinatorTests {
-  @Test func claimingAndReleasingTheExclusiveSlot() {
-    let jobs = JobCoordinator()
-    #expect(jobs.phase == .idle)
-    jobs.claim(.installing)
-    #expect(jobs.phase == .installing)
-    #expect(!jobs.allowsPreDownload)
-    jobs.release(preDownload: false)
-    #expect(jobs.phase == .idle)
+  /// A job body that runs until cancelled.
+  private func untilCancelled() -> @MainActor () async -> Void {
+    { while !Task.isCancelled { await Task.yield() } }
   }
 
-  @Test func preDownloadMayOverlapLaunchingAndRunning() {
+  @Test func startingClaimsBeforeAnyAwaitAndTheSlotFreesWhenTheBodyEnds() async {
     let jobs = JobCoordinator()
-    jobs.claim(.launching)
+    #expect(jobs.phase == .idle)
+    jobs.startExclusive(.installing) {}
+    #expect(jobs.phase == .installing)  // claimed synchronously, the body has not run yet
+    #expect(!jobs.allowsPreDownload)
+    #expect(jobs.isHolding(exclusive: true))
+    await jobs.waitUntilIdle()
+    #expect(jobs.phase == .idle)
+    #expect(!jobs.isHolding(exclusive: true))
+  }
+
+  @Test func preDownloadMayOverlapLaunchingAndRunning() async {
+    let jobs = JobCoordinator()
+    jobs.startExclusive(.launching, body: untilCancelled())
     #expect(jobs.allowsPreDownload)
     jobs.markRunning()
     #expect(jobs.phase == .running)
-    jobs.claimPreDownload()
+    #expect(jobs.allowsPreDownload)
+    jobs.startPreDownload(body: untilCancelled())
     #expect(jobs.phase == .running)  // the exclusive phase outranks the pre-download flag
-    jobs.release(preDownload: false)
+    await jobs.cancelAndWait(exclusive: true, preDownload: false)
     #expect(jobs.phase == .preDownloading)
-    jobs.release(preDownload: true)
+    await jobs.cancelAndWait(exclusive: false, preDownload: true)
     #expect(jobs.phase == .idle)
   }
 
-  @Test func markRunningOnlyAppliesToLaunching() {
-    let jobs = JobCoordinator()
-    jobs.claim(.installing)
-    jobs.markRunning()
-    #expect(jobs.phase == .installing)
+  @Test func installUpdateRepairAndWineBlockPreDownload() async {
+    for phase in [LauncherPhase.installing, .updating, .repairing, .preparingWine] {
+      let jobs = JobCoordinator()
+      jobs.startExclusive(phase, body: untilCancelled())
+      #expect(!jobs.allowsPreDownload)
+      await jobs.cancelAndWait(exclusive: true, preDownload: false)
+    }
   }
 
-  @Test func cancelAndWaitReturnsAfterTheTaskStopped() async {
+  @Test func markRunningOnlyAppliesToLaunching() async {
     let jobs = JobCoordinator()
-    jobs.claim(.installing)
+    jobs.startExclusive(.installing, body: untilCancelled())
+    jobs.markRunning()
+    #expect(jobs.phase == .installing)
+    await jobs.cancelAndWait(exclusive: true, preDownload: false)
+  }
+
+  @Test func cancelAndWaitReturnsAfterTheTaskStoppedAndFreedTheSlot() async {
+    let jobs = JobCoordinator()
     let stopped = Flag()
-    jobs.exclusiveTask = Task {
+    jobs.startExclusive(.installing) {
       while !Task.isCancelled { await Task.yield() }
       stopped.set()
-      jobs.release(preDownload: false)
     }
     await jobs.cancelAndWait(exclusive: true, preDownload: false)
     #expect(stopped.value)
+    #expect(jobs.phase == .idle)
+  }
+
+  @Test func cancelAndWaitCanStopBothSlots() async {
+    let jobs = JobCoordinator()
+    jobs.startExclusive(.launching, body: untilCancelled())
+    jobs.startPreDownload(body: untilCancelled())
+    await jobs.cancelAndWait(exclusive: true, preDownload: true)
+    #expect(jobs.phase == .idle)
+    #expect(!jobs.isHolding(exclusive: true))
+    #expect(!jobs.isHolding(exclusive: false))
+  }
+
+  @Test func theSlotIsFreedWhenTheBodyEndsEarlyAfterAnAwait() async {
+    let jobs = JobCoordinator()
+    jobs.startPreDownload {
+      await Task.yield()
+      return  // e.g. a failed preflight
+    }
+    #expect(jobs.isPreDownloading)
+    await jobs.waitUntilIdle()
+    #expect(jobs.phase == .idle)
+  }
+
+  @Test func theSlotIsFreedWhenCancelledBeforeTheBodyStarted() async {
+    let jobs = JobCoordinator()
+    jobs.startExclusive(.updating, body: untilCancelled())
+    await jobs.cancelAndWait(exclusive: true, preDownload: false)  // cancelled on the very same turn
+    #expect(jobs.phase == .idle)
+  }
+
+  @Test func waitForExclusiveReturnsAfterTheBodyAndWithoutOneAtOnce() async {
+    let jobs = JobCoordinator()
+    await jobs.waitForExclusive()
+    let done = Flag()
+    jobs.startExclusive(.preparingWine) {
+      await Task.yield()
+      done.set()
+    }
+    await jobs.waitForExclusive()
+    #expect(done.value)
+    #expect(jobs.phase == .idle)
+  }
+
+  @Test func waitUntilIdleCoversBothSlots() async {
+    let jobs = JobCoordinator()
+    let done = Flag()
+    jobs.startExclusive(.launching) {}
+    jobs.startPreDownload {
+      await Task.yield()
+      done.set()
+    }
+    await jobs.waitUntilIdle()
+    #expect(done.value)
     #expect(jobs.phase == .idle)
   }
 }
