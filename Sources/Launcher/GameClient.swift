@@ -82,6 +82,8 @@ public enum LaunchOutcome: Sendable, Equatable {
   case exited
   case failedExit(code: Int32, logPath: URL)
   case failedToLaunch
+  /// No game process appeared within the client's startup timeout (LCH-036, #28 15); everything is already cleaned up.
+  case startupTimedOut
 }
 
 public enum BackgroundImage: Sendable, Equatable {
@@ -111,8 +113,9 @@ public protocol GameClient: Sendable {
   /// This is the launcher's preflight, run before it writes anything, so it also refuses a folder the job could
   /// not use (an install into a folder with other content throws `installDirectoryNotEmpty`) and touches nothing.
   func requiredDiskSpace(for job: GameJob, in directory: URL) async throws -> Int64
-  /// `onStarted` fires once the game process exists; without it within the launch timeout the launcher cancels.
-  /// Cancellation must restore Launch Mutations and kill the prefix before returning.
+  /// `onStarted` fires once the game process exists (launching → running). The client owns the startup timeout: when
+  /// no process appears in time it restores Launch Mutations, kills the prefix and returns `.startupTimedOut`.
+  /// Cancellation does the same cleanup before returning.
   func launch(_ options: LaunchOptions, onStarted: @escaping @Sendable () -> Void) async throws -> LaunchOutcome
   func backgroundImage() async -> BackgroundImage
   /// Returns once nothing the client started is still running. A job's stream ends as soon as its consumer is

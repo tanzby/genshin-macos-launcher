@@ -40,7 +40,6 @@ private let allJobs: [GameJob] = [.install, .update, .repair, .preDownload]
 private final class Harness {
   let fake: FakeGameClient
   let model: LauncherModel
-  let sleeper = ManualSleeper()
   let log: EventLog
   let directory: URL?
 
@@ -55,7 +54,6 @@ private final class Harness {
   init(
     status: GameStatus?,
     hasGameDirectory: Bool = true,
-    launchTimeout: Duration = LauncherModel.defaultLaunchTimeout,
     chunkTempMargin: Int64 = 0,
     availableDiskSpace: @escaping @Sendable (URL) -> Int64? = { _ in nil },
     preexistingJobFile: String? = nil
@@ -65,14 +63,11 @@ private final class Harness {
     let directory = hasGameDirectory ? makeTemporaryDirectory("LauncherJobTests") : nil
     self.fake = fake
     self.directory = directory
-    let sleeper = self.sleeper
     model = LauncherModel(
       client: fake,
       gameDirectory: directory,
-      launchTimeout: launchTimeout,
       chunkTempMargin: chunkTempMargin,
-      availableDiskSpace: availableDiskSpace,
-      sleep: { try await sleeper.sleep($0) }
+      availableDiskSpace: availableDiskSpace
     )
     log = EventLog(model.events)
     if let preexistingJobFile { writeJobFile(preexistingJobFile) }
@@ -837,30 +832,24 @@ private final class Queried: Sendable {
 // MARK: - LCH-036 and launch preconditions
 
 @MainActor @Suite struct LCH_036_LaunchTests {
-  @Test func LCH_036_defaultLaunchTimeoutIs120Seconds() {
-    #expect(LauncherModel.defaultLaunchTimeout == .seconds(120))
-  }
-
-  @Test func LCH_036_launchWithoutStartedSignalTimesOutCancelsAndAwaitsTheLaunch() async throws {
-    let h = await Harness(status: Status.installed, launchTimeout: .seconds(7))
+  @Test func LCH_036_startupTimedOutOutcomeShowsLaunchTimeoutAndReturnsToIdle() async throws {
+    let h = await Harness(status: Status.installed)
     try await h.beginLaunch()
     #expect(h.model.phase == .launching)
-    #expect(try await h.sleeper.sleeping.pop("the timeout sleep") == .seconds(7))
 
-    h.sleeper.fire()
+    h.fake.finishLaunch(.startupTimedOut)
     await h.model.waitUntilIdle()
 
     #expect(h.model.lastError == .launchTimeout)
     #expect(h.model.phase == .idle)
-    // Cancelled and awaited: the fake's launch has already returned.
-    #expect(h.fake.events == ["launch", "launch:cancelled", "launch:ended"])
+    #expect(try await h.log.next() == .launchFailed(.launchTimeout))
+    #expect(h.fake.events == ["launch", "launch:ended"])
   }
 
   @Test func LCH_036_launchCanBeRetriedAfterTimeout() async throws {
     let h = await Harness(status: Status.installed)
     try await h.beginLaunch()
-    _ = try await h.sleeper.sleeping.pop("the timeout sleep")
-    h.sleeper.fire()
+    h.fake.finishLaunch(.startupTimedOut)
     await h.model.waitUntilIdle()
     #expect(h.model.lastError == .launchTimeout)
 
@@ -881,19 +870,6 @@ private final class Queried: Sendable {
     h.fake.finishLaunch(.exited)
     await h.model.waitUntilIdle()
     #expect(h.model.phase == .idle)
-    #expect(h.model.lastError == nil)
-    #expect(h.fake.events == ["launch", "launch:ended"])
-  }
-
-  @Test func LCH_036_timeoutDoesNotFireOnceStartedHasBeenSignalled() async throws {
-    let h = await Harness(status: Status.installed)
-    try await h.beginLaunch()
-    h.fake.fireStarted()
-    #expect(await h.waitForPhase(.running))
-    // A late timer must not kill a game that already started.
-    h.sleeper.fire()
-    h.fake.finishLaunch(.exited)
-    await h.model.waitUntilIdle()
     #expect(h.model.lastError == nil)
     #expect(h.fake.events == ["launch", "launch:ended"])
   }
