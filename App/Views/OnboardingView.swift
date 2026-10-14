@@ -20,7 +20,7 @@ struct OnboardingView: View {
         isDone: onboarding.allowsLaunch
       ) {
         if !onboarding.allowsLaunch {
-          Button("Block Telemetry…") { Task { await onboarding.applyHosts() } }
+          Button("Block Telemetry…") { Task { await controller.applyHosts() } }
             .buttonStyle(.glassProminent)
             .disabled(onboarding.isApplyingHosts)
           if let error = onboarding.hostsError {

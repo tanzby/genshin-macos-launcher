@@ -14,6 +14,7 @@ struct AppRuntime {
   let client: GenshinCNClient
   let notifier: EventNotifier
   let dataDirectory: DataDirectory
+  let hosts: any HostsBlocking
 
   /// `prepare()` migrates a TS-launcher data directory before anything reads it, so nothing here is built
   /// when it fails. `--autolaunch` may point at a sandbox root.
@@ -23,10 +24,11 @@ struct AppRuntime {
     let wine = WineRuntime(dataDirectory: data, dxmt: .inApp)
     let client = GenshinCNClient.bundled(wine: wine, dataDirectory: data, bundle: .main)
     let settings = SettingsModel()
-    let onboarding = OnboardingModel(hosts: GenshinCN.hostsBlocklist(), settings: settings)
+    let hosts = GenshinCN.hostsBlocklist()
+    let onboarding = OnboardingModel(hosts: hosts, settings: settings)
     // A diagnostic run names its own game folder; it must not touch the one saved in the real preferences.
     let launcher = LauncherModel(
-      client: client, wine: wine,
+      client: client, wine: wine, hosts: hosts,
       startup: StartupSteps(
         rosettaInstalled: { StartupSteps.isRosettaInstalled() }, recoverSession: { await client.recover() }),
       gameDirectory: autoLaunch.enabled ? autoLaunch.gameDirectory : settings.gameDirectory)
@@ -35,6 +37,7 @@ struct AppRuntime {
     self.client = client
     notifier = EventNotifier(delivery: UserNotificationDelivery())
     dataDirectory = data
+    self.hosts = hosts
   }
 }
 
@@ -93,7 +96,7 @@ struct GenshinLauncherApp: App {
     guard autoLaunch.enabled else { return }
     runtime.controller.onboarding.refresh()
     await AutoLaunch.runIfRequested(
-      autoLaunch, model: runtime.controller.launcher, log: DiagLog(logsDirectory: runtime.dataDirectory.logs)
+      autoLaunch, model: runtime.controller.launcher, hosts: runtime.hosts, log: DiagLog(logsDirectory: runtime.dataDirectory.logs)
     ) { NSApp.terminate(nil) }
   }
 

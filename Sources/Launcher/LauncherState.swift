@@ -19,6 +19,8 @@ public enum LauncherError: Error, Sendable, Equatable {
   case noGameDirectory
   case notInstalled
   case offline
+  /// The hosts blocklist is missing or outdated; the game must not start without it.
+  case hostsRequired
   case updateRequired
   case pendingJob(GameJob)
   case preDownloadUnavailable
@@ -34,6 +36,15 @@ public enum LauncherError: Error, Sendable, Equatable {
     if case .insufficientDiskSpace(let required, let available) = self { return max(0, required - available) }
     return nil
   }
+}
+
+/// What a caller wants to do. `LauncherModel.refusal(for:)` answers whether it may run now.
+package enum LauncherAction: Sendable, Equatable {
+  case prepareWine
+  case start(GameJob)
+  /// Continue the unfinished job, or prepare Wine when that is what is missing.
+  case resume
+  case launch
 }
 
 /// Discrete events for system notifications. `@Observable` coalesces states, so it cannot drive them.

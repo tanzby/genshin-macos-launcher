@@ -14,8 +14,9 @@ private func makeController(
   let settings = SettingsModel(defaults: makeTemporaryDefaults("controller").defaults)
   settings.gameDirectory = gameDirectory
   let client = FakeGameClient(status: status)
-  let launcher = LauncherModel(client: client, startup: startup, availableDiskSpace: { _ in Int64.max })
-  let onboarding = OnboardingModel(hosts: FakeHosts(hosts), settings: settings)
+  let fakeHosts = FakeHosts(hosts)
+  let launcher = LauncherModel(client: client, hosts: fakeHosts, startup: startup, availableDiskSpace: { _ in Int64.max })
+  let onboarding = OnboardingModel(hosts: fakeHosts, settings: settings)
   return (MainController(launcher: launcher, settings: settings, onboarding: onboarding), client, settings)
 }
 
@@ -80,7 +81,7 @@ private func makeController(
     await controller.refresh()
     settings.gameDirectory = temporaryURL("genshin-launcher-mc")
     await controller.perform(.install)
-    #expect(controller.actionError == nil)
+    #expect(controller.launcher.lastError == nil)
     _ = try await client.nextRun()
     await controller.launcher.shutdown()
   }
@@ -91,7 +92,7 @@ private func makeController(
     #expect(controller.needsGameDirectory(for: .install))
     await controller.perform(.install)
     #expect(client.runs.isEmpty)
-    #expect(controller.actionError == .noGameDirectory)
+    #expect(controller.launcher.lastError == .noGameDirectory)
   }
 
   @Test func APP_013_aRefusedStartSurfacesAsAnErrorInTheCapsule() async {
@@ -102,20 +103,23 @@ private func makeController(
     let c = MainController(launcher: tiny, settings: controller.settings, onboarding: controller.onboarding)
     await c.refresh()
     await c.repair()
-    guard case .insufficientDiskSpace = c.actionError else {
-      Issue.record("expected insufficientDiskSpace, got \(String(describing: c.actionError))")
+    guard case .insufficientDiskSpace = c.launcher.lastError else {
+      Issue.record("expected insufficientDiskSpace, got \(String(describing: c.launcher.lastError))")
       return
     }
-    #expect(c.presentation.status == .error(c.actionError!))
+    #expect(c.presentation.status == .error(c.launcher.lastError!))
   }
 
-  @Test func APP_013_theNextActionClearsAStaleError() async {
-    let (controller, _, _) = makeController(status: GameStatus(), gameDirectory: nil)
+  @Test func APP_013_aStartThatWorksClearsTheEarlierRefusal() async throws {
+    let (controller, client, settings) = makeController(status: GameStatus(), gameDirectory: nil)
     await controller.refresh()
     await controller.perform(.install)
-    #expect(controller.actionError == .noGameDirectory)
-    await controller.perform(.pausing)  // a no-op button still starts from a clean slate
-    #expect(controller.actionError == nil)
+    #expect(controller.launcher.lastError == .noGameDirectory)
+    settings.gameDirectory = temporaryURL("genshin-launcher-mc")
+    await controller.perform(.install)
+    #expect(controller.launcher.lastError == nil)
+    _ = try await client.nextRun()
+    await controller.launcher.shutdown()
   }
 
   @Test func APP_017_pauseAndResumeGoThroughTheLauncher() async throws {
@@ -137,7 +141,18 @@ private func makeController(
     let (controller, client, _) = makeController(hosts: .missing)
     await controller.refresh()
     #expect(!controller.presentation.buttonEnabled)
+    #expect(controller.presentation.status == .hostsRequired)
     await controller.perform(.launch)
     #expect(client.launchOptions.isEmpty)
+    #expect(controller.launcher.lastError == .hostsRequired)
+  }
+
+  @Test func WIN_011_applyingTheBlocklistReleasesTheLaunchButton() async {
+    let (controller, _, _) = makeController(hosts: .missing)
+    await controller.refresh()
+    #expect(!controller.presentation.buttonEnabled)
+    await controller.applyHosts()
+    #expect(controller.presentation.buttonEnabled)
+    #expect(controller.presentation.status == .none)
   }
 }

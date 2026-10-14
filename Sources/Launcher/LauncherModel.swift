@@ -24,6 +24,8 @@ public final class LauncherModel {
   public private(set) var progress: JobProgress?
   package private(set) var pendingJob: PendingJob?
   public private(set) var lastError: LauncherError?
+  /// What the hosts blocklist looked like at the last read; nil = unread or unreadable.
+  package private(set) var hostsStatus: HostsBlocklist.Status?
   public var gameDirectory: URL?
   /// Snapshots the settings for a launch. The composition root replaces it with one that reads `SettingsModel`.
   public var makeLaunchOptions: @MainActor (URL) -> LaunchOptions = { LaunchOptions(gameDirectory: $0) }
@@ -37,6 +39,11 @@ public final class LauncherModel {
     isWineNotReady ? .prepareWine : PrimaryAction.derive(status)
   }
 
+  /// The hosts blocklist is in place (or there is no hosts seam to ask). Without it the game must not start.
+  package var hostsAllowLaunch: Bool {
+    hosts == nil || hostsStatus?.allowsLaunch == true
+  }
+
   /// Wine is known to need preparation.
   private var isWineMissing: Bool {
     if case .needsInstall = wineStatus { return true }
@@ -45,7 +52,7 @@ public final class LauncherModel {
 
   /// Gate for game jobs and launch: with a Wine seam, an unread status counts as not ready, so nothing
   /// slips in while the first `refreshWine()` is still suspended.
-  private var isWineNotReady: Bool {
+  package var isWineNotReady: Bool {
     wine != nil && wineStatus != .ready
   }
 
@@ -58,6 +65,7 @@ public final class LauncherModel {
 
   private let client: any GameClient
   private let wine: (any WinePreparing)?
+  private let hosts: (any HostsBlocking)?
   private let startup: StartupSteps?
   private let launchTimeout: Duration
   private let diskSpace: DiskSpaceCheck
@@ -82,6 +90,7 @@ public final class LauncherModel {
   public init(
     client: any GameClient,
     wine: (any WinePreparing)? = nil,
+    hosts: (any HostsBlocking)? = nil,
     startup: StartupSteps? = nil,
     gameDirectory: URL? = nil,
     launchTimeout: Duration = LauncherModel.defaultLaunchTimeout,
@@ -91,6 +100,7 @@ public final class LauncherModel {
   ) {
     self.client = client
     self.wine = wine
+    self.hosts = hosts
     self.startup = startup
     self.gameDirectory = gameDirectory
     self.launchTimeout = launchTimeout
@@ -128,7 +138,7 @@ public final class LauncherModel {
       return
     }
     do {
-      try await prepareWine()
+      try await startWinePreparation()
     } catch {
       // Someone else (the user pressing "prepare Wine") got the slot while the status was being read.
       guard jobs.exclusive == .preparingWine else { return }
@@ -181,6 +191,7 @@ public final class LauncherModel {
   /// A failed query keeps the previous status: offline must not turn an installed game into "install".
   /// A slow answer about an older directory or state must not overwrite a newer one.
   public func refresh() async {
+    refreshHosts()
     refreshGeneration += 1
     let generation = refreshGeneration
     client.setGameDirectory(gameDirectory)
@@ -205,14 +216,92 @@ public final class LauncherModel {
     if let store = store { pendingJob = store.load() }
   }
 
+  /// Re-reads `/etc/hosts` (no privileges needed). An unreadable file counts as "not in place". Call it after
+  /// the blocklist was applied elsewhere.
+  package func refreshHosts() {
+    guard let hosts else { return }
+    hostsStatus = try? hosts.status()
+    if hostsAllowLaunch, lastError == .hostsRequired { lastError = nil }
+  }
+
   private var store: PendingJobStore? {
     gameDirectory.map { PendingJobStore(gameDirectory: $0) }
+  }
+
+  // MARK: Availability
+
+  /// Why `action` may not run now; nil = allowed. The one place that decides this: `start`, `launch`,
+  /// `resume` and `prepareWine` guard through it, and the main window reads it for its buttons and status line.
+  /// The disk-space check is not part of it: it needs the client and runs as a preflight of the job.
+  package func refusal(for action: LauncherAction) -> LauncherError? {
+    switch action {
+    case .prepareWine: prepareWineRefusal
+    case .start(let job): startRefusal(job)
+    case .resume:
+      if isWineMissing { prepareWineRefusal } else { pendingJob.flatMap { startRefusal($0.kind) } }
+    case .launch: launchRefusal
+    }
+  }
+
+  private var isBusyWithBookkeeping: Bool { isPausing || isShuttingDown || recovery != nil }
+
+  private var prepareWineRefusal: LauncherError? {
+    if isBusyWithBookkeeping || jobs.exclusive != .idle { return .busy }
+    return isRosettaMissing ? .rosettaMissing : nil
+  }
+
+  private func startRefusal(_ job: GameJob) -> LauncherError? {
+    if isBusyWithBookkeeping { return .busy }
+    if job == .preDownload {
+      if !jobs.allowsPreDownload || jobs.isPreDownloading { return .busy }
+    } else if jobs.exclusive != .idle {
+      return .busy
+    }
+    if isWineNotReady { return .wineNotReady }
+    if job != .install, status?.localVersion == nil { return .notInstalled }
+    switch job {
+    case .repair:
+      if let pending = pendingJob, pending.blocksLaunch, pending.kind != .repair { return .pendingJob(pending.kind) }
+      if status?.canUpdate == true { return .updateRequired }
+      if !isOnline { return .offline }
+    case .preDownload:
+      if !isOnline { return .offline }
+      if status?.canPreDownload != true { return .preDownloadUnavailable }
+    case .install, .update:
+      break
+    }
+    return store == nil ? .noGameDirectory : nil
+  }
+
+  private var launchRefusal: LauncherError? {
+    if isBusyWithBookkeeping || jobs.exclusive != .idle { return .busy }
+    if isWineNotReady { return .wineNotReady }
+    guard let status, status.localVersion != nil else { return .notInstalled }
+    if gameDirectory == nil { return .noGameDirectory }
+    if let pending = pendingJob, pending.blocksLaunch { return .pendingJob(pending.kind) }
+    if !hostsAllowLaunch { return .hostsRequired }
+    if !isOnline { return .offline }
+    return status.canUpdate ? .updateRequired : nil
+  }
+
+  /// A refused start is an error the window shows like a failed job: one channel, `lastError`.
+  private func recordingFailure<T>(_ work: () async throws -> T) async throws -> T {
+    do {
+      return try await work()
+    } catch {
+      if !(error is CancellationError) { lastError = LauncherError(error) }
+      throw error
+    }
   }
 
   // MARK: Jobs
 
   public func start(_ job: GameJob) async throws {
-    guard !isPausing, !isShuttingDown, recovery == nil else { throw LauncherError.busy }
+    try await recordingFailure { try await startJob(job) }
+  }
+
+  private func startJob(_ job: GameJob) async throws {
+    if let refusal = refusal(for: .start(job)) { throw refusal }
     if job == .preDownload {
       try await startPreDownload()
     } else {
@@ -221,12 +310,6 @@ public final class LauncherModel {
   }
 
   private func startExclusive(_ job: GameJob) async throws {
-    guard jobs.exclusive == .idle else { throw LauncherError.busy }
-    guard !isWineNotReady else { throw LauncherError.wineNotReady }
-    if job != .install {
-      guard status?.localVersion != nil else { throw LauncherError.notInstalled }
-    }
-    if job == .repair, status?.canUpdate == true { throw LauncherError.updateRequired }
     guard let store else { throw LauncherError.noGameDirectory }
     jobs.claim(job.exclusivePhase)  // claim before any await so nothing else can slip in
     try await spawn(job, store: store, preDownload: false) {
@@ -238,10 +321,6 @@ public final class LauncherModel {
   }
 
   private func startPreDownload() async throws {
-    guard jobs.allowsPreDownload, !jobs.isPreDownloading else { throw LauncherError.busy }
-    guard !isWineNotReady else { throw LauncherError.wineNotReady }
-    guard status?.localVersion != nil else { throw LauncherError.notInstalled }
-    guard status?.canPreDownload == true else { throw LauncherError.preDownloadUnavailable }
     guard let store else { throw LauncherError.noGameDirectory }
     jobs.claimPreDownload()
     try await spawn(.preDownload, store: store, preDownload: true) {
@@ -368,9 +447,12 @@ public final class LauncherModel {
   }
 
   public func resume() async throws {
-    if isWineMissing { return try await prepareWine() }
-    guard let pendingJob else { return }
-    try await start(pendingJob.kind)
+    try await recordingFailure {
+      if let refusal = refusal(for: .resume) { throw refusal }
+      if isWineMissing { return try await startWinePreparation() }
+      guard let pendingJob else { return }
+      try await startJob(pendingJob.kind)
+    }
   }
 
   /// What quitting has to do first (APP-022). A pure function of the phase, so asking twice gives the same answer.
@@ -406,10 +488,13 @@ public final class LauncherModel {
   /// Prepares Wine in the exclusive slot. Returns once the Task is running; a no-op when Wine is ready.
   /// Pause is cancel-and-await. The downloads keep their `.part` files, so calling this again resumes.
   public func prepareWine() async throws {
+    try await recordingFailure { try await startWinePreparation() }
+  }
+
+  private func startWinePreparation() async throws {
     // Pressed before `bootstrap()` got to the Rosetta check: do it here, the 2 GB download must not come first.
     if !hasBootstrapped, !(await rosettaIsAvailable()) { throw LauncherError.rosettaMissing }
-    guard !isPausing, !isShuttingDown, jobs.exclusive == .idle, recovery == nil else { throw LauncherError.busy }
-    guard !isRosettaMissing else { throw LauncherError.rosettaMissing }
+    if let refusal = refusal(for: .prepareWine) { throw refusal }
     guard let wine, wineStatus != .ready else { return }
     jobs.claim(.preparingWine)  // claim before any await so nothing else can slip in
     lastError = nil
@@ -485,14 +570,16 @@ public final class LauncherModel {
   }
 
   public func launch() async throws {
+    try await recordingFailure { try startLaunch() }
+  }
+
+  private func startLaunch() throws {
     client.setGameDirectory(gameDirectory)
-    guard jobs.exclusive == .idle, !isPausing, !isShuttingDown, recovery == nil else { throw LauncherError.busy }
-    guard !isWineNotReady else { throw LauncherError.wineNotReady }
-    guard let status, status.localVersion != nil else { throw LauncherError.notInstalled }
+    // The disk and /etc/hosts can change under the window: look again right before the game starts.
+    if let store { pendingJob = store.load() }
+    refreshHosts()
+    if let refusal = refusal(for: .launch) { throw refusal }
     guard let gameDirectory else { throw LauncherError.noGameDirectory }
-    if let pending = store?.load(), pending.blocksLaunch { throw LauncherError.pendingJob(pending.kind) }
-    guard isOnline else { throw LauncherError.offline }
-    guard !status.canUpdate else { throw LauncherError.updateRequired }
     jobs.claim(.launching)
     lastError = nil
     let gate = LaunchGate()

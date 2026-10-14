@@ -32,7 +32,7 @@ import Wine
     let presentation = MainPresentation.derive(
       MainSnapshot(
         phase: model.phase, isPreDownloading: false, isPausing: false, progress: nil, pendingJob: nil,
-        lastError: model.lastError, status: model.status, isOnline: true, hostsAllowLaunch: true))
+        lastError: model.lastError, status: model.status, isOnline: true))
 
     #expect(model.lastError == .client(.brokenInstallation))
     #expect(presentation.status == .error(.client(.brokenInstallation)))

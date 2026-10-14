@@ -10,8 +10,11 @@ package struct MainSnapshot: Sendable, Equatable {
   public var lastError: LauncherError?
   public var status: GameStatus?
   package var isOnline: Bool
-  /// The hosts blocklist is in place; without it the game must not start.
-  package var hostsAllowLaunch: Bool
+  /// Why the launcher would refuse each action right now (`LauncherModel.refusal(for:)`); nil = allowed.
+  /// The presentation only renders these; it decides nothing itself.
+  package var launchRefusal: LauncherError?
+  package var repairRefusal: LauncherError?
+  package var preDownloadRefusal: LauncherError?
   /// The first status query has finished (successfully or not). Before that "offline" is not yet known.
   package var hasLoaded: Bool
   /// Wine is known to need (re)installing; nothing else can run until it is prepared.
@@ -20,7 +23,8 @@ package struct MainSnapshot: Sendable, Equatable {
   public init(
     phase: LauncherPhase, isPreDownloading: Bool, isPausing: Bool, progress: JobProgress?,
     pendingJob: PendingJob?, lastError: LauncherError?, status: GameStatus?, isOnline: Bool,
-    hostsAllowLaunch: Bool, hasLoaded: Bool = true, wineNotReady: Bool = false
+    launchRefusal: LauncherError? = nil, repairRefusal: LauncherError? = nil,
+    preDownloadRefusal: LauncherError? = nil, hasLoaded: Bool = true, wineNotReady: Bool = false
   ) {
     self.phase = phase
     self.isPreDownloading = isPreDownloading
@@ -30,7 +34,9 @@ package struct MainSnapshot: Sendable, Equatable {
     self.lastError = lastError
     self.status = status
     self.isOnline = isOnline
-    self.hostsAllowLaunch = hostsAllowLaunch
+    self.launchRefusal = launchRefusal
+    self.repairRefusal = repairRefusal
+    self.preDownloadRefusal = preDownloadRefusal
     self.hasLoaded = hasLoaded
     self.wineNotReady = wineNotReady
   }
@@ -71,27 +77,21 @@ public struct MainPresentation: Sendable, Equatable {
   public var button: PrimaryButton
   public var buttonEnabled: Bool
   public var status: StatusLine
-  /// "Check file integrity" needs the remote manifest: offered only online, for an installed, current game while
-  /// nothing exclusive runs.
+  /// "Check file integrity" is offered when the launcher would run it, and no unfinished job waits to be continued.
   public var canRepair: Bool
   /// The "Pre-download" button is offered (also next to an error, so a failed pre-download can be retried).
   public var canPreDownload: Bool
   public var activePreDownload: ActivePreDownload?
 
   package static func derive(_ s: MainSnapshot) -> MainPresentation {
-    let installed = s.status?.localVersion != nil
-    let idleLike = s.phase == .idle || s.phase == .preDownloading
-    // Pre-download may overlap with launching and running (APP-015), but not with install/update/repair.
-    let preDownloadPhase = idleLike || s.phase == .launching || s.phase == .running
     let noBlockingJob = s.pendingJob?.blocksLaunch != true
-    let repairable = installed && s.isOnline && idleLike && noBlockingJob && !s.wineNotReady && s.status?.canUpdate != true
+    let repairable = s.repairRefusal == nil && noBlockingJob
 
     let offline = s.hasLoaded && !s.isOnline
     func make(_ button: PrimaryButton, _ enabled: Bool, _ status: StatusLine) -> MainPresentation {
       MainPresentation(
         button: button, buttonEnabled: enabled, status: status, canRepair: repairable,
-        canPreDownload: installed && s.isOnline && preDownloadPhase && !s.isPreDownloading
-          && s.status?.canPreDownload == true,
+        canPreDownload: s.preDownloadRefusal == nil,
         activePreDownload: s.isPreDownloading ? ActivePreDownload(progress: s.progress, isPausing: s.isPausing) : nil)
     }
     // Download jobs and Wine preparation are paused by the same button.
@@ -128,12 +128,12 @@ public struct MainPresentation: Sendable, Equatable {
       case .update: .update
       default: .launch
       }
-    let enabled = base == .install ? s.isOnline : s.isOnline && (base != .launch || s.hostsAllowLaunch)
+    let enabled = base == .launch ? s.launchRefusal == nil : s.isOnline
 
     let status: StatusLine
     if let error = s.lastError {
       status = .error(error)
-    } else if base == .launch && !s.hostsAllowLaunch {
+    } else if base == .launch && s.launchRefusal == .hostsRequired {
       status = .hostsRequired
     } else if offline {
       status = .offline

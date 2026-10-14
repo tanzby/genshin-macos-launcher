@@ -105,12 +105,15 @@ public struct AutoLaunch {
   let pollInterval: Duration
   let progressInterval: Duration
   let allowDownload: Bool
+  /// Writes the hosts blocklist (administrator password dialog) when the launcher refuses to start without it.
+  let hosts: (any HostsBlocking)?
 
   public init(
-    model: LauncherModel, log: DiagLog, pollInterval: Duration = .milliseconds(200),
+    model: LauncherModel, hosts: (any HostsBlocking)? = nil, log: DiagLog, pollInterval: Duration = .milliseconds(200),
     progressInterval: Duration = .seconds(5), allowDownload: Bool = false
   ) {
     self.model = model
+    self.hosts = hosts
     self.log = log
     self.pollInterval = pollInterval
     self.progressInterval = progressInterval
@@ -148,10 +151,29 @@ public struct AutoLaunch {
     }
     guard model.primaryAction == .launch else { return .failed("action=\(model.primaryAction)") }
 
-    do { try await model.launch() } catch { return .failed("launch \(error)") }
+    do {
+      try await launchApplyingHostsIfNeeded()
+    } catch {
+      return .failed("launch \(error)")
+    }
     await waitUntilIdle()
     if let error = model.lastError { return .failed("game \(error)") }
     return .ok
+  }
+
+  /// Nobody is there to click through onboarding: a missing blocklist is applied here (the password dialog is the
+  /// maintainer's hand-off, see `genshin-launcher-diag`). A refused or failed apply ends the run as `hostsRequired`.
+  private func launchApplyingHostsIfNeeded() async throws {
+    do {
+      return try await model.launch()
+    } catch LauncherError.hostsRequired {}
+    guard let hosts else { throw LauncherError.hostsRequired }
+    log.say("autolaunch: hosts blocklist missing, applying (administrator password)")
+    do { try await hosts.apply() } catch {
+      log.say("autolaunch: hosts apply failed: \(error)")
+      throw LauncherError.hostsRequired
+    }
+    try await model.launch()
   }
 
   private func waitUntilIdle() async {
@@ -187,7 +209,7 @@ public struct AutoLaunch {
   /// The app entry point: does nothing unless `--autolaunch` was given; otherwise runs and then asks the
   /// app to quit, also when it failed (a diag script must never wait for a window nobody closes).
   public static func runIfRequested(
-    _ options: AutoLaunchOptions, model: LauncherModel, log: DiagLog, terminate: @MainActor () -> Void,
+    _ options: AutoLaunchOptions, model: LauncherModel, hosts: (any HostsBlocking)? = nil, log: DiagLog, terminate: @MainActor () -> Void,
     forceExit: @MainActor () -> Void = { exit(0) }
   ) async {
     guard options.enabled, !started else { return }
@@ -200,7 +222,7 @@ public struct AutoLaunch {
       return
     }
     if let directory = options.gameDirectory { model.gameDirectory = directory }
-    _ = await AutoLaunch(model: model, log: log, allowDownload: options.allowDownload).run()
+    _ = await AutoLaunch(model: model, hosts: hosts, log: log, allowDownload: options.allowDownload).run()
     await model.shutdown()
     log.say("autolaunch: exit")
     terminate()

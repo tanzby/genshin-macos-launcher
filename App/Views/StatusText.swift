@@ -45,6 +45,7 @@ extension LauncherError {
     case .noGameDirectory: "Choose a game folder first."
     case .notInstalled: "The game is not installed."
     case .offline: "You are offline."
+    case .hostsRequired: "Telemetry block required"
     case .updateRequired: "Update the game before playing."
     case .pendingJob: "An unfinished task has to be continued first."
     case .preDownloadUnavailable: "There is no pre-download available."
