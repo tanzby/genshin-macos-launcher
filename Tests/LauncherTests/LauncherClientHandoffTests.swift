@@ -13,7 +13,7 @@ private func waitForLaunch(_ fake: FakeGameClient) async {
 
 @Suite struct LauncherClientHandoffTests {
   @MainActor
-  @Test func WIN_005_theCurrentGameDirectoryReachesTheClientBeforeEveryRefreshStartAndLaunch() async throws {
+  @Test func ADR0002_refreshAsksAboutTheFolderTheModelHasRightNow() async throws {
     let fake = FakeGameClient(status: GameStatus(localVersion: "5.6.0", remoteVersion: "5.6.0"))
     let first = makeTemporaryDirectory("handoff")
     let second = URL(filePath: "/Games/B")
@@ -25,11 +25,21 @@ private func waitForLaunch(_ fake: FakeGameClient) async {
     model.gameDirectory = nil
     await model.refresh()
 
-    let seen = fake.gameDirectories
-    #expect(seen.count == 3)
-    #expect(seen[0] == first)
-    #expect(seen[1] == second)
-    #expect(seen[2] == nil)
+    #expect(fake.statusDirectories == [first, second, nil])
+  }
+
+  @MainActor
+  @Test func ADR0002_theModelFollowsASourceInsteadOfACopy() async throws {
+    let fake = FakeGameClient(status: GameStatus(localVersion: "5.6.0", remoteVersion: "5.6.0"))
+    let settings = SettingsModel(defaults: makeTemporaryDefaults().defaults)
+    let model = LauncherModel(client: fake, gameDirectorySource: { settings.gameDirectory })
+    settings.gameDirectory = URL(filePath: "/Games/A")
+
+    await model.refresh()
+    settings.gameDirectory = URL(filePath: "/Games/B")
+    await model.refresh()
+
+    #expect(fake.statusDirectories == [URL(filePath: "/Games/A"), URL(filePath: "/Games/B")])
   }
 
   @MainActor
@@ -55,7 +65,7 @@ private func waitForLaunch(_ fake: FakeGameClient) async {
   }
 
   @MainActor
-  @Test func WIN_005_aRejectedStartDoesNotRepointTheClientAwayFromTheRunningJob() async throws {
+  @Test func ADR0002_aJobAndItsDiskCheckUseTheFolderTheStartWasMadeWith() async throws {
     let fake = FakeGameClient(status: GameStatus(localVersion: "4.9.0", remoteVersion: "5.0.0", canUpdate: true))
     let running = makeTemporaryDirectory("handoff")
     let model = LauncherModel(client: fake, gameDirectory: running)
@@ -66,7 +76,8 @@ private func waitForLaunch(_ fake: FakeGameClient) async {
     model.gameDirectory = URL(filePath: "/Games/B")
     await #expect(throws: LauncherError.busy) { try await model.start(.update) }
 
-    #expect(fake.gameDirectories.last == running)
+    #expect(fake.diskCheckDirectories == [running])
+    #expect(fake.runDirectories == [running])
     fake.finish(run: run)
     await model.waitUntilIdle()
   }

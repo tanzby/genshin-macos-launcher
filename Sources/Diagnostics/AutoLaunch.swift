@@ -32,6 +32,9 @@ public struct AutoLaunchOptions: Sendable, Equatable {
     return try DataDirectory.prepare(root: dataRoot, externalResidue: [])
   }
 
+  /// The Game Directory a run uses: a diagnostic run names its own and never touches the saved preferences.
+  public func gameDirectory(saved: URL?) -> URL? { enabled ? gameDirectory : saved }
+
   public static var current: AutoLaunchOptions {
     parse(arguments: CommandLine.arguments, environment: ProcessInfo.processInfo.environment)
   }
@@ -221,7 +224,6 @@ public struct AutoLaunch {
       terminate()
       return
     }
-    if let directory = options.gameDirectory { model.gameDirectory = directory }
     _ = await AutoLaunch(model: model, hosts: hosts, log: log, allowDownload: options.allowDownload).run()
     await model.shutdown()
     log.say("autolaunch: exit")

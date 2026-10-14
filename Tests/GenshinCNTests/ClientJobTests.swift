@@ -21,7 +21,7 @@ private func isError(_ error: (any Error)?, _ expected: SophonError) -> Bool {
     #expect(result.error == nil)
     for (path, content) in release.files { #expect(rig.read(path) == content) }
     #expect(rig.configText?.contains("game_version=5.6.0") == true)
-    #expect(try await rig.client.status().localVersion == "5.6.0")
+    #expect(try await rig.status().localVersion == "5.6.0")
     #expect(result.progress.first == .preparing)
     #expect(result.progress.last == .finalizing)
   }
@@ -34,7 +34,7 @@ private func isError(_ error: (any Error)?, _ expected: SophonError) -> Bool {
     let task = Task { await rig.run(.install) }
     // Mid-install: the template is there, the real version is not, and the game does not count as installed.
     #expect(await rig.waitForConfig(version: "0.0.0"))
-    #expect(try await rig.client.status().localVersion == nil)
+    #expect(try await rig.status().localVersion == nil)
     task.cancel()
     _ = await task.value
     #expect(rig.configText?.contains("game_version=0.0.0") == true)
@@ -69,27 +69,18 @@ private func isError(_ error: (any Error)?, _ expected: SophonError) -> Bool {
     #expect(rig.cdn.chunkRequests().isEmpty)
   }
 
-  @Test func ADR0002_aQueuedJobKeepsTheFolderItWasStartedWith() async throws {
+  @Test func ADR0002_queuedJobsEachWorkOnTheFolderTheyWereStartedWith() async throws {
     let rig = ClientRig(main: .game("5.6.0"))
     rig.cdn.chunkDelay = .milliseconds(200)
-    let first = rig.client.run(.install)
-    let second = rig.client.run(.repair)  // waits for `first`
     let other = rig.root.appending(path: "other", directoryHint: .isDirectory)
-    rig.client.setGameDirectory(other)
+    let first = rig.stream(.install)
+    let second = rig.stream(.install, in: other)  // waits for `first`
 
     for try await _ in first {}
     for try await _ in second {}
 
-    #expect(!FileManager.default.fileExists(atPath: other.path))
-  }
-
-  @Test func INS_003_installWithoutAGameDirectoryFailsBeforeAnyRequest() async throws {
-    let rig = ClientRig(main: .game("5.6.0"), withGameDirectory: false)
-
-    let result = await rig.run(.install)
-
-    #expect((result.error as? GenshinCNClientError) == .noGameDirectory)
-    #expect(rig.cdn.requests.isEmpty)
+    #expect(try await rig.status().localVersion == "5.6.0")
+    #expect(try await rig.client.status(in: other).localVersion == "5.6.0")
   }
 }
 
@@ -230,7 +221,7 @@ private func isError(_ error: (any Error)?, _ expected: SophonError) -> Bool {
     #expect(result.error == nil)
     for (path, content) in new.files { #expect(rig.read(path) == content) }
     #expect(!rig.exists("gone.bin"))
-    #expect(try await rig.client.status().localVersion == "5.6.0")
+    #expect(try await rig.status().localVersion == "5.6.0")
   }
 
   @Test func UPG_011_updateWritesTheNewVersionIntoConfigIniOnlyAfterTheFilesAreIn() async throws {
@@ -255,7 +246,7 @@ private func isError(_ error: (any Error)?, _ expected: SophonError) -> Bool {
 
     #expect(result.error == nil)
     #expect(rig.read("pkg_version") == new.files["pkg_version"])
-    #expect(try await rig.client.status().localVersion == "5.6.0")
+    #expect(try await rig.status().localVersion == "5.6.0")
   }
 
   @Test func UPG_006_updateWhenAlreadyCurrentIsAnError() async throws {
@@ -328,16 +319,16 @@ private func isError(_ error: (any Error)?, _ expected: SophonError) -> Bool {
     #expect(rig.read("pkg_version") == pkg)
     #expect(!rig.exists("fresh.bin"))
     #expect(rig.exists(".genshin-launcher-tmp"))
-    #expect(try await rig.client.status().localVersion == "5.6.0")
+    #expect(try await rig.status().localVersion == "5.6.0")
   }
 
   @Test func PRE_001_afterAPreDownloadTheOfferIsGoneButTheVersionStaysKnown() async throws {
     let (rig, _) = rig()
-    #expect(try await rig.client.status().canPreDownload)
+    #expect(try await rig.status().canPreDownload)
 
     _ = await rig.run(.preDownload)
 
-    let status = try await rig.client.status()
+    let status = try await rig.status()
     #expect(!status.canPreDownload)
     #expect(status.preDownloadVersion == "5.7.0")
   }

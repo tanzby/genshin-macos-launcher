@@ -2,11 +2,9 @@ import Foundation
 import Launcher
 import Platform
 import Sophon
-import Synchronization
 import Wine
 
 enum GenshinCNClientError: Error, Sendable, Equatable {
-  case noGameDirectory
   /// The folder holds no (complete) install, so there is nothing to update or repair.
   case notInstalled
   /// Repair needs the latest version (REP-002); update first.
@@ -28,8 +26,7 @@ extension GameSession: GameLaunching {}
 
 /// Composes Sophon, Wine and Platform into the `GameClient` for Genshin Impact, China server.
 ///
-/// The client works on one game folder at a time, which the launcher hands over with `setGameDirectory(_:)`
-/// (`GameClient`'s job methods take no path). `run(_:)` jobs are serialized: a job starts only after the
+/// The client holds no game folder: each operation gets it as a parameter. `run(_:in:)` jobs are serialized: a job starts only after the
 /// previous one, paused or not, has really returned.
 public final class GenshinCNClient: GameClient {
   let dataDirectory: URL
@@ -41,7 +38,6 @@ public final class GenshinCNClient: GameClient {
   let background: BackgroundImageProvider?
   /// The Wine loader the game starts with; when it is gone the launch asks for a Wine reinstall.
   let wineLoader: URL?
-  private let location = Mutex<URL?>(nil)
   let serializer = JobSerializer()
 
   package init(
@@ -102,25 +98,13 @@ public final class GenshinCNClient: GameClient {
 
   public func quiesce() async { await serializer.waitUntilIdle() }
 
-  public func setGameDirectory(_ url: URL?) {
-    location.withLock { $0 = url }
-  }
-
-  var gameDirectory: URL? { location.withLock { $0 } }
-
-  func requireGameDirectory() throws -> URL {
-    guard let directory = gameDirectory else { throw GenshinCNClientError.noGameDirectory }
-    return directory
-  }
-
   // MARK: - Status
 
-  public func status() async throws -> GameStatus {
-    do { return try await loadStatus() } catch { throw Self.map(error) }
+  public func status(in directory: URL?) async throws -> GameStatus {
+    do { return try await loadStatus(in: directory) } catch { throw Self.map(error) }
   }
 
-  private func loadStatus() async throws -> GameStatus {
-    let directory = gameDirectory
+  private func loadStatus(in directory: URL?) async throws -> GameStatus {
     // A broken or non-China install throws `brokenInstallation` (UPG-005) instead of reading as "no install".
     let installed = try directory.flatMap { try SophonInstallation.installedVersion(in: $0) }
     let branches: SophonGameBranches
