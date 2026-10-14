@@ -156,18 +156,6 @@ private let noop: @Sendable () -> Void = {}
     #expect(rig.launcher.cleanupFinished)
     #expect(throws: CancellationError.self) { try result.get() }
   }
-
-  @Test func LCH_014_aMovedAsideFileWithoutAJournalIsBroughtBackBeforeTheLaunch() async throws {
-    let rig = installedRig()
-    let crash = "YuanShen_Data/upload_crash.exe"
-    try FileManager.default.moveItem(at: rig.url(crash), to: rig.url(crash + ".bak"))
-    rig.launcher.watchedFiles.withLock { $0 = [rig.url(crash)] }
-
-    _ = try await rig.client.launch(.init(gameDirectory: rig.game), onStarted: noop)
-
-    #expect(rig.launcher.filesAtLaunch["upload_crash.exe"] == true)
-    #expect(!rig.exists(crash + ".bak"))
-  }
 }
 
 final class Counter: @unchecked Sendable {

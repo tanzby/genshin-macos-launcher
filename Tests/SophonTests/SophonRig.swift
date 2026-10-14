@@ -4,18 +4,12 @@ import TestSupport
 
 @testable import Sophon
 
-final class HealLog: Sendable {
-  let directories = Mutex<[URL]>([])
-}
-
 /// A temporary game directory and a fake CDN wired into a `SophonClient`.
 final class SophonRig: @unchecked Sendable {
   let root: URL
   let game: URL
   let cdn: FakeGameCDN
   let client: SophonClient
-  /// The directories `SophonGame.healBackups` was called with.
-  let healed = HealLog()
   /// What the client is asked about: the game folder, or `nil` for a launcher with none chosen.
   let directory: URL?
 
@@ -24,9 +18,8 @@ final class SophonRig: @unchecked Sendable {
     game = root.appending(path: "Game", directoryHint: .isDirectory)
     try! FileManager.default.createDirectory(at: game, withIntermediateDirectories: true)
     cdn = FakeGameCDN(main: main, pre: pre)
-    let healed = healed
     client = SophonClient(
-      game: FakeGameCDN.game(healBackups: { directory in healed.directories.withLock { $0.append(directory) } }),
+      game: FakeGameCDN.game(),
       session: cdn.session,
       configuration: SophonDownloadConfiguration(concurrency: 2, maxAttempts: 1, retryDelay: .milliseconds(1)))
     directory = withGameDirectory ? game : nil

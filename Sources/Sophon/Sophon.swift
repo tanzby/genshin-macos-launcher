@@ -22,20 +22,16 @@ package struct SophonGame: Sendable {
   package var foreignBuildMarkers: [String]
   /// Chunk cache, ldiff files, assembly folders and the launcher's `job.json`, inside the game directory.
   package var tempDirectoryName: String
-  /// Puts back files the game's launch moved aside. Runs at the start of repair and update, after the install
-  /// is known to exist and before anything is verified or patched.
-  package var healBackups: @Sendable (URL) -> Void
 
   package init(
     endpoints: SophonEndpoints, dataFolder: String, executableName: String, foreignBuildMarkers: [String],
-    tempDirectoryName: String, healBackups: @escaping @Sendable (URL) -> Void = { _ in }
+    tempDirectoryName: String
   ) {
     self.endpoints = endpoints
     self.dataFolder = dataFolder
     self.executableName = executableName
     self.foreignBuildMarkers = foreignBuildMarkers
     self.tempDirectoryName = tempDirectoryName
-    self.healBackups = healBackups
   }
 }
 

@@ -99,8 +99,6 @@ public final class GenshinCNClient: GameClient {
     guard GenshinLaunchRecipe.isSupported(gameDirectory: directory),
       FileManager.default.fileExists(atPath: directory.appending(path: GenshinCN.executableName).path)
     else { return .failedToLaunch }
-    // The game is not running (the launcher holds the exclusive slot), so leftovers can be put back.
-    GenshinGameFiles.healBackups(in: directory)
 
     let recipe = recipe(for: options)
     // The session restores everything itself, also when this Task is cancelled, and returns only afterwards.
