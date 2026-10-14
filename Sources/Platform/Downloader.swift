@@ -48,7 +48,7 @@ package struct Downloader: Downloading {
     try fileManager.createDirectory(
       at: destination.deletingLastPathComponent(), withIntermediateDirectories: true)
     let expected = sha256?.lowercased()
-    let partial = URL(filePath: destination.path + ".part")
+    let partial = Self.partialURL(for: destination)
 
     // A finished archive from an earlier, interrupted install is reused instead of fetched again.
     if let expected, fileManager.fileExists(atPath: destination.path),
@@ -117,6 +117,9 @@ package struct Downloader: Downloading {
     return delegate.total
   }
 
+  /// Where `download` keeps the bytes of `destination` until they are complete and verified.
+  package static func partialURL(for destination: URL) -> URL { URL(filePath: destination.path + ".part") }
+
   package static func fileSize(_ url: URL) -> Int64 {
     (try? FileManager.default.attributesOfItem(atPath: url.path))?[.size] as? Int64 ?? 0
   }
@@ -149,6 +152,10 @@ private final class StreamingDelegate: NSObject, URLSessionDataDelegate, @unchec
   private var failure: (any Error)?
   private var finishedWithoutBody = false
   private var _total: Int64 = -1
+  /// Blocks arrive thousands of times a second; progress goes out at most every `reportInterval`.
+  /// `download` reports the final size itself.
+  private static let reportInterval: Duration = .milliseconds(250)
+  private var lastReport: ContinuousClock.Instant?
 
   init(partial: URL, offset: Int64, progress: @escaping @Sendable (DownloadProgress) -> Void) {
     self.partial = partial
@@ -209,11 +216,14 @@ private final class StreamingDelegate: NSObject, URLSessionDataDelegate, @unchec
       dataTask.cancel()
       return
     }
-    let (done, total) = lock.withLock { () -> (Int64, Int64) in
+    let due = lock.withLock { () -> DownloadProgress? in
       completed += Int64(data.count)
-      return (completed, _total)
+      let now = ContinuousClock.now
+      if let lastReport, now - lastReport < Self.reportInterval { return nil }
+      lastReport = now
+      return DownloadProgress(completed: completed, total: _total)
     }
-    report(DownloadProgress(completed: done, total: total))
+    if let due { report(due) }
   }
 
   func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: (any Error)?) {

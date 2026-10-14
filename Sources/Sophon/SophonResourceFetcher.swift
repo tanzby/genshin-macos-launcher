@@ -67,8 +67,7 @@ struct ResourceFetcher: Sendable {
         }
       }
     } catch let error as URLError {
-      if error.code == .cancelled { throw CancellationError() }
-      throw SophonError.transport(code: error.code.rawValue)
+      throw SophonError.from(error)
     } catch SophonError.checksumMismatch(let name) {
       // The body outgrew the chunk: what is on disk is not a prefix worth resuming.
       try? handle?.close()

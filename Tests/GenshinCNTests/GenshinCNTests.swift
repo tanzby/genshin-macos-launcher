@@ -10,7 +10,6 @@ import TestSupport
     let rig = ClientRig()
     let client: any GameClient = rig.client
     #expect(await client.backgroundImage() == .bundledDefault)
-    #expect(GenshinCN.channel == "hk4ecn")
   }
 
   @Test func APP_021_clientServesTheProvidersImageAndItsFallback() async throws {

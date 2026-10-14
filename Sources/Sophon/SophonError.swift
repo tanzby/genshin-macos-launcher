@@ -41,6 +41,11 @@ package enum SophonError: Error, Equatable, Sendable {
 }
 
 extension SophonError {
+  /// What a failed `URLSession` call throws: cancellation stays cancellation, anything else is `.transport`.
+  package static func from(_ error: URLError) -> any Error {
+    error.code == .cancelled ? CancellationError() : SophonError.transport(code: error.code.rawValue)
+  }
+
   /// Transport faults and server faults read as "offline"; a 4xx is a contract break.
   package static func isOffline(_ error: any Error) -> Bool {
     switch error {

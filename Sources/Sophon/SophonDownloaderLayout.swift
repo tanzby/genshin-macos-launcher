@@ -4,6 +4,15 @@ enum SophonDownloaderLayout {
   /// Temp-directory name of one file: a digest of the whole relative path, never the basename.
   static func fileKey(for path: String) -> String { MD5Hasher.hex(of: Data(path.utf8)) }
 
+  /// Where downloaded chunks wait: `<temp>/chunks/`, one folder per file.
+  static func chunkRoot(in tempDirectory: URL) -> URL {
+    tempDirectory.appending(path: "chunks", directoryHint: .isDirectory)
+  }
+
+  static func chunkDirectory(for path: String, in tempDirectory: URL) -> URL {
+    chunkRoot(in: tempDirectory).appending(path: fileKey(for: path), directoryHint: .isDirectory)
+  }
+
   static let maxChunkSize: UInt32 = 64 << 20
 
   /// REP-003: checking is disk and CPU bound, so it uses about as many workers as there are cores.

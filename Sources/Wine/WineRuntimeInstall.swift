@@ -2,7 +2,8 @@ import Foundation
 import Platform
 
 extension WineRuntime {
-  func currentStatus() -> WineStatus {
+  /// Whether the pinned Wine and the app's DXMT are installed and intact. Looks at the disk, not just the stamp.
+  public func status() -> WineStatus {
     let fileManager = FileManager.default
     var isDirectory: ObjCBool = false
     guard fileManager.fileExists(atPath: layout.runtimeDirectory.path, isDirectory: &isDirectory), isDirectory.boolValue
@@ -84,9 +85,7 @@ extension WineRuntime {
     progress(.extracting)
     // An orphaned wineserver on the old prefix must not outlive the prefix it serves.
     if fileManager.fileExists(atPath: layout.wineserver.path) {
-      _ = try? await runner.run(
-        layout.wineserver, arguments: ["-k"], environment: ["WINEPREFIX": layout.prefixDirectory.path],
-        workingDirectory: layout.root)
+      _ = try? await WinePrefixCommands(layout: layout, runner: runner).wineserver("-k")
     }
     try removeIfPresent(layout.runtimeDirectory)
     try removeIfPresent(layout.prefixDirectory)
@@ -198,7 +197,7 @@ extension WineRuntime {
 
   /// Size of a finished download plus its `.part`, 0 if neither exists.
   static func bytesOnDisk(of archive: URL) -> Int64 {
-    Downloader.fileSize(archive) + Downloader.fileSize(URL(filePath: archive.path + ".part"))
+    Downloader.fileSize(archive) + Downloader.fileSize(Downloader.partialURL(for: archive))
   }
 
   private func removeIfEmpty(_ directory: URL) {
