@@ -168,7 +168,7 @@
 | PRE-001 | 何时显示预下载提示 | 改写 | [#26](https://github.com/tanzby/yet-another-anime-game-launcher/issues/26) | 组件、线上 | `PRE_001_*`（SophonUpdaterTests：按目标版本的预下载记录；提示显示逻辑属 Launcher）；`PRE_001_*`（SophonClientStatusTests、SophonClientPreDownloadTests） |
 | PRE-002 | 执行预下载 | 改写 | [#26](https://github.com/tanzby/yet-another-anime-game-launcher/issues/26) | 组件、线上 | `PRE_002_*`（SophonUpdaterTests）、`PRE_002_live_*`；`PRE_002_*`（SophonClientPreDownloadTests） |
 | PRE-003 | 预下载版本的显示 | 照搬 | 行为不变（流程由 Launcher + Fake GameClient 承载） | 组件 | `PRE_003_*`（SophonClientStatusTests） |
-| PRG-001 | 任务事件推送（WebSocket） | 改写 | [#28](https://github.com/tanzby/yet-another-anime-game-launcher/issues/28) C 负面用例 | 单元 | `PRG_001_*`（ClientJobMappingTests：作业先结束、后读事件，错误不丢；进度事件的首尾见 SophonClientInstallTests） |
+| PRG-001 | 任务事件推送（WebSocket） | 改写 | [#28](https://github.com/tanzby/yet-another-anime-game-launcher/issues/28) C 负面用例 | 单元 | `PRG_001_*`（ClientMappingTests：作业在任何进度之前失败，错误仍由 `run` 抛出、不丢；进度事件的首尾见 SophonClientInstallTests） |
 | PRG-002 | 进度与速度计算 | 改写 | [#21](https://github.com/tanzby/yet-another-anime-game-launcher/issues/21) SwiftUI 主界面 / 设置窗口重新设计 | 单元 |`PRG_002_*`（MainPresentationTests） |
 | PRG-003 | 事件与界面文案的对应关系 | 改写 | [#21](https://github.com/tanzby/yet-another-anime-game-launcher/issues/21) SwiftUI 主界面 / 设置窗口重新设计 | 单元 |`PRG_003_*`（MainPresentationTests、EventNotifierTests） |
 | PRG-004 | 字节数的可读格式 | 改写 | [#21](https://github.com/tanzby/yet-another-anime-game-launcher/issues/21) SwiftUI 主界面 / 设置窗口重新设计 | 单元 |`PRG_004_*`（MainPresentationTests） |

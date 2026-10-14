@@ -79,6 +79,13 @@ import Testing
     #expect(failure as? SophonError == .notInstalled)
   }
 
+  @Test func PRG_001_aJobThatFailsBeforeAnyProgressStillDeliversItsError() async throws {
+    let rig = ClientRig()
+    await #expect(throws: SophonError.notInstalled) {  // nothing is installed, so there is nothing to update
+      try await rig.client.run(.update, in: rig.game) { _ in }
+    }
+  }
+
   @Test func ADR0002_eachJobWorksOnTheFolderItWasGiven() async throws {
     let rig = ClientRig()
     rig.install("5.5.0")
