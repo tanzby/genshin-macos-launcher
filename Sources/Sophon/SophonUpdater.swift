@@ -71,7 +71,6 @@ package struct SophonUpdater: Sendable {
     self.downloader = downloader
   }
 
-
   // MARK: - Pre-download record
 
   /// Whether `targetVersion` was pre-downloaded completely, for the game at `installedVersion`: an ldiff
