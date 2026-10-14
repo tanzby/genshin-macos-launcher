@@ -29,7 +29,7 @@ private final class Harness {
     let directory = temporaryURL("AutoLaunchTests")
     logs = directory.appending(path: "logs")
     log = DiagLog(logsDirectory: logs)
-    model = LauncherModel(client: fake, wine: wine, hosts: hosts, gameDirectory: directory, chunkTempMargin: 0)
+    model = LauncherModel(client: fake, wine: wine, hosts: HostsModel(hosts), gameDirectory: directory, chunkTempMargin: 0)
   }
 
   var lines: [String] {

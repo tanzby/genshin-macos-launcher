@@ -2,36 +2,28 @@ import Foundation
 import Observation
 import Platform
 
-/// `HostsBlocklist` behind a seam, so onboarding is testable without `/etc/hosts` or a password dialog.
-public protocol HostsBlocking: Sendable {
-  func status() throws -> HostsBlocklist.Status
-  func apply() async throws
-}
-
-extension HostsBlocklist: HostsBlocking {}
-
 /// First-run guidance: the hosts blocklist is a required step (the game never starts without it), then the
 /// game directory. The blocklist stays watched afterwards because `/etc/hosts` can change under us.
 @MainActor @Observable
 public final class OnboardingModel {
   public enum Step: Sendable, Equatable { case hosts, gameDirectory, done }
 
-  package private(set) var hostsStatus: HostsBlocklist.Status?
-  public private(set) var hostsError: String?
-  public private(set) var isApplyingHosts = false
   /// The saved game folder still exists. A folder on an unmounted or renamed volume sends the user back to
   /// the picker instead of failing every install and launch against a dead path.
   package private(set) var gameDirectoryUsable = true
 
-  private let hosts: any HostsBlocking
+  /// Shared with the launcher: onboarding only shows it.
+  public let hosts: HostsModel
   private let settings: SettingsModel
 
-  public init(hosts: any HostsBlocking, settings: SettingsModel) {
+  public init(hosts: HostsModel, settings: SettingsModel) {
     self.hosts = hosts
     self.settings = settings
   }
 
-  public var allowsLaunch: Bool { hostsStatus?.allowsLaunch ?? false }
+  public var allowsLaunch: Bool { hosts.allowsLaunch }
+  public var hostsError: String? { hosts.error }
+  public var isApplyingHosts: Bool { hosts.isApplying }
 
   /// A game folder is chosen and still exists.
   public var hasUsableGameDirectory: Bool { settings.gameDirectory != nil && gameDirectoryUsable }
@@ -52,7 +44,7 @@ public final class OnboardingModel {
 
   /// Re-reads `/etc/hosts` (no privileges needed). An unreadable file counts as "not in place".
   public func refresh() {
-    hostsError = readStatus()
+    hosts.refresh()
     checkGameDirectory()
   }
 
@@ -61,31 +53,9 @@ public final class OnboardingModel {
     gameDirectoryUsable = settings.gameDirectory.map(GameDirectoryValidator.isUsable) ?? true
   }
 
-  /// Returns the read error's description, nil on success.
-  private func readStatus() -> String? {
-    do {
-      hostsStatus = try hosts.status()
-      return nil
-    } catch {
-      hostsStatus = nil
-      return String(describing: error)
-    }
-  }
-
-  /// Asks for the administrator password (inside `apply()`). A cancelled dialog leaves the step unchanged.
+  /// Asks for the administrator password. A cancelled dialog leaves the step unchanged.
   public func applyHosts() async {
-    guard !isApplyingHosts else { return }
-    isApplyingHosts = true
-    hostsError = nil
-    var applyError: String?
-    do {
-      try await hosts.apply()
-    } catch {
-      applyError = String(describing: error)
-    }
-    isApplyingHosts = false
-    let readError = readStatus()
-    hostsError = applyError ?? readError
+    await hosts.apply()
   }
 
   public func useGameDirectory(_ url: URL) {

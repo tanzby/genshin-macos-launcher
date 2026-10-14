@@ -25,10 +25,11 @@ struct AppRuntime {
     let client = GenshinCNClient.bundled(wine: wine, dataDirectory: data, bundle: .main)
     let settings = SettingsModel()
     let hosts = GenshinCN.hostsBlocklist()
-    let onboarding = OnboardingModel(hosts: hosts, settings: settings)
+    let hostsModel = HostsModel(hosts)
+    let onboarding = OnboardingModel(hosts: hostsModel, settings: settings)
     // A diagnostic run names its own game folder; it must not touch the one saved in the real preferences.
     let launcher = LauncherModel(
-      client: client, wine: wine, hosts: hosts,
+      client: client, wine: wine, hosts: hostsModel,
       startup: StartupSteps(
         rosettaInstalled: { StartupSteps.isRosettaInstalled() }, recoverSession: { await client.recover() }),
       gameDirectorySource: { autoLaunch.gameDirectory(saved: settings.gameDirectory) })

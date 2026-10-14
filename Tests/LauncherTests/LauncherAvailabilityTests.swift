@@ -14,7 +14,7 @@ private func makeModel(
   hosts: FakeHosts = FakeHosts(.current), gameDirectory: URL? = temporaryURL("LauncherAvailability")
 ) async -> (LauncherModel, FakeGameClient, FakeHosts) {
   let fake = FakeGameClient(status: status)
-  let model = LauncherModel(client: fake, hosts: hosts, gameDirectory: gameDirectory, chunkTempMargin: 0)
+  let model = LauncherModel(client: fake, hosts: HostsModel(hosts), gameDirectory: gameDirectory, chunkTempMargin: 0)
   await model.refresh()
   return (model, fake, hosts)
 }

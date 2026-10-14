@@ -17,11 +17,11 @@ private func makeController(
   let settings = SettingsModel(defaults: makeTemporaryDefaults("controller").defaults)
   settings.gameDirectory = gameDirectory
   let client = FakeGameClient(status: status)
-  let fakeHosts = FakeHosts(hosts)
+  let hostsModel = HostsModel(FakeHosts(hosts))
   let launcher = LauncherModel(
-    client: client, hosts: fakeHosts, startup: startup, gameDirectorySource: { settings.gameDirectory },
+    client: client, hosts: hostsModel, startup: startup, gameDirectorySource: { settings.gameDirectory },
     availableDiskSpace: { _ in Int64.max })
-  let onboarding = OnboardingModel(hosts: fakeHosts, settings: settings)
+  let onboarding = OnboardingModel(hosts: hostsModel, settings: settings)
   return (MainController(launcher: launcher, settings: settings, onboarding: onboarding), client, settings)
 }
 
@@ -159,5 +159,14 @@ private func makeController(
     await controller.applyHosts()
     #expect(controller.presentation.buttonEnabled)
     #expect(controller.presentation.status == .none)
+  }
+
+  @Test func WIN_011_onboardingAndTheLauncherReadOneHostsState() async {
+    let (controller, _, _) = makeController(hosts: .missing)
+    await controller.refresh()
+    #expect(controller.launcher.refusal(for: .launch) == .hostsRequired)
+    await controller.onboarding.applyHosts()  // not through the controller: nothing re-reads for the launcher
+    #expect(controller.onboarding.allowsLaunch)
+    #expect(controller.launcher.refusal(for: .launch) == nil)
   }
 }

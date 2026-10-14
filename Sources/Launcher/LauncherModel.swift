@@ -24,8 +24,6 @@ public final class LauncherModel {
   public private(set) var progress: JobProgress?
   package private(set) var pendingJob: PendingJob?
   public private(set) var lastError: LauncherError?
-  /// What the hosts blocklist looked like at the last read; nil = unread or unreadable.
-  package private(set) var hostsStatus: HostsBlocklist.Status?
   /// Read on every use, never copied: the app passes a closure over `SettingsModel`, so a folder picked a moment
   /// ago is the one the next operation sees. Tests with a fixed folder pass `gameDirectory:` instead.
   private var directorySource: @MainActor () -> URL?
@@ -47,7 +45,7 @@ public final class LauncherModel {
 
   /// The hosts blocklist is in place (or there is no hosts seam to ask). Without it the game must not start.
   package var hostsAllowLaunch: Bool {
-    hosts == nil || hostsStatus?.allowsLaunch == true
+    hosts?.allowsLaunch ?? true
   }
 
   /// Wine is known to need preparation.
@@ -70,7 +68,7 @@ public final class LauncherModel {
 
   private let client: any GameClient
   private let wine: (any WinePreparing)?
-  private let hosts: (any HostsBlocking)?
+  private let hosts: HostsModel?
   private let startup: StartupSteps?
   private let diskSpace: DiskSpaceCheck
 
@@ -90,7 +88,7 @@ public final class LauncherModel {
   public init(
     client: any GameClient,
     wine: (any WinePreparing)? = nil,
-    hosts: (any HostsBlocking)? = nil,
+    hosts: HostsModel? = nil,
     startup: StartupSteps? = nil,
     gameDirectory: URL? = nil,
     gameDirectorySource: (@MainActor () -> URL?)? = nil,
@@ -195,11 +193,11 @@ public final class LauncherModel {
     if let store = store { pendingJob = store.load() }
   }
 
-  /// Re-reads `/etc/hosts` (no privileges needed). An unreadable file counts as "not in place". Call it after
-  /// the blocklist was applied elsewhere.
+  /// Re-reads `/etc/hosts` (no privileges needed) and drops a `hostsRequired` error the read resolved. An unreadable
+  /// file counts as "not in place".
   package func refreshHosts() {
     guard let hosts else { return }
-    hostsStatus = try? hosts.status()
+    hosts.refresh()
     if hostsAllowLaunch, lastError == .hostsRequired { lastError = nil }
   }
 
