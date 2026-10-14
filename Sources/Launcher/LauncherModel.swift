@@ -90,8 +90,6 @@ public final class LauncherModel {
   /// `GameSession.recover()` has run in this process; it must not run again while a game may be running.
   private var hasRecovered = false
   private var recovery: Task<Void, Never>?
-  /// The game launch found Wine broken although the stamp says ready; only a reinstall clears it.
-  private var needsForcedReinstall = false
 
   public init(
     client: any GameClient,
@@ -158,8 +156,7 @@ public final class LauncherModel {
   package func refreshWine() async {
     guard let wine else { return }
     let status = await wine.status()
-    // A launch that found Wine broken outranks the stamp: only a successful reinstall clears the request.
-    wineStatus = needsForcedReinstall && status == .ready ? Self.reportedByLaunch : status
+    wineStatus = status
   }
 
   /// Re-checks Rosetta (when there is a check to make) and records the result. False: `lastError` says why.
@@ -173,15 +170,6 @@ public final class LauncherModel {
     }
     return !isRosettaMissing
   }
-
-  /// The game launch found Wine broken although the stamp says ready: Wine counts as missing until a
-  /// reinstall succeeds, and the main button goes back to "prepare Wine".
-  func requireWineReinstall() {
-    needsForcedReinstall = true
-    wineStatus = Self.reportedByLaunch
-  }
-
-  private static let reportedByLaunch = WineStatus.needsInstall(.corrupt(missing: "reported by the game launch"))
 
   /// Runs `recover()` once per process. Overlapping callers share the one running recovery and all wait for
   /// it; it counts as done only after it has returned, so nothing reads the game state before. While it runs
@@ -514,18 +502,13 @@ public final class LauncherModel {
       options: [.userInitiated, .idleSystemSleepDisabled], reason: "Genshin Launcher Wine preparation")
     let (updates, sink) = AsyncStream<WineInstallProgress>.makeStream(bufferingPolicy: .bufferingNewest(1))  // only the latest progress matters
     var failure: Error?
-    let forced = needsForcedReinstall
     // A task group, so cancelling this Task cancels the install; `updates` ends when the install returns.
     await withTaskGroup(of: (any Error)?.self) { group in
       group.addTask {
         defer { sink.finish() }
         do {
           try Task.checkCancellation()  // paused while waiting for a pre-download: do not begin the install
-          if forced {
-            try await wine.reinstall { sink.yield($0) }
-          } else {
-            try await wine.ensureInstalled { sink.yield($0) }
-          }
+          try await wine.ensureInstalled { sink.yield($0) }
           return nil
         } catch {
           return error
@@ -536,7 +519,6 @@ public final class LauncherModel {
     }
     let error = failure.map(LauncherError.init)
     let paused = Task.isCancelled || failure is CancellationError || error == .client(.cancelled)
-    if failure == nil { needsForcedReinstall = false }
     await refreshWine()  // after a pause or failure still not ready: the next attempt starts from the stamp and the `.part` files
     if !paused {
       let failed = error ?? (isWineMissing ? .unexpected("Wine is still not ready after installation") : nil)
@@ -630,7 +612,8 @@ public final class LauncherModel {
     if let failure {
       lastError = failure
       eventSink.yield(.launchFailed(failure))
-      if failure == .client(.wineReinstallRequired) { requireWineReinstall() }
+      // Wine's own status is the only judge: if the failure came from a damaged Wine, the main button goes back to "prepare Wine".
+      await refreshWine()
     }
     launchGate = nil
     launchWork = nil

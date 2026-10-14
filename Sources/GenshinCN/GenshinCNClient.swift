@@ -23,8 +23,6 @@ public final class GenshinCNClient: GameClient {
   let launcher: any GameLaunching
   let sophon: SophonClient
   let background: BackgroundImageProvider?
-  /// The Wine loader the game starts with; when it is gone the launch asks for a Wine reinstall.
-  let wineLoader: URL?
   let serializer = JobSerializer()
 
   package init(
@@ -32,15 +30,13 @@ public final class GenshinCNClient: GameClient {
     protonExtras: URL,
     launcher: any GameLaunching,
     sophon: SophonClient = SophonClient(game: GenshinCN.sophonGame),
-    background: BackgroundImageProvider? = nil,
-    wineLoader: URL? = nil
+    background: BackgroundImageProvider? = nil
   ) {
     self.dataDirectory = dataDirectory
     self.protonExtras = protonExtras
     self.launcher = launcher
     self.sophon = sophon
     self.background = background
-    self.wineLoader = wineLoader
   }
 
   /// The production composition: the game runs in `wine`'s prefix through a `GameSession`.
@@ -52,8 +48,7 @@ public final class GenshinCNClient: GameClient {
       launchServices: SystemLaunchServices(), helpers: helpers)
     return GenshinCNClient(
       dataDirectory: dataDirectory.root, protonExtras: protonExtras, launcher: session,
-      background: BackgroundImageProvider(cacheDirectory: dataDirectory.background),
-      wineLoader: wine.runtimeDirectory.appending(path: "bin/wine", directoryHint: .notDirectory))
+      background: BackgroundImageProvider(cacheDirectory: dataDirectory.background))
   }
 
   /// The composition for the app: helpers and protonextras come from `bundle` (`Contents/Helpers`, `Resources`).
@@ -100,10 +95,6 @@ public final class GenshinCNClient: GameClient {
     _ options: LaunchOptions, onStarted: @escaping @Sendable () -> Void
   ) async throws -> LaunchOutcome {
     let directory = options.gameDirectory
-    // The stamp says ready but the loader is gone: only a reinstall helps (the launcher goes back to Wine setup).
-    if let wineLoader, !FileManager.default.isExecutableFile(atPath: wineLoader.path) {
-      throw GameClientError.wineReinstallRequired
-    }
     // An unsupported path (LCH-010) or an empty folder has nothing to launch.
     guard GenshinLaunchRecipe.isSupported(gameDirectory: directory),
       FileManager.default.fileExists(atPath: directory.appending(path: GenshinCN.executableName).path)

@@ -2330,23 +2330,6 @@
         }
       }
     },
-    "Wine has to be reinstalled.": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Wine has to be reinstalled."
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "需要重新安装 Wine。"
-          }
-        }
-      }
-    },
     "Wine has to be set up first": {
       "extractionState": "manual",
       "localizations": {

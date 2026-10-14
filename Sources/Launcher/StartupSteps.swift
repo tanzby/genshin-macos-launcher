@@ -9,8 +9,6 @@ public protocol WinePreparing: Sendable {
   /// Installs Wine, DXMT and the prefix when `status()` is not `.ready`. Must stop when its Task is
   /// cancelled; downloads resume from their `.part` files on the next call.
   func ensureInstalled(progress: @escaping @Sendable (WineInstallProgress) -> Void) async throws
-  /// Installs unconditionally, replacing a Wine that `status()` still calls ready (used when launching found it broken).
-  func reinstall(progress: @escaping @Sendable (WineInstallProgress) -> Void) async throws
 }
 
 /// The environment steps of ADR 0002's startup order that sit around Wine, behind a seam so the state machine
