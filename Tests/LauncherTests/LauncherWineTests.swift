@@ -474,73 +474,41 @@ private final class Harness {
   }
 }
 
-// MARK: - Forced reinstall after a launch found Wine broken
+// MARK: - Wine found broken by a failed launch
 
-@MainActor @Suite struct WIN_005_ReinstallTests {
-  /// What `launch()` does when the client throws `wineReinstallRequired`: the hook is called directly.
-  private func failLaunchWithReinstall(_ h: Harness) async throws {
-    await h.model.bootstrap()
-    h.model.requireWineReinstall()
-  }
-
-  @Test func WIN_005_wineReinstallRequiredReturnsToPreparation() async throws {
+@MainActor @Suite struct WIN_005_FailedLaunchTests {
+  @Test func WIN_005_aFailedLaunchRereadsWineAndReturnsToPreparationWhenItIsBroken() async throws {
     let h = Harness(wine: .ready)
-    try await failLaunchWithReinstall(h)
-    #expect(h.model.primaryAction == .prepareWine)
-    #expect(h.model.wineStatus != .ready)
-    await #expect(throws: LauncherError.wineNotReady) { try await h.model.launch() }
+    await h.model.bootstrap()
+    try await h.model.launch()
+    try await h.fake.nextLaunch()
+    let before = h.wine.statusCalls
 
-    // the disk still says "ready"; re-reading it must not undo the request
-    await h.model.refreshWine()
+    h.wine.setStatus(.needsInstall(.corrupt(missing: "bin/wine64")))
+    h.fake.finishLaunch(.failedToLaunch)
+    await h.model.waitUntilIdle()
+
+    #expect(h.wine.statusCalls - before == 1)
     #expect(h.model.primaryAction == .prepareWine)
+    #expect(h.model.lastError == .failedToLaunch)
 
     try await h.model.prepareWine()
     let install = try await h.wine.nextInstall()
-    #expect(h.wine.isReinstall(install: install), "ensureInstalled would return at once on a ready stamp")
+    h.wine.setStatus(.ready)
     h.wine.finish(install: install)
     await h.model.waitUntilIdle()
-    #expect(h.model.wineStatus == .ready)
-    #expect(h.model.primaryAction == .launch)
-
-    // satisfied: later refreshes follow the disk again
-    h.wine.setStatus(missing)
-    await h.model.refreshWine()
-    h.wine.setStatus(.ready)
-    await h.model.refreshWine()
     #expect(h.model.primaryAction == .launch)
   }
 
-  @Test func WIN_005_aFailedReinstallStaysRequired() async throws {
+  @Test func WIN_005_aFailedLaunchWithReadyWineKeepsTheLaunchButton() async throws {
     let h = Harness(wine: .ready)
-    try await failLaunchWithReinstall(h)
-    try await h.model.prepareWine()
-    let first = try await h.wine.nextInstall()
-    h.wine.fail(install: first, throwing: WineInstallError.dxmtBundleInvalid)
-    await h.model.waitUntilIdle()
-    #expect(h.model.primaryAction == .prepareWine)
-
-    try await h.model.resume()
-    let second = try await h.wine.nextInstall()
-    #expect(h.wine.isReinstall(install: second))
-    h.wine.finish(install: second)
+    await h.model.bootstrap()
+    try await h.model.launch()
+    try await h.fake.nextLaunch()
+    h.fake.finishLaunch(.failedToLaunch)
     await h.model.waitUntilIdle()
     #expect(h.model.primaryAction == .launch)
-  }
-}
-
-extension WIN_005_ReinstallTests {
-  @Test func WIN_005_aPausedReinstallStaysRequired() async throws {
-    let h = Harness(wine: .ready)
-    try await failLaunchWithReinstall(h)
-    try await h.model.prepareWine()
-    _ = try await h.wine.nextInstall()
-    await h.model.pause()
-    #expect(h.model.primaryAction == .prepareWine)
-    try await h.model.resume()
-    let second = try await h.wine.nextInstall()
-    #expect(h.wine.isReinstall(install: second))
-    h.wine.finish(install: second)
-    await h.model.waitUntilIdle()
+    #expect(h.wine.installCount == 0)
   }
 }
 
