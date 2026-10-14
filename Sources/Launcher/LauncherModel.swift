@@ -187,7 +187,7 @@ public final class LauncherModel {
       isOnline = false
       // Offline is a state of its own; anything else (a broken install) needs to be seen.
       let failure = LauncherError(error)
-      if failure != .client(.network), failure != .client(.cancelled) {
+      if !error.isCancellation, failure != .client(.network) {
         lastError = failure
         refreshFailure = failure
       }
@@ -268,7 +268,7 @@ public final class LauncherModel {
     do {
       return try await work()
     } catch {
-      if !(error is CancellationError) { lastError = LauncherError(error) }
+      if !error.isCancellation { lastError = LauncherError(error) }
       throw error
     }
   }
@@ -351,7 +351,7 @@ public final class LauncherModel {
     async let outcome = Self.run(job, client: client, in: store.gameDirectory, progress: sink)
     for await update in updates { progress = update }
     let failure = await outcome
-    let paused = Task.isCancelled || failure is CancellationError
+    let paused = Task.isCancelled || failure?.isCancellation == true
     if paused {
       // Keep job.json: the job is resumable.
     } else if let failure {
@@ -404,7 +404,7 @@ public final class LauncherModel {
     do {
       bytes = try await client.requiredDiskSpace(for: job, in: directory)
     } catch {
-      if Task.isCancelled || error is CancellationError { throw CancellationError() }
+      if Task.isCancelled || error.isCancellation { throw CancellationError() }
       throw LauncherError(error)
     }
     try diskSpace.verify(required: bytes, in: directory)
@@ -500,7 +500,7 @@ public final class LauncherModel {
       failure = await group.next() ?? nil
     }
     let error = failure.map(LauncherError.init)
-    let paused = Task.isCancelled || failure is CancellationError || error == .client(.cancelled)
+    let paused = Task.isCancelled || failure?.isCancellation == true
     await refreshWine()  // after a pause or failure still not ready: the next attempt starts from the stamp and the `.part` files
     if !paused {
       let failed = error ?? (isWineMissing ? .unexpected("Wine is still not ready after installation") : nil)
@@ -571,8 +571,7 @@ public final class LauncherModel {
     case .success(.startupTimedOut): failure = .launchTimeout
     case .success(.failedToLaunch): failure = .failedToLaunch
     case .failure(let error):
-      let mapped = LauncherError(error)
-      failure = mapped == .client(.cancelled) ? nil : mapped
+      failure = error.isCancellation ? nil : LauncherError(error)
     }
     if let failure {
       lastError = failure

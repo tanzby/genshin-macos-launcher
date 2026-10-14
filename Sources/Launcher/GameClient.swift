@@ -95,7 +95,6 @@ public enum GameClientError: Error, Sendable, Equatable {
   case network
   case insufficientDiskSpace
   case verificationFailed
-  case cancelled
   /// The game folder is damaged or not the China release (Bilibili); neither update nor repair can start from it.
   case brokenInstallation
   /// The folder chosen for an install holds something else than an interrupted install.

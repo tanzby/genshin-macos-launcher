@@ -128,9 +128,7 @@ public final class GenshinCNClient: GameClient {
   /// Translates module errors into the ones the launcher knows (`GameClientError`).
   static func map(_ error: any Error) -> any Error {
     switch error {
-    case is CancellationError:
-      return error
-    case let error as URLError where error.code == .cancelled:
+    case _ where error.isCancellation:
       return CancellationError()
     case _ where SophonError.isOffline(error):
       return GameClientError.network

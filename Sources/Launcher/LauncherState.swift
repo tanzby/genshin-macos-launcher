@@ -29,6 +29,8 @@ public enum LauncherError: Error, Sendable, Equatable {
   case gameExited(code: Int32, logPath: URL)
   case failedToLaunch
   case client(GameClientError)
+  /// The work was stopped (pause, quit), nothing failed. Callers check `Error.isCancellation` before showing an error.
+  case cancelled
   case unexpected(String)
 
   /// Bytes still missing for `insufficientDiskSpace`.
@@ -69,7 +71,9 @@ extension GameJob {
 
 extension LauncherError {
   init(_ error: Error) {
-    if let error = error as? LauncherError {
+    if error.isCancellation {
+      self = .cancelled
+    } else if let error = error as? LauncherError {
       self = error
     } else if let error = error as? GameClientError {
       self = .client(error)
@@ -84,10 +88,8 @@ extension LauncherError {
       case .httpStatus: self = .client(.network)
       case .checksumMismatch: self = .client(.verificationFailed)
       }
-    } else if let error = error as? URLError {
-      self = error.code == .cancelled ? .client(.cancelled) : .client(.network)
-    } else if error is CancellationError {
-      self = .client(.cancelled)
+    } else if error is URLError {
+      self = .client(.network)
     } else {
       self = .unexpected(String(describing: error))
     }
