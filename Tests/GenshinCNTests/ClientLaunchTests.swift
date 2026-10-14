@@ -124,7 +124,7 @@ private let noop: @Sendable () -> Void = {}
     #expect(try await rig.client.launch(.init(gameDirectory: rig.game), onStarted: noop) == .failedExit(code: 3, logPath: log))
 
     rig.launcher.script(.result(.startupTimedOut))
-    #expect(try await rig.client.launch(.init(gameDirectory: rig.game), onStarted: noop) == .failedToLaunch)
+    #expect(try await rig.client.launch(.init(gameDirectory: rig.game), onStarted: noop) == .startupTimedOut)
 
     rig.launcher.script(.result(.failedToLaunch(reason: "reg add failed")))
     #expect(try await rig.client.launch(.init(gameDirectory: rig.game), onStarted: noop) == .failedToLaunch)

@@ -107,7 +107,8 @@ public final class GenshinCNClient: GameClient {
     switch await launcher.launch(recipe, onStarted: onStarted) {
     case .exited: return .exited
     case .failedExit(let code, let log): return .failedExit(code: code, logPath: log)
-    case .startupTimedOut, .failedToLaunch: return .failedToLaunch
+    case .startupTimedOut: return .startupTimedOut
+    case .failedToLaunch: return .failedToLaunch
     case .cancelled: throw CancellationError()
     }
   }
