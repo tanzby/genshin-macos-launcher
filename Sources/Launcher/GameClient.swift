@@ -101,23 +101,21 @@ public enum GameClientError: Error, Sendable, Equatable {
   case installDirectoryNotEmpty
 }
 
-/// The seam between the launcher state machine and a concrete game.
+/// The seam between the launcher state machine and a concrete game. The client keeps no Game Directory: every
+/// operation that reads one takes it as a parameter (`launch` through `LaunchOptions.gameDirectory`).
 public protocol GameClient: Sendable {
-  func status() async throws -> GameStatus
-  func run(_ job: GameJob) -> AsyncThrowingStream<JobProgress, Error>
+  /// `directory` is the Game Directory, `nil` when none is chosen yet: the remote state is still reported.
+  func status(in directory: URL?) async throws -> GameStatus
+  func run(_ job: GameJob, in directory: URL) -> AsyncThrowingStream<JobProgress, Error>
   /// Bytes the job will write after decompression, excluding the chunk-cache margin the launcher adds.
   /// Install: unpacked total. Update and pre-download: download size plus new files. 0 when nothing is written.
   /// This is the launcher's preflight, run before it writes anything, so it also refuses a folder the job could
   /// not use (an install into a folder with other content throws `installDirectoryNotEmpty`) and touches nothing.
-  func requiredDiskSpace(for job: GameJob) async throws -> Int64
+  func requiredDiskSpace(for job: GameJob, in directory: URL) async throws -> Int64
   /// `onStarted` fires once the game process exists; without it within the launch timeout the launcher cancels.
   /// Cancellation must restore Launch Mutations and kill the prefix before returning.
   func launch(_ options: LaunchOptions, onStarted: @escaping @Sendable () -> Void) async throws -> LaunchOutcome
   func backgroundImage() async -> BackgroundImage
-  /// The launcher tells the client which folder `status()`, `run(_:)` and `requiredDiskSpace(for:)` work on
-  /// (they take no path). Called with the current folder, also `nil`, right before every client call that reads it
-  /// (refresh, the disk-space check and `run` of a job, launch), never ahead of a check that may reject the call.
-  func setGameDirectory(_ url: URL?)
   /// Returns once nothing the client started is still running. A job's stream ends as soon as its consumer is
   /// cancelled; this is how the launcher learns the work behind it has really stopped (pause, shutdown).
   func quiesce() async
@@ -128,6 +126,5 @@ public protocol GameClient: Sendable {
 
 extension GameClient {
   public func openWineCommandPrompt(_ options: LaunchOptions) async {}
-  public func setGameDirectory(_ url: URL?) {}
   public func quiesce() async {}
 }

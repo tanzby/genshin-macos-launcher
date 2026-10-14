@@ -1,8 +1,7 @@
 import Foundation
 import Observation
 
-/// Glue between the main window and the models: routes button taps and keeps the launcher's game directory in
-/// step with the settings. Everything with a decision in it lives here or in
+/// Glue between the main window and the models: routes button taps. Everything with a decision in it lives here or in
 /// `MainPresentation`, so the SwiftUI views stay plain.
 @MainActor @Observable
 public final class MainController {
@@ -45,12 +44,7 @@ public final class MainController {
     await reload()
   }
 
-  private func syncGameDirectory() {
-    if launcher.gameDirectory != settings.gameDirectory { launcher.gameDirectory = settings.gameDirectory }
-  }
-
   private func reload() async {
-    syncGameDirectory()
     // Until the startup sequence has got past the Rosetta check, every reload runs it again.
     if launcher.hasBootstrapped {
       await launcher.refreshWine()
@@ -84,7 +78,6 @@ public final class MainController {
 
   /// Returns once the prompt window is closed, so callers run it in a `Task`.
   public func openWineCommandPrompt() async {
-    syncGameDirectory()
     await launcher.openWineCommandPrompt()
   }
 
@@ -104,8 +97,6 @@ public final class MainController {
 
   /// A refusal is already in `launcher.lastError`; the window reads it from there.
   private func run(_ work: () async throws -> Void) async {
-    // A folder picked a moment ago has not reached the launcher yet when the install button is tapped right after.
-    syncGameDirectory()
     try? await work()
   }
 }

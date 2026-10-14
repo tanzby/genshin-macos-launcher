@@ -15,7 +15,9 @@ private func makeController(
   settings.gameDirectory = gameDirectory
   let client = FakeGameClient(status: status)
   let fakeHosts = FakeHosts(hosts)
-  let launcher = LauncherModel(client: client, hosts: fakeHosts, startup: startup, availableDiskSpace: { _ in Int64.max })
+  let launcher = LauncherModel(
+    client: client, hosts: fakeHosts, startup: startup, gameDirectorySource: { settings.gameDirectory },
+    availableDiskSpace: { _ in Int64.max })
   let onboarding = OnboardingModel(hosts: fakeHosts, settings: settings)
   return (MainController(launcher: launcher, settings: settings, onboarding: onboarding), client, settings)
 }
@@ -67,7 +69,7 @@ private func makeController(
     await controller.launcher.shutdown()
   }
 
-  @Test func CFG_009_gameDirectoryIsHandedToTheLauncher() async {
+  @Test func CFG_009_launcherReadsTheGameDirectoryFromTheSettings() async {
     let (controller, _, settings) = makeController(gameDirectory: nil)
     await controller.refresh()
     #expect(controller.launcher.gameDirectory == nil)

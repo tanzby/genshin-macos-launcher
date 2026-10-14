@@ -69,6 +69,8 @@ final class ClientRig: @unchecked Sendable {
   let cdn: FakeCDN
   let launcher = FakeLauncher()
   let client: GenshinCNClient
+  /// What the client is asked about: the game folder, or `nil` for a launcher with none chosen.
+  let directory: URL?
 
   init(main: FakeRelease, pre: FakeRelease? = nil, withGameDirectory: Bool = true) {
     root = temporaryURL("genshin-launcher-client")
@@ -82,7 +84,7 @@ final class ClientRig: @unchecked Sendable {
       dataDirectory: data, protonExtras: protonExtras, launcher: launcher, sophon: cdn.api,
       downloader: SophonDownloader(session: cdn.session, configuration: configuration),
       updater: SophonUpdater(session: cdn.session, configuration: configuration))
-    if withGameDirectory { client.setGameDirectory(game) }
+    directory = withGameDirectory ? game : nil
   }
 
   func url(_ path: String) -> URL { game.appending(path: path) }
@@ -114,11 +116,22 @@ final class ClientRig: @unchecked Sendable {
           .utf8))
   }
 
+  func status() async throws -> GameStatus { try await client.status(in: directory) }
+
+  func requiredDiskSpace(for job: GameJob) async throws -> Int64 {
+    try await client.requiredDiskSpace(for: job, in: game)
+  }
+
+  /// The raw stream of `run(job)` in the rig's game folder; `run(_:)` below collects it.
+  func stream(_ job: GameJob, in folder: URL? = nil) -> AsyncThrowingStream<JobProgress, Error> {
+    client.run(job, in: folder ?? game)
+  }
+
   /// Everything `run(job)` reports, or the error it ends with.
   func run(_ job: GameJob) async -> (progress: [JobProgress], error: (any Error)?) {
     var progress: [JobProgress] = []
     do {
-      for try await update in client.run(job) { progress.append(update) }
+      for try await update in stream(job) { progress.append(update) }
       return (progress, nil)
     } catch {
       return (progress, error)

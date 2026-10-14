@@ -31,7 +31,7 @@ struct AppRuntime {
       client: client, wine: wine, hosts: hosts,
       startup: StartupSteps(
         rosettaInstalled: { StartupSteps.isRosettaInstalled() }, recoverSession: { await client.recover() }),
-      gameDirectory: autoLaunch.enabled ? autoLaunch.gameDirectory : settings.gameDirectory)
+      gameDirectorySource: { autoLaunch.gameDirectory(saved: settings.gameDirectory) })
     launcher.makeLaunchOptions = { settings.launchOptions(gameDirectory: $0) }
     controller = MainController(launcher: launcher, settings: settings, onboarding: onboarding)
     self.client = client

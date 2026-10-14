@@ -5,10 +5,8 @@ import Sophon
 extension GenshinCNClient {
   // MARK: - Running jobs
 
-  public func run(_ job: GameJob) -> AsyncThrowingStream<JobProgress, Error> {
+  public func run(_ job: GameJob, in directory: URL) -> AsyncThrowingStream<JobProgress, Error> {
     let (stream, continuation) = AsyncThrowingStream<JobProgress, Error>.makeStream()
-    // Fixed at call time: a job queued behind another must not follow a later `setGameDirectory`.
-    let directory = gameDirectory
     let task = serializer.enqueue { [self] in
       // Paused before it began: do not touch the disk at all.
       if Task.isCancelled {
@@ -27,9 +25,8 @@ extension GenshinCNClient {
   }
 
   private func perform(
-    _ job: GameJob, in directory: URL?, report: @escaping @Sendable (JobProgress) -> Void
+    _ job: GameJob, in directory: URL, report: @escaping @Sendable (JobProgress) -> Void
   ) async throws {
-    guard let directory else { throw GenshinCNClientError.noGameDirectory }
     // An install is only known to target a game directory once `prepareForInstall` accepted it.
     if job != .install { SophonInstallation.removeLegacyTemporaryFolders(in: directory) }
     let progress: @Sendable (SophonProgress) -> Void = { report(Self.jobProgress($0)) }
@@ -143,8 +140,7 @@ extension GenshinCNClient {
 
   // MARK: - Disk space
 
-  public func requiredDiskSpace(for job: GameJob) async throws -> Int64 {
-    let directory = try requireGameDirectory()
+  public func requiredDiskSpace(for job: GameJob, in directory: URL) async throws -> Int64 {
     do {
       switch job {
       case .install:

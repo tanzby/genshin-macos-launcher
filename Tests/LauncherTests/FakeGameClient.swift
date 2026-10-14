@@ -21,7 +21,9 @@ final class FakeGameClient: GameClient, Sendable {
     var runs: [RunRecord] = []
     var events: [String] = []
     var launchOptions: [LaunchOptions] = []
-    var gameDirectories: [URL?] = []
+    var statusDirectories: [URL?] = []
+    var diskCheckDirectories: [URL] = []
+    var runDirectories: [URL] = []
     var quiesces = 0
     var prompts: [LaunchOptions] = []
     var launchContinuation: CheckedContinuation<LaunchOutcome, Error>?
@@ -53,7 +55,10 @@ final class FakeGameClient: GameClient, Sendable {
   var runs: [GameJob] { state.withLock { $0.runs.map(\.job) } }
   var events: [String] { state.withLock { $0.events } }
   var launchOptions: [LaunchOptions] { state.withLock { $0.launchOptions } }
-  var gameDirectories: [URL?] { state.withLock { $0.gameDirectories } }
+  /// The folder each `status(in:)`, `requiredDiskSpace` and `run` call was given, in call order.
+  var statusDirectories: [URL?] { state.withLock { $0.statusDirectories } }
+  var diskCheckDirectories: [URL] { state.withLock { $0.diskCheckDirectories } }
+  var runDirectories: [URL] { state.withLock { $0.runDirectories } }
   var quiesces: Int { state.withLock { $0.quiesces } }
   var commandPrompts: [LaunchOptions] { state.withLock { $0.prompts } }
 
@@ -116,9 +121,10 @@ final class FakeGameClient: GameClient, Sendable {
   let statusGate = AsyncQueue<Void>()
 
   /// The answer is fixed when the query starts, like a response to a request already sent.
-  func status() async throws -> GameStatus {
+  func status(in directory: URL?) async throws -> GameStatus {
     let answer = state.withLock { s -> Result<GameStatus, Error> in
       s.statusCalls += 1
+      s.statusDirectories.append(directory)
       return s.status
     }
     if stallsStatus.withLock({ $0 }) {
@@ -133,7 +139,8 @@ final class FakeGameClient: GameClient, Sendable {
   let stallsDiskQuery = Mutex(false)
   let diskQueries = AsyncQueue<Void>()
 
-  func requiredDiskSpace(for job: GameJob) async throws -> Int64 {
+  func requiredDiskSpace(for job: GameJob, in directory: URL) async throws -> Int64 {
+    state.withLock { $0.diskCheckDirectories.append(directory) }
     if stallsDiskQuery.withLock({ $0 }) {
       diskQueries.push(())
       while true {
@@ -147,10 +154,11 @@ final class FakeGameClient: GameClient, Sendable {
     }
   }
 
-  func run(_ job: GameJob) -> AsyncThrowingStream<JobProgress, Error> {
+  func run(_ job: GameJob, in directory: URL) -> AsyncThrowingStream<JobProgress, Error> {
     let (stream, continuation) = AsyncThrowingStream<JobProgress, Error>.makeStream()
     let index = state.withLock { s -> Int in
       s.runs.append(RunRecord(job: job, continuation: continuation))
+      s.runDirectories.append(directory)
       s.events.append("run:\(job.rawValue)")
       return s.runs.count - 1
     }
@@ -207,6 +215,5 @@ final class FakeGameClient: GameClient, Sendable {
 
   func backgroundImage() async -> BackgroundImage { .bundledDefault }
 
-  func setGameDirectory(_ url: URL?) { state.withLock { $0.gameDirectories.append(url) } }
   func quiesce() async { state.withLock { $0.quiesces += 1 } }
 }

@@ -85,7 +85,7 @@ private final class Harness {
     #expect(!FileManager.default.fileExists(atPath: directory.winePrefix.path))
   }
 
-  @Test func APP_020_entryPointPreparesTheDataRootAppliesTheGameDirectoryAndQuits() async throws {
+  @Test func APP_020_entryPointPreparesTheDataRootAndQuits() async throws {
     let h = Harness(wine: .needsInstall(.notInstalled))
     let root = h.logs.deletingLastPathComponent().appending(path: "data")
     let game = h.logs.deletingLastPathComponent().appending(path: "game")
@@ -100,9 +100,16 @@ private final class Harness {
     ) { terminated += 1 } forceExit: {}
     try await failer.value
     #expect(terminated == 1)
-    #expect(h.model.gameDirectory == game)
     #expect(FileManager.default.fileExists(atPath: root.appending(path: DataDirectory.nativeMarkerName).path))
     #expect(h.lines.last == "autolaunch: exit")
+  }
+
+  @Test func APP_020_gameDirFlagReplacesTheSavedFolderOnlyInADiagnosticRun() {
+    let saved = URL(filePath: "/tmp/saved")
+    let flag = URL(filePath: "/tmp/game")
+    #expect(AutoLaunchOptions(enabled: true, gameDirectory: flag).gameDirectory(saved: saved) == flag)
+    #expect(AutoLaunchOptions(enabled: true).gameDirectory(saved: saved) == nil)
+    #expect(AutoLaunchOptions(enabled: false, gameDirectory: flag).gameDirectory(saved: saved) == saved)
   }
 
   @Test func APP_020_launchesAndReportsOkWhenTheGameExits() async throws {

@@ -26,7 +26,13 @@ public final class LauncherModel {
   public private(set) var lastError: LauncherError?
   /// What the hosts blocklist looked like at the last read; nil = unread or unreadable.
   package private(set) var hostsStatus: HostsBlocklist.Status?
-  public var gameDirectory: URL?
+  /// Read on every use, never copied: the app passes a closure over `SettingsModel`, so a folder picked a moment
+  /// ago is the one the next operation sees. Tests with a fixed folder pass `gameDirectory:` instead.
+  private var directorySource: @MainActor () -> URL?
+  public package(set) var gameDirectory: URL? {
+    get { directorySource() }
+    set { directorySource = { newValue } }
+  }
   /// Snapshots the settings for a launch. The composition root replaces it with one that reads `SettingsModel`.
   public var makeLaunchOptions: @MainActor (URL) -> LaunchOptions = { LaunchOptions(gameDirectory: $0) }
 
@@ -93,6 +99,7 @@ public final class LauncherModel {
     hosts: (any HostsBlocking)? = nil,
     startup: StartupSteps? = nil,
     gameDirectory: URL? = nil,
+    gameDirectorySource: (@MainActor () -> URL?)? = nil,
     launchTimeout: Duration = LauncherModel.defaultLaunchTimeout,
     chunkTempMargin: Int64 = LauncherModel.defaultChunkTempMargin,
     availableDiskSpace: @escaping @Sendable (URL) -> Int64? = LauncherModel.systemAvailableCapacity,
@@ -102,7 +109,7 @@ public final class LauncherModel {
     self.wine = wine
     self.hosts = hosts
     self.startup = startup
-    self.gameDirectory = gameDirectory
+    directorySource = gameDirectorySource ?? { gameDirectory }
     self.launchTimeout = launchTimeout
     diskSpace = DiskSpaceCheck(margin: chunkTempMargin, availableSpace: availableDiskSpace)
     self.sleep = sleep
@@ -194,9 +201,8 @@ public final class LauncherModel {
     refreshHosts()
     refreshGeneration += 1
     let generation = refreshGeneration
-    client.setGameDirectory(gameDirectory)
     do {
-      let fresh = try await client.status()
+      let fresh = try await client.status(in: gameDirectory)
       guard generation > publishedGeneration else { return }
       publishedGeneration = generation
       status = fresh
@@ -356,7 +362,6 @@ public final class LauncherModel {
   }
 
   private func begin(_ job: GameJob, store: PendingJobStore) throws -> AsyncThrowingStream<JobProgress, Error> {
-    client.setGameDirectory(store.gameDirectory)
     let pending = PendingJob(kind: job, targetVersion: job == .preDownload ? status?.preDownloadTarget : status?.remoteVersion)
     // A pre-download must not replace the marker of an unfinished install/update/repair: that one blocks launch.
     if !Self.leavesMarkerAlone(job, store: store) {
@@ -365,7 +370,7 @@ public final class LauncherModel {
       pendingJob = pending
     }
     progress = .preparing
-    return client.run(job)
+    return client.run(job, in: store.gameDirectory)
   }
 
   private func drive(
@@ -426,8 +431,7 @@ public final class LauncherModel {
   private func checkDiskSpace(for job: GameJob, in directory: URL) async throws {
     let bytes: Int64
     do {
-      client.setGameDirectory(directory)
-      bytes = try await client.requiredDiskSpace(for: job)
+      bytes = try await client.requiredDiskSpace(for: job, in: directory)
     } catch {
       if Task.isCancelled || error is CancellationError { throw CancellationError() }
       throw LauncherError(error)
@@ -574,7 +578,6 @@ public final class LauncherModel {
   }
 
   private func startLaunch() throws {
-    client.setGameDirectory(gameDirectory)
     // The disk and /etc/hosts can change under the window: look again right before the game starts.
     if let store { pendingJob = store.load() }
     refreshHosts()

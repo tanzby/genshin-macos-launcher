@@ -13,14 +13,14 @@ import Testing
   @Test func APP_011_noGameDirectoryMeansNotInstalled() async throws {
     let rig = ClientRig(main: .game("5.6.0"), withGameDirectory: false)
 
-    #expect(try await rig.client.status().localVersion == nil)
+    #expect(try await rig.status().localVersion == nil)
   }
 
   @Test func APP_011_aFolderWithAReadableVersionIsInstalled() async throws {
     let rig = ClientRig(main: .game("5.6.0"))
     rig.install(.game("5.6.0"))
 
-    #expect(try await rig.client.status().localVersion == "5.6.0")
+    #expect(try await rig.status().localVersion == "5.6.0")
   }
 
   @Test func APP_011_aFolderWhoseVersionFileIsGoneIsNotInstalledAndNothingIsDeleted() async throws {
@@ -28,7 +28,7 @@ import Testing
     rig.install(.game("5.6.0"))
     try FileManager.default.removeItem(at: rig.url("YuanShen_Data/globalgamemanagers"))
 
-    let status = try await rig.client.status()
+    let status = try await rig.status()
 
     #expect(status.localVersion == nil)
     #expect(rig.exists("YuanShen.exe"))
@@ -45,7 +45,7 @@ import Testing
       "YuanShen_Data/globalgamemanagers",
       Data(("junk ic.app-category.games \0" + "5.5.0_31234567_31456789" + "\0 tail").utf8))
 
-    #expect(try await rig.client.status().localVersion == "5.5.0")
+    #expect(try await rig.status().localVersion == "5.5.0")
   }
 
   @Test func APP_012_aBuildStringWithoutTheTwoNumbersIsNotAVersion() async throws {
@@ -53,7 +53,7 @@ import Testing
     rig.install(.game("5.5.0"))
     rig.write("YuanShen_Data/globalgamemanagers", Data(("\0" + "5.5.0" + "\0").utf8))
 
-    await #expect(throws: GameClientError.brokenInstallation) { try await rig.client.status() }
+    await #expect(throws: GameClientError.brokenInstallation) { try await rig.status() }
   }
 
   // APP-014: the TS launcher warned and went on with "0.0.0", which led to an "update" that reset the install.
@@ -63,7 +63,7 @@ import Testing
     rig.install(.game("5.5.0"))
     rig.write("YuanShen_Data/globalgamemanagers", Data("\0not a version\0".utf8))
 
-    await #expect(throws: GameClientError.brokenInstallation) { try await rig.client.status() }
+    await #expect(throws: GameClientError.brokenInstallation) { try await rig.status() }
   }
 
   @Test func APP_014_twoCandidatesAreAmbiguousAndAlsoReported() async throws {
@@ -71,7 +71,7 @@ import Testing
     rig.install(.game("5.5.0"))
     rig.write("YuanShen_Data/globalgamemanagers", Data(("\0" + "5.5.0_1_2" + "\0x\0" + "5.6.0_3_4" + "\0").utf8))
 
-    await #expect(throws: GameClientError.brokenInstallation) { try await rig.client.status() }
+    await #expect(throws: GameClientError.brokenInstallation) { try await rig.status() }
   }
 
   // APP-016: an update is needed only while the installed version is older than the latest.
@@ -79,28 +79,28 @@ import Testing
     let rig = ClientRig(main: .game("5.6.0", diffTags: ["5.5.0"]))
     rig.install(.game("5.5.0"))
 
-    #expect(try await rig.client.status().canUpdate)
+    #expect(try await rig.status().canUpdate)
   }
 
   @Test func APP_016_theSameVersionAllowsLaunching() async throws {
     let rig = ClientRig(main: .game("5.6.0"))
     rig.install(.game("5.6.0"))
 
-    #expect(try await rig.client.status().canUpdate == false)
+    #expect(try await rig.status().canUpdate == false)
   }
 
   @Test func APP_016_aHigherLocalVersionAllowsLaunching() async throws {
     let rig = ClientRig(main: .game("5.5.0"))
     rig.install(.game("5.6.0"))
 
-    #expect(try await rig.client.status().canUpdate == false)
+    #expect(try await rig.status().canUpdate == false)
   }
 
   @Test func APP_016_aMinorVersionTenIsNewerThanNine() async throws {
     let rig = ClientRig(main: .game("5.10.0"))
     rig.install(.game("5.9.0"))
 
-    #expect(try await rig.client.status().canUpdate)
+    #expect(try await rig.status().canUpdate)
   }
 
   // PRG-001: the TS launcher pushed task events over a WebSocket and lost the terminal event of a job that ended
@@ -108,7 +108,7 @@ import Testing
   // reading after the job is over: it still gets every event and the end.
   @Test func PRG_001_aJobThatEndedBeforeAnyoneListenedStillDeliversItsEventsAndItsEnd() async throws {
     let rig = ClientRig(main: .game("5.6.0"))
-    let stream = rig.client.run(.install)
+    let stream = rig.stream(.install)
     #expect(await rig.waitForConfig(version: "5.6.0"))
     await rig.client.quiesce()
 
@@ -121,7 +121,7 @@ import Testing
 
   @Test func PRG_001_aJobThatFailedBeforeAnyoneListenedStillDeliversItsError() async throws {
     let rig = ClientRig(main: .game("5.6.0"))
-    let stream = rig.client.run(.update)  // nothing is installed, so there is nothing to update
+    let stream = rig.stream(.update)  // nothing is installed, so there is nothing to update
     await rig.client.quiesce()
 
     await #expect(throws: (any Error).self) {
