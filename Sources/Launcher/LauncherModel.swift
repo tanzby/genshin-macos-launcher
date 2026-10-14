@@ -305,7 +305,7 @@ public final class LauncherModel {
 
   private func startExclusive(_ job: GameJob) async throws {
     guard let store else { throw LauncherError.noGameDirectory }
-    try await spawn(job, store: store, preDownload: false) {
+    try await spawn(job, store: store) {
       await self.stopPreDownload()
       try Task.checkCancellation()
       try await self.checkDiskSpace(for: job, in: store.gameDirectory)
@@ -315,7 +315,7 @@ public final class LauncherModel {
 
   private func startPreDownload() async throws {
     guard let store else { throw LauncherError.noGameDirectory }
-    try await spawn(.preDownload, store: store, preDownload: true) {
+    try await spawn(.preDownload, store: store) {
       try await self.checkDiskSpace(for: .preDownload, in: store.gameDirectory)
       try Task.checkCancellation()
       // Starting install/update/repair during the check would have claimed the slot first.
@@ -326,7 +326,7 @@ public final class LauncherModel {
   /// Runs `preflight`, then the job, in one Task, so pause()/shutdown() always find a handle to cancel and
   /// await. Returns once the job has begun; a failed preflight frees the slot and throws.
   private func spawn(
-    _ job: GameJob, store: PendingJobStore, preDownload: Bool, preflight: @escaping () async throws -> Void
+    _ job: GameJob, store: PendingJobStore, preflight: @escaping () async throws -> Void
   ) async throws {
     lastError = nil
     let (ready, readySink) = AsyncThrowingStream<Void, Error>.makeStream()
@@ -342,7 +342,7 @@ public final class LauncherModel {
       readySink.finish()
       await self.drive(job, stream: stream, store: store)
     }
-    if preDownload { jobs.startPreDownload(body: body) } else { jobs.startExclusive(job.exclusivePhase, body: body) }
+    if job == .preDownload { jobs.startPreDownload(body: body) } else { jobs.startExclusive(job.exclusivePhase, body: body) }
     do { for try await _ in ready {} } catch is CancellationError { return }  // paused before the job began
   }
 
