@@ -29,7 +29,7 @@ public final class LauncherModel {
   /// Read on every use, never copied: the app passes a closure over `SettingsModel`, so a folder picked a moment
   /// ago is the one the next operation sees. Tests with a fixed folder pass `gameDirectory:` instead.
   private var directorySource: @MainActor () -> URL?
-  public var gameDirectory: URL? {
+  public package(set) var gameDirectory: URL? {
     get { directorySource() }
     set { directorySource = { newValue } }
   }
