@@ -52,7 +52,7 @@ package struct SophonDownloader: Sendable {
     }
 
     let total = targets.reduce(Int64(0)) { $0 + SophonManifestValidator.compressedSize(of: $1.file) }
-    let reporter = ProgressReporter(total: total, interval: configuration.progressInterval, report: progress)
+    let reporter = ProgressReporter(.downloading, total: total, interval: configuration.progressInterval, report: progress)
     progress(.preparing)
 
     // INS-007: manifest files first so an interrupted install is still recognisable.
@@ -86,7 +86,7 @@ package struct SophonDownloader: Sendable {
     let total = candidates.reduce(Int64(0)) { $0 + $1.size }
     let paths = SophonPathPolicy(root: gameDirectory)
     let destinations = try candidates.map { try paths.resolve($0.path) }
-    let counter = VerifyCounter(total: total, interval: configuration.progressInterval, report: progress)
+    let counter = ProgressReporter(.verifying, total: total, interval: configuration.progressInterval, report: progress)
     progress(.verifying(done: 0, total: total))
     let pairs = Array(zip(candidates, destinations))
     let flags = try await mapBounded(pairs, limit: SophonDownloaderLayout.verifyWorkers) { file, destination in

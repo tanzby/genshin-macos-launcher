@@ -188,7 +188,8 @@ package struct SophonUpdater: Sendable {
     }
 
     let total = candidates.reduce(Int64(0)) { $0 + max($1.file.size, $1.patch?.originalSize ?? 0) }
-    let counter = VerifyCounter(total: total, interval: .milliseconds(250), report: progress)
+    let counter = ProgressReporter(
+      .verifying, total: total, interval: downloader.configuration.progressInterval, report: progress)
     progress(.verifying(done: 0, total: total))
     let verdicts = try await mapBounded(candidates, limit: SophonDownloaderLayout.verifyWorkers) { candidate in
       let verdict: Verdict = try await Offload.run { cancelled in
@@ -276,7 +277,8 @@ package struct SophonUpdater: Sendable {
       .write(to: tempDirectory)
 
     let total = plan.ldiffSize + plan.chunkSize
-    let reporter = ProgressReporter(total: total, interval: downloader.configuration.progressInterval, report: progress)
+    let reporter = ProgressReporter(
+      .downloading, total: total, interval: downloader.configuration.progressInterval, report: progress)
     try await downloader.fetchLdiffs(
       plan.ldiffs, using: diffRef, into: Self.ldiffDirectory(in: tempDirectory), reporter: reporter)
     if !plan.downloads.isEmpty {
@@ -315,7 +317,7 @@ package struct SophonUpdater: Sendable {
 
     if !plan.patches.isEmpty {
       let reporter = ProgressReporter(
-        total: plan.ldiffSize, interval: downloader.configuration.progressInterval, report: progress)
+        .downloading, total: plan.ldiffSize, interval: downloader.configuration.progressInterval, report: progress)
       try await downloader.fetchLdiffs(plan.ldiffs, using: diffRef, into: ldiffDirectory, reporter: reporter)
       reporter.finish(.downloading(done: plan.ldiffSize, total: plan.ldiffSize))
     }
