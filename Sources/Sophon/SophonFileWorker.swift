@@ -8,7 +8,7 @@ struct FileWorker: Sendable {
   let session: URLSession
   let chunkBase: String
   let chunkSuffix: String
-  let gameDirectory: URL
+  let paths: SophonPathPolicy
   let tempDirectory: URL
 
   var chunkRoot: URL { SophonDownloaderLayout.chunkRoot(in: tempDirectory) }
@@ -87,10 +87,10 @@ struct FileWorker: Sendable {
       throw SophonError.checksumMismatch(path: file.path)
     }
     // Re-check right before the move: a symlink may have appeared since validation.
-    let safe = try SophonPathPolicy.resolve(file.path, in: gameDirectory)
+    let safe = try paths.resolve(file.path)
     try fileManager.createDirectory(at: safe.deletingLastPathComponent(), withIntermediateDirectories: true)
     // And after it: the folders just created must not have been swapped for a symlink either.
-    _ = try SophonPathPolicy.resolve(file.path, in: gameDirectory)
+    _ = try paths.resolve(file.path)
     if fileManager.fileExists(atPath: safe.path) {
       _ = try fileManager.replaceItemAt(safe, withItemAt: assembly)
     } else {

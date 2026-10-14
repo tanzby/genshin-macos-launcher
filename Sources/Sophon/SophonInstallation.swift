@@ -113,8 +113,9 @@ package struct SophonInstallation: Sendable {
 
   /// INS-006: the quick check after a download. Every file is there with the size the manifest says.
   package static func verifySizes(of files: [SophonFile], in gameDirectory: URL) throws {
+    let paths = SophonPathPolicy(root: gameDirectory)
     for file in files where !file.isDirectory {
-      guard try size(of: file, in: gameDirectory) == file.size else {
+      guard try size(of: file, paths: paths) == file.size else {
         throw SophonError.verificationFailed(path: file.path)
       }
     }
@@ -122,13 +123,14 @@ package struct SophonInstallation: Sendable {
 
   /// Bytes of the files that are missing or have the wrong size. Looks at sizes only, never hashes.
   package static func bytesToFetch(for files: [SophonFile], in gameDirectory: URL) throws -> Int64 {
-    try files.filter { !$0.isDirectory }.reduce(Int64(0)) { sum, file in
-      try size(of: file, in: gameDirectory) == file.size ? sum : sum + file.size
+    let paths = SophonPathPolicy(root: gameDirectory)
+    return try files.filter { !$0.isDirectory }.reduce(Int64(0)) { sum, file in
+      try size(of: file, paths: paths) == file.size ? sum : sum + file.size
     }
   }
 
-  private static func size(of file: SophonFile, in gameDirectory: URL) throws -> Int64? {
-    let url = try SophonPathPolicy.resolve(file.path, in: gameDirectory)
+  private static func size(of file: SophonFile, paths: SophonPathPolicy) throws -> Int64? {
+    let url = try paths.resolve(file.path)
     return url.fileSize
   }
 }

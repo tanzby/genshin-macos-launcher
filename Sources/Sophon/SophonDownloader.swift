@@ -45,8 +45,9 @@ package struct SophonDownloader: Sendable {
   ) async throws {
     // Validate everything first: a hostile manifest must fail before the first request.
     let (chunkBase, targets) = try SophonManifestValidator.validate(files, using: ref, into: gameDirectory)
+    let paths = SophonPathPolicy(root: gameDirectory)
     for file in files where file.isDirectory {
-      let directory = try SophonPathPolicy.resolve(file.path, in: gameDirectory)
+      let directory = try paths.resolve(file.path)
       try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
     }
 
@@ -63,7 +64,7 @@ package struct SophonDownloader: Sendable {
 
     let worker = FileWorker(
       session: session, chunkBase: chunkBase, chunkSuffix: ref.chunkURLSuffix,
-      gameDirectory: gameDirectory, tempDirectory: tempDirectory)
+      paths: SophonPathPolicy(root: gameDirectory), tempDirectory: tempDirectory)
     let config = configuration
 
     try await runBounded(ordered, limit: configuration.concurrency) { item in
@@ -83,7 +84,8 @@ package struct SophonDownloader: Sendable {
   ) async throws -> [SophonFile] {
     let candidates = files.filter { !$0.isDirectory }
     let total = candidates.reduce(Int64(0)) { $0 + $1.size }
-    let destinations = try candidates.map { try SophonPathPolicy.resolve($0.path, in: gameDirectory) }
+    let paths = SophonPathPolicy(root: gameDirectory)
+    let destinations = try candidates.map { try paths.resolve($0.path) }
     let counter = VerifyCounter(total: total, interval: configuration.progressInterval, report: progress)
     progress(.verifying(done: 0, total: total))
     let pairs = Array(zip(candidates, destinations))

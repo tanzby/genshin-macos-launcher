@@ -638,9 +638,9 @@ private func withRig(_ body: (Rig) async throws -> Void) async throws {
 
   @Test func UPG_007_pathKeysFoldCaseOnlyOnCaseInsensitiveVolumes() throws {
     let game = URL(fileURLWithPath: "/tmp/game", isDirectory: true)
-    #expect(try SophonUpdater.key("DATA/D.bin", in: game, caseSensitive: false) == "/tmp/game/data/d.bin")
-    #expect(try SophonUpdater.key("DATA/D.bin", in: game, caseSensitive: true) == "/tmp/game/DATA/D.bin")
-    #expect(try SophonUpdater.key("data/./d.bin", in: game, caseSensitive: true) == "/tmp/game/data/d.bin")
+    #expect(try SophonUpdater.key("DATA/D.bin", paths: SophonPathPolicy(root: game), caseSensitive: false) == "/tmp/game/data/d.bin")
+    #expect(try SophonUpdater.key("DATA/D.bin", paths: SophonPathPolicy(root: game), caseSensitive: true) == "/tmp/game/DATA/D.bin")
+    #expect(try SophonUpdater.key("data/./d.bin", paths: SophonPathPolicy(root: game), caseSensitive: true) == "/tmp/game/data/d.bin")
   }
 
   @Test func UPG_007_aFolderDeletionIsRefusedAlsoWhenSpelledWithDotsOrOtherCase() async throws {

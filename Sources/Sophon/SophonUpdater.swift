@@ -118,6 +118,7 @@ package struct SophonUpdater: Sendable {
     gameDirectory: URL,
     progress: @escaping @Sendable (SophonProgress) -> Void = { _ in }
   ) async throws -> SophonUpdatePlan {
+    let paths = SophonPathPolicy(root: gameDirectory)
     // Every file lacking a patch for this version would read as "not modified": an update that
     // succeeds without doing anything. Refuse versions the patch build does not know.
     let known =
@@ -156,13 +157,13 @@ package struct SophonUpdater: Sendable {
 
     var candidates: [Candidate] = []
     for file in diff.files {
-      let destination = try SophonPathPolicy.resolve(file.path, in: gameDirectory)
+      let destination = try paths.resolve(file.path)
       let chunks = chunkFiles[file.path]!  // checked above
       if file.patches.isEmpty {
         candidates.append(Candidate(file: file, patch: nil, destination: destination, original: nil, chunks: chunks))
       } else if let patch = file.patches[installedVersion] {
         let originalPath = patch.originalPath.isEmpty ? file.path : patch.originalPath
-        let original = try SophonPathPolicy.resolve(originalPath, in: gameDirectory)
+        let original = try paths.resolve(originalPath)
         candidates.append(
           Candidate(file: file, patch: patch, destination: destination, original: original, chunks: chunks))
       }
@@ -172,7 +173,7 @@ package struct SophonUpdater: Sendable {
     let caseSensitive = Self.isCaseSensitive(gameDirectory)
     var newFolders = Set<String>()
     for file in diff.files {
-      var path = try Self.key(file.path, in: gameDirectory, caseSensitive: caseSensitive)[...]
+      var path = try Self.key(file.path, paths: paths, caseSensitive: caseSensitive)[...]
       // Every ancestor of a seen folder is already in the set.
       while let slash = path.lastIndex(of: "/") {
         path = path[..<slash]
@@ -180,7 +181,7 @@ package struct SophonUpdater: Sendable {
       }
     }
     for deleted in diff.deletions[installedVersion] ?? [] {
-      let folder = try Self.key(deleted.path, in: gameDirectory, caseSensitive: caseSensitive)
+      let folder = try Self.key(deleted.path, paths: paths, caseSensitive: caseSensitive)
       if newFolders.contains(folder) {
         throw SophonError.invalidManifest("\(deleted.path) is a folder of the new version")
       }
@@ -235,7 +236,7 @@ package struct SophonUpdater: Sendable {
     // New files may already be on disk and intact: leave those out of the totals.
     var seenNew = Set<String>()
     let uniqueNew = newFiles.filter { seenNew.insert($0.path).inserted }
-    let destinations = try uniqueNew.map { ($0, try SophonPathPolicy.resolve($0.path, in: gameDirectory)) }
+    let destinations = try uniqueNew.map { ($0, try paths.resolve($0.path)) }
     let missing: [SophonFile] = try await mapBounded(destinations, limit: SophonDownloaderLayout.verifyWorkers) {
       item -> SophonFile? in
       let (file, url) = item
@@ -301,12 +302,13 @@ package struct SophonUpdater: Sendable {
     tempDirectory: URL,
     progress: @escaping @Sendable (SophonProgress) -> Void
   ) async throws {
+    let paths = SophonPathPolicy(root: gameDirectory)
     try Self.validate(patches: plan.patches)
     // Resolved up front: a bad deletion path must fail before anything is downloaded or changed.
     let caseSensitive = Self.isCaseSensitive(gameDirectory)
-    let keep = Set(try plan.expectedFiles.map { try Self.key($0.path, in: gameDirectory, caseSensitive: caseSensitive) })
+    let keep = Set(try plan.expectedFiles.map { try Self.key($0.path, paths: paths, caseSensitive: caseSensitive) })
     let doomed = try plan.deletions.filter {
-      !keep.contains(try Self.key($0.path, in: gameDirectory, caseSensitive: caseSensitive))
+      !keep.contains(try Self.key($0.path, paths: paths, caseSensitive: caseSensitive))
     }
     progress(.preparing)
     let ldiffDirectory = Self.ldiffDirectory(in: tempDirectory)
@@ -327,7 +329,7 @@ package struct SophonUpdater: Sendable {
     for planned in plan.patches {
       try Task.checkCancellation()
       let applied = try await Self.apply(
-        planned, ldiffDirectory: ldiffDirectory, patchDirectory: patchDirectory, gameDirectory: gameDirectory)
+        planned, ldiffDirectory: ldiffDirectory, patchDirectory: patchDirectory, paths: paths)
       if !applied { downloads.append(planned.fallback) }
       patchDone += planned.file.size
       progress(.patching(done: patchDone, total: patchTotal))
@@ -336,7 +338,7 @@ package struct SophonUpdater: Sendable {
     // UPG-007: files the new version no longer has.
     for deleted in doomed {
       try Task.checkCancellation()
-      let url = try SophonPathPolicy.resolve(deleted.path, in: gameDirectory)
+      let url = try paths.resolve(deleted.path)
       // Only a file or a link goes. `attributesOfItem` does not follow links, and a folder is never removed.
       guard let attributes = try? FileManager.default.attributesOfItem(atPath: url.path) else { continue }
       guard attributes[.type] as? FileAttributeType != .typeDirectory else {
@@ -354,11 +356,11 @@ package struct SophonUpdater: Sendable {
     // UPG-011: sizes of every file of the new version, and the old files are gone.
     progress(.finalizing)
     for file in plan.expectedFiles {
-      let url = try SophonPathPolicy.resolve(file.path, in: gameDirectory)
+      let url = try paths.resolve(file.path)
       guard url.fileSize == file.size else { throw SophonError.verificationFailed(path: file.path) }
     }
     for deleted in doomed {
-      let url = try SophonPathPolicy.resolve(deleted.path, in: gameDirectory)
+      let url = try paths.resolve(deleted.path)
       if Self.exists(url) { throw SophonError.verificationFailed(path: deleted.path) }
     }
 
@@ -396,8 +398,8 @@ package struct SophonUpdater: Sendable {
   /// The file a manifest path stands for, normalised (`a/./b`, `a//b`) and case-folded: macOS volumes are
   /// case-insensitive by default. Two paths with equal keys are one file.
   /// Case is folded only on case-insensitive volumes; on a case-sensitive one `A.bin` and `a.bin` differ.
-  static func key(_ path: String, in gameDirectory: URL, caseSensitive: Bool) throws -> String {
-    let resolved = try SophonPathPolicy.resolve(path, in: gameDirectory).standardizedFileURL.path
+  static func key(_ path: String, paths: SophonPathPolicy, caseSensitive: Bool) throws -> String {
+    let resolved = try paths.resolve(path).standardizedFileURL.path
     return caseSensitive ? resolved : resolved.lowercased()
   }
 
@@ -422,12 +424,12 @@ package struct SophonUpdater: Sendable {
   /// old file or the ldiff file is not what the manifest says, or the result does not match its MD5
   /// (the original file is then left alone). Throws only for cancellation.
   private static func apply(
-    _ planned: SophonPlannedPatch, ldiffDirectory: URL, patchDirectory: URL, gameDirectory: URL
+    _ planned: SophonPlannedPatch, ldiffDirectory: URL, patchDirectory: URL, paths: SophonPathPolicy
   ) async throws -> Bool {
     let file = planned.file
     let patch = planned.patch
     return try await Offload.run { cancelled in
-      let destination = try SophonPathPolicy.resolve(file.path, in: gameDirectory)
+      let destination = try paths.resolve(file.path)
       let originalPath = patch.originalPath.isEmpty ? file.path : patch.originalPath
       // In place and the same size: one read answers both questions below, like in `plan`.
       let digest =
@@ -439,7 +441,7 @@ package struct SophonUpdater: Sendable {
       }
       // Already the new file (a previous run got this far): nothing to do.
       if try isFile(destination, size: file.size, md5: file.md5) { return true }
-      let original = try SophonPathPolicy.resolve(originalPath, in: gameDirectory)
+      let original = try paths.resolve(originalPath)
       // Before patching: the old file must be the one the patch was made for.
       guard try isFile(original, size: patch.originalSize, md5: patch.originalMD5) else {
         return false
@@ -468,7 +470,7 @@ package struct SophonUpdater: Sendable {
         return false
       }
       // The game directory may have changed meanwhile: resolve once more right before the move.
-      let safe = try SophonPathPolicy.resolve(file.path, in: gameDirectory)
+      let safe = try paths.resolve(file.path)
       try fileManager.createDirectory(at: safe.deletingLastPathComponent(), withIntermediateDirectories: true)
       if exists(safe) {
         _ = try fileManager.replaceItemAt(safe, withItemAt: staging)

@@ -20,7 +20,7 @@ extension SophonDownloader {
     let (chunkBase, targets) = try SophonManifestValidator.validate(files, using: ref, into: gameDirectory)
     let worker = FileWorker(
       session: session, chunkBase: chunkBase, chunkSuffix: ref.chunkURLSuffix,
-      gameDirectory: gameDirectory, tempDirectory: tempDirectory)
+      paths: SophonPathPolicy(root: gameDirectory), tempDirectory: tempDirectory)
     let fetcher = ResourceFetcher(session: session)
     let config = configuration
     try await runBounded(targets, limit: configuration.concurrency) { item in
