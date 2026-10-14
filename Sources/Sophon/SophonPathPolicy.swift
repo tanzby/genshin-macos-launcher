@@ -12,11 +12,6 @@ struct SophonPathPolicy: Sendable {
   }
 
   /// The absolute destination of `path` under `root`, or `SophonError.unsafePath`.
-  static func resolve(_ path: String, in root: URL) throws -> URL {
-    try SophonPathPolicy(root: root).resolve(path)
-  }
-
-  /// The absolute destination of `path` under `root`, or `SophonError.unsafePath`.
   func resolve(_ path: String) throws -> URL {
     // Same rule as the TS launcher (no `..`, no leading `/`) plus the ways to say the same thing.
     guard !path.isEmpty, !path.hasPrefix("/"), !path.contains(".."), !path.contains("\\"),

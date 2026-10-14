@@ -1009,13 +1009,13 @@ private final class Rig: @unchecked Sendable {
   func INS_011_resolveRejectsUnsafePath(path: String) throws {
     let sandbox = try Sandbox()
     #expect(throws: SophonError.unsafePath(path)) {
-      _ = try SophonPathPolicy.resolve(path, in: sandbox.game)
+      _ = try SophonPathPolicy(root: sandbox.game).resolve(path)
     }
   }
 
   @Test func INS_011_resolveAcceptsARelativePathInsideTheRoot() throws {
     let sandbox = try Sandbox()
-    let url = try SophonPathPolicy.resolve("GenshinImpact_Data/Persistent/a.bin", in: sandbox.game)
+    let url = try SophonPathPolicy(root: sandbox.game).resolve("GenshinImpact_Data/Persistent/a.bin")
     #expect(
       url.standardizedFileURL.path
         == sandbox.game.appendingPathComponent("GenshinImpact_Data/Persistent/a.bin").path)
@@ -1029,7 +1029,7 @@ private final class Rig: @unchecked Sendable {
       at: sandbox.game.appendingPathComponent("link"), withDestinationURL: outside)
 
     #expect(throws: SophonError.unsafePath("link/x.bin")) {
-      _ = try SophonPathPolicy.resolve("link/x.bin", in: sandbox.game)
+      _ = try SophonPathPolicy(root: sandbox.game).resolve("link/x.bin")
     }
   }
 

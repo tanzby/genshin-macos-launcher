@@ -71,7 +71,7 @@ private func tempDirectory() -> URL { makeTemporaryDirectory("genshin-launcher-o
     await model.applyHosts()
     #expect(hosts.applyCalls == 1)
     #expect(model.step == .gameDirectory)
-    #expect(model.hostsError == nil)
+    #expect(model.hosts.error == nil)
     #expect(model.allowsLaunch)
   }
 
@@ -80,8 +80,8 @@ private func tempDirectory() -> URL { makeTemporaryDirectory("genshin-launcher-o
     model.refresh()
     await model.applyHosts()
     #expect(model.step == .hosts)
-    #expect(model.hostsError != nil)
-    #expect(!model.isApplyingHosts)
+    #expect(model.hosts.error != nil)
+    #expect(!model.hosts.isApplying)
   }
 
   @Test func WIN_011_unreadableHostsFileBlocksLaunch() {
@@ -136,10 +136,10 @@ private func tempDirectory() -> URL { makeTemporaryDirectory("genshin-launcher-o
     hosts.setStatus(.failure(PasswordCancelled()))
     let model = OnboardingModel(hosts: HostsModel(hosts), settings: settings(), gameDirectoryRules: .test)
     model.refresh()
-    #expect(model.hostsError != nil)
+    #expect(model.hosts.error != nil)
     hosts.setStatus(.success(.current))
     model.refresh()
-    #expect(model.hostsError == nil)
+    #expect(model.hosts.error == nil)
   }
 
   @Test func CFG_009_aVanishedGameFolderSendsTheUserBackToThePicker() throws {

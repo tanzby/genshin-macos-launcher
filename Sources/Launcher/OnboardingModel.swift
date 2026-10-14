@@ -24,8 +24,6 @@ public final class OnboardingModel {
   }
 
   public var allowsLaunch: Bool { hosts.allowsLaunch }
-  public var hostsError: String? { hosts.error }
-  public var isApplyingHosts: Bool { hosts.isApplying }
 
   /// A game folder is chosen and still exists.
   public var hasUsableGameDirectory: Bool { settings.gameDirectory != nil && gameDirectoryUsable }

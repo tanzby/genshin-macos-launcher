@@ -64,7 +64,7 @@ package struct SophonDownloader: Sendable {
 
     let worker = FileWorker(
       session: session, chunkBase: chunkBase, chunkSuffix: ref.chunkURLSuffix,
-      paths: SophonPathPolicy(root: gameDirectory), tempDirectory: tempDirectory)
+      paths: paths, tempDirectory: tempDirectory)
     let config = configuration
 
     try await runBounded(ordered, limit: configuration.concurrency) { item in

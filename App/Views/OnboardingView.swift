@@ -22,8 +22,8 @@ struct OnboardingView: View {
         if !onboarding.allowsLaunch {
           Button("Block Telemetry…") { Task { await controller.applyHosts() } }
             .buttonStyle(.glassProminent)
-            .disabled(onboarding.isApplyingHosts)
-          if let error = onboarding.hostsError {
+            .disabled(onboarding.hosts.isApplying)
+          if let error = onboarding.hosts.error {
             Text(error).font(.caption).foregroundStyle(.red).lineLimit(3)
           }
         }
