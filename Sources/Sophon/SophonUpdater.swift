@@ -428,12 +428,20 @@ package struct SophonUpdater: Sendable {
     let patch = planned.patch
     return try await Offload.run { cancelled in
       let destination = try SophonPathPolicy.resolve(file.path, in: gameDirectory)
-      // Already the new file (a previous run got this far): nothing to do.
-      if try matches(destination, size: file.size, md5: file.md5, cancelled: cancelled) { return true }
       let originalPath = patch.originalPath.isEmpty ? file.path : patch.originalPath
+      // In place and the same size: one read answers both questions below, like in `plan`.
+      let digest =
+        originalPath == file.path && patch.originalSize == file.size && destination.fileSize == file.size
+        ? try MD5Hasher.hex(ofFileAt: destination, cancelled: cancelled) : nil
+      func isFile(_ url: URL, size: Int64, md5: String) throws -> Bool {
+        guard let digest else { return try matches(url, size: size, md5: md5, cancelled: cancelled) }
+        return digest.caseInsensitiveCompare(md5) == .orderedSame
+      }
+      // Already the new file (a previous run got this far): nothing to do.
+      if try isFile(destination, size: file.size, md5: file.md5) { return true }
       let original = try SophonPathPolicy.resolve(originalPath, in: gameDirectory)
       // Before patching: the old file must be the one the patch was made for.
-      guard try matches(original, size: patch.originalSize, md5: patch.originalMD5, cancelled: cancelled) else {
+      guard try isFile(original, size: patch.originalSize, md5: patch.originalMD5) else {
         return false
       }
       let ldiff = ldiffDirectory.appending(path: patch.patchID)
