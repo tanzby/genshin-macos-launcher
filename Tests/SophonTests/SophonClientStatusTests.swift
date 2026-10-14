@@ -216,6 +216,18 @@ import Testing
     #expect(needed == Int64(release.files["pkg_version"]!.count + release.files["YuanShen.exe"]!.count))
   }
 
+  @Test func INS_004_aRepairRightAfterItsDiskCheckDownloadsTheManifestOnce() async throws {
+    let release = FakeRelease.game("5.6.0")
+    let rig = SophonRig(main: release)
+    rig.install(release)
+
+    _ = try await rig.requiredDiskSpace(for: .repair)
+    try await rig.client.run(.repair, in: rig.game) { _ in }
+    try await rig.client.run(.repair, in: rig.game) { _ in }  // a later repair fetches it again
+
+    #expect(rig.cdn.requests.filter { $0.contains("/manifests/") }.count == 2)
+  }
+
   @Test func INS_004_aCdnWithoutSizeStatsIsAContractBreakNotZeroBytes() async throws {
     var full = FakeRelease.game("5.6.0")
     full.omitsStats = true
