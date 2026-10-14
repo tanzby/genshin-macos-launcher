@@ -35,4 +35,37 @@ enum Zstd {
     guard finished else { throw SophonError.decompressionFailed }
     return output
   }
+
+  /// The frame decompressed fine but does not hold the declared number of bytes.
+  struct WrongSize: Error {}
+
+  /// One decompression context reused across frames. Calls must not overlap: one file's chunks go through it in turn.
+  final class Decoder: @unchecked Sendable {
+    private let context: OpaquePointer
+
+    init() throws {
+      guard let context = ZSTD_createDCtx() else { throw SophonError.decompressionFailed }
+      self.context = context
+    }
+
+    deinit { ZSTD_freeDCtx(context) }
+
+    /// Decompresses one complete frame straight into a buffer of `size` bytes. Throws `WrongSize` when the frame
+    /// holds more or fewer bytes, `SophonError.decompressionFailed` when it is corrupt or truncated.
+    func decompress(_ input: Data, size: Int) throws -> Data {
+      guard !input.isEmpty else { throw SophonError.decompressionFailed }
+      var output = Data(count: size)
+      let result = output.withUnsafeMutableBytes { out in
+        input.withUnsafeBytes { raw in
+          ZSTD_decompressDCtx(context, out.baseAddress, out.count, raw.baseAddress, raw.count)
+        }
+      }
+      if ZSTD_isError(result) != 0 {
+        if ZSTD_getErrorCode(result) == ZSTD_error_dstSize_tooSmall { throw WrongSize() }
+        throw SophonError.decompressionFailed
+      }
+      guard result == size else { throw WrongSize() }
+      return output
+    }
+  }
 }

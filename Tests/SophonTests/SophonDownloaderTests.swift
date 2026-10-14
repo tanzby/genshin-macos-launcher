@@ -545,6 +545,30 @@ private final class Rig: @unchecked Sendable {
     #expect(Sandbox.regularFiles(in: rig.sandbox.temp).isEmpty)
   }
 
+  @Test func INS_008_chunksListedOutOfOffsetOrderStillAssembleAndVerify() async throws {
+    let rig = try Rig()
+    let clean = SyntheticFile("Data/shuffled.bin", sizes: [300, 500, 200])
+    rig.cdn.serve(clean)
+    // The whole-file MD5 can then not be fed while writing: the assembled file is read back instead.
+    let file = clean.file.replacing(chunks: clean.file.chunks.reversed())
+
+    try await rig.install([file])
+
+    #expect(rig.sandbox.read(file.path) == clean.plain)
+  }
+
+  @Test func INS_008_aWrongWholeFileMD5IsCaughtWhenTheChunksAreInOrder() async throws {
+    let rig = try Rig()
+    let clean = SyntheticFile("Data/ordered.bin", sizes: [300, 500])
+    rig.cdn.serve(clean)
+    let file = clean.file.replacing(md5: String(repeating: "0", count: 32))
+
+    await #expect(throws: SophonError.checksumMismatch(path: file.path)) {
+      try await rig.install([file], downloader: rig.downloader(maxAttempts: 1))
+    }
+    #expect(!rig.sandbox.exists(file.path))
+  }
+
   // MARK: invalid manifests
 
   @Test func INS_008_chunkRangeBeyondFileSizeIsAnInvalidManifest() async throws {
