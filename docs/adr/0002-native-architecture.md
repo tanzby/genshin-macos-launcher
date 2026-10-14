@@ -46,9 +46,10 @@ protocol GameClient: Sendable {
 ```
 
 - **修订（票 #13，实现 `LauncherModel` 时发现原协议不够）：** ① `requiredDiskSpace(for:)`：磁盘空间检查（#28 A4）需要只有客户端知道的大小（安装：解压后总大小；更新和预下载：下载量加新文件），`Launcher` 负责加 chunk 临时空间余量、与剩余空间比较，并在 `LauncherError.insufficientDiskSpace(required:available:)` 里带上差额。② `launch` 增加 `onStarted` 回调：120 秒启动超时（#28 15）要知道「游戏进程是否已出现」，只返回最终结果的 `async -> LaunchOutcome` 表达不了。超时时 `Launcher` 取消 launch 的 Task 并等它返回，客户端在取消路径上必须还原 Launch Mutations 并杀 prefix（清理按上文放在不受取消影响的上下文里）。
+- **修订（架构评审 #4，2026-10-14）：** 启动超时只在 `GameSession` 里（120 秒，超时即取消、关 prefix、还原 Launch Mutations）。票 #13 为 `Launcher` 一侧的超时加了 `onStarted`，但 `GameSession` 已经有同样的看门狗和更完整的清理，两个 120 秒计时器会互相竞争，还把原因在 `GenshinCNClient` 里丢掉。现在 `LaunchOutcome` 多一个 `startupTimedOut`，`LauncherModel` 把它映射成 `launchTimeout`；`LauncherModel` 的计时器、`sleep`/`launchTimeout` 注入和 `LaunchGate` 删除。`onStarted` 保留，但只用于 launching → running 的相位切换，不再参与超时判定。
 - **修订（架构评审 2026-10-14）：** 客户端不持有游戏目录。读目录的操作（`status`、`requiredDiskSpace`、`run`）都把它当参数传入（`launch` 本来就经 `LaunchOptions.gameDirectory`），去掉了 `setGameDirectory` 及其「每次调用前必须先设置」的时序约定。`LauncherModel` 的目录由注入的只读闭包提供（生产环境读 `SettingsModel`），不再被推送副本。
 - 错误分类：`GameClientError` 分为网络、磁盘空间不足、校验失败、已取消、需要重装 Wine。`Launcher` 据此决定重试、提示或引导。
-- `LaunchOutcome`：正常退出、非零退出（带退出码和日志路径）、启动失败。
+- `LaunchOutcome`：正常退出、非零退出（带退出码和日志路径）、启动失败、启动超时。
 
 保留这个协议是维护者的有意预留（现在只有原神 CN 一个实现）。第二个游戏出现时，以此为起点。
 

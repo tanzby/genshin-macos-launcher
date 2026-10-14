@@ -65,7 +65,6 @@ public final class LauncherModel {
   @ObservationIgnored public let events: AsyncStream<JobEvent>
   @ObservationIgnored private let eventSink: AsyncStream<JobEvent>.Continuation
 
-  public static let defaultLaunchTimeout: Duration = .seconds(120)
   /// Room for the chunk cache and files being assembled next to the finished ones.
   public static let defaultChunkTempMargin: Int64 = DiskSpaceCheck.defaultMargin
 
@@ -73,11 +72,8 @@ public final class LauncherModel {
   private let wine: (any WinePreparing)?
   private let hosts: (any HostsBlocking)?
   private let startup: StartupSteps?
-  private let launchTimeout: Duration
   private let diskSpace: DiskSpaceCheck
-  private let sleep: @Sendable (Duration) async throws -> Void
 
-  private var launchGate: LaunchGate?
   private var isShuttingDown = false
   private var launchWork: Task<LaunchOutcome, Error>?
   private var statusRead: Task<Void, Never>?
@@ -98,27 +94,16 @@ public final class LauncherModel {
     startup: StartupSteps? = nil,
     gameDirectory: URL? = nil,
     gameDirectorySource: (@MainActor () -> URL?)? = nil,
-    launchTimeout: Duration = LauncherModel.defaultLaunchTimeout,
     chunkTempMargin: Int64 = LauncherModel.defaultChunkTempMargin,
-    availableDiskSpace: @escaping @Sendable (URL) -> Int64? = LauncherModel.systemAvailableCapacity,
-    sleep: @escaping @Sendable (Duration) async throws -> Void = LauncherModel.defaultSleep
+    availableDiskSpace: @escaping @Sendable (URL) -> Int64? = LauncherModel.systemAvailableCapacity
   ) {
     self.client = client
     self.wine = wine
     self.hosts = hosts
     self.startup = startup
     directorySource = gameDirectorySource ?? { gameDirectory }
-    self.launchTimeout = launchTimeout
     diskSpace = DiskSpaceCheck(margin: chunkTempMargin, availableSpace: availableDiskSpace)
-    self.sleep = sleep
     (events, eventSink) = AsyncStream.makeStream()
-  }
-
-  /// A named function, not a closure literal in the default argument: with a closure literal there,
-  /// Xcode 26.6's runtime trapped ("freed pointer was not the last allocation") in suites that build a
-  /// `LauncherModel` without passing `sleep` (issue #48).
-  nonisolated public static func defaultSleep(_ duration: Duration) async throws {
-    try await Task.sleep(for: duration)
   }
 
   /// Free bytes on the volume holding `url`, or on its nearest existing ancestor when it does not exist yet.
@@ -560,47 +545,32 @@ public final class LauncherModel {
     if let refusal = refusal(for: .launch) { throw refusal }
     guard let gameDirectory else { throw LauncherError.noGameDirectory }
     lastError = nil
-    let gate = LaunchGate()
-    launchGate = gate
     let client = client
     let options = makeLaunchOptions(gameDirectory)
+    // The client owns the startup timeout (`GameSession`); this callback only moves launching → running.
     let onStarted: @Sendable () -> Void = { [weak self] in
-      // Only the callback that beats the timeout may switch the phase to running.
-      guard gate.markStarted() else { return }
-      Task { @MainActor in self?.noteStarted(gate) }
+      Task { @MainActor in self?.noteStarted() }
     }
     let work = Task { try await client.launch(options, onStarted: onStarted) }
     launchWork = work
-    let timeout = launchTimeout
-    let sleep = sleep
-    let watchdog = Task {
-      try? await sleep(timeout)
-      if !Task.isCancelled, gate.expire() { work.cancel() }
-    }
-    jobs.startExclusive(.launching) { await self.finishLaunch(work: work, watchdog: watchdog, gate: gate) }
+    jobs.startExclusive(.launching) { await self.finishLaunch(work: work) }
   }
 
-  private func noteStarted(_ gate: LaunchGate) {
-    if launchGate === gate { jobs.markRunning() }
+  private func noteStarted() {
+    if launchWork != nil { jobs.markRunning() }
   }
 
-  private func finishLaunch(
-    work: Task<LaunchOutcome, Error>, watchdog: Task<Void, Never>, gate: LaunchGate
-  ) async {
+  private func finishLaunch(work: Task<LaunchOutcome, Error>) async {
     let result = await work.result
-    watchdog.cancel()
     let failure: LauncherError?
-    if gate.timedOut {
-      failure = .launchTimeout
-    } else {
-      switch result {
-      case .success(.exited): failure = nil
-      case .success(.failedExit(let code, let logPath)): failure = .gameExited(code: code, logPath: logPath)
-      case .success(.failedToLaunch): failure = .failedToLaunch
-      case .failure(let error):
-        let mapped = LauncherError(error)
-        failure = mapped == .client(.cancelled) ? nil : mapped
-      }
+    switch result {
+    case .success(.exited): failure = nil
+    case .success(.failedExit(let code, let logPath)): failure = .gameExited(code: code, logPath: logPath)
+    case .success(.startupTimedOut): failure = .launchTimeout
+    case .success(.failedToLaunch): failure = .failedToLaunch
+    case .failure(let error):
+      let mapped = LauncherError(error)
+      failure = mapped == .client(.cancelled) ? nil : mapped
     }
     if let failure {
       lastError = failure
@@ -608,7 +578,6 @@ public final class LauncherModel {
       // Wine's own status is the only judge: if the failure came from a damaged Wine, the main button goes back to "prepare Wine".
       await refreshWine()
     }
-    launchGate = nil
     launchWork = nil
   }
 
