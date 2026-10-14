@@ -60,31 +60,44 @@ final class FakeLauncher: GameLaunching {
   }
 }
 
-/// A temporary game directory, data directory and fake CDN wired into a `GenshinCNClient`.
+/// A temporary game directory and data directory around a `GenshinCNClient` whose Sophon talks to a canned server.
+/// The job workflows themselves are tested in SophonTests; here only the mapping to the launcher's types is.
 final class ClientRig: @unchecked Sendable {
   let root: URL
   let game: URL
   let data: URL
   let protonExtras: URL
-  let cdn: FakeCDN
   let launcher = FakeLauncher()
   let client: GenshinCNClient
-  /// What the client is asked about: the game folder, or `nil` for a launcher with none chosen.
-  let directory: URL?
 
-  init(main: FakeRelease, pre: FakeRelease? = nil, withGameDirectory: Bool = true) {
+  /// `branches` is the body of getGameBranches; `nil` makes every request fail like a missing network.
+  init(branches: Data? = nil) {
     root = temporaryURL("genshin-launcher-client")
     game = root.appending(path: "Game", directoryHint: .isDirectory)
     data = root.appending(path: "Data", directoryHint: .isDirectory)
     protonExtras = root.appending(path: "protonextras", directoryHint: .isDirectory)
     try! FileManager.default.createDirectory(at: game, withIntermediateDirectories: true)
-    cdn = FakeCDN(main: main, pre: pre)
-    let configuration = SophonDownloadConfiguration(concurrency: 2, maxAttempts: 1, retryDelay: .milliseconds(1))
+    let (session, _) = BackgroundStub.session { url in
+      url.path.hasSuffix("getGameBranches") ? branches.map { (200, $0) } : nil
+    }
     client = GenshinCNClient(
-      dataDirectory: data, protonExtras: protonExtras, launcher: launcher, sophon: cdn.api,
-      downloader: SophonDownloader(session: cdn.session, configuration: configuration),
-      updater: SophonUpdater(session: cdn.session, configuration: configuration))
-    directory = withGameDirectory ? game : nil
+      dataDirectory: data, protonExtras: protonExtras, launcher: launcher,
+      sophon: SophonClient(game: GenshinCN.sophonGame, session: session))
+  }
+
+  /// A getGameBranches answer: the main version, and optionally a pre-download one that patches from `preFrom`.
+  static func branches(main: String, diffTags: [String] = [], pre: String? = nil, preFrom: [String] = []) -> Data {
+    func branch(_ name: String, _ tag: String, _ diffs: [String]) -> String {
+      let tags = diffs.map { "\"\($0)\"" }.joined(separator: ",")
+      return """
+        "\(name)":{"package_id":"p","branch":"\(name)","password":"x","tag":"\(tag)","diff_tags":[\(tags)],"categories":[]}
+        """
+    }
+    let preDownload = pre.map { "," + branch("pre_download", $0, preFrom) } ?? ""
+    return Data(
+      """
+      {"retcode":0,"message":"OK","data":{"game_branches":[{\(branch("main", main, diffTags))\(preDownload)}]}}
+      """.utf8)
   }
 
   func url(_ path: String) -> URL { game.appending(path: path) }
@@ -99,58 +112,13 @@ final class ClientRig: @unchecked Sendable {
 
   func exists(_ path: String) -> Bool { FileManager.default.fileExists(atPath: url(path).path) }
 
-  var configText: String? { read("config.ini").map { String(decoding: $0, as: UTF8.self) } }
-
-  /// Polls until `config.ini` says `version`, so a test does not depend on how fast a loaded runner gets there.
-  func waitForConfig(version: String) async -> Bool {
-    await pollUntil { configText?.contains("game_version=\(version)") == true }
-  }
-
-  /// Puts `release` on disk as a finished install, with `config.ini` saying `version` (default: its tag).
-  func install(_ release: FakeRelease, configVersion: String? = nil) {
-    for (path, content) in release.files { write(path, content) }
+  /// Puts a finished install of `version` on disk: the executable, the version file, the three files the launch
+  /// moves aside and `config.ini`.
+  func install(_ version: String) {
+    for path in ["YuanShen.exe"] + GenshinLaunchRecipe.movedAside { write(path, Data("\(path) \(version)".utf8)) }
+    write("YuanShen_Data/globalgamemanagers", Data(("\0" + "\(version)_100_200" + "\0").utf8))
     write(
       "config.ini",
-      Data(
-        "[General]\r\nchannel=1\r\ncps=mihoyo\r\ngame_version=\(configVersion ?? release.tag)\r\nsdk_version=\r\nsub_channel=1\r\n"
-          .utf8))
-  }
-
-  func status() async throws -> GameStatus { try await client.status(in: directory) }
-
-  func requiredDiskSpace(for job: GameJob) async throws -> Int64 {
-    try await client.requiredDiskSpace(for: job, in: game)
-  }
-
-  /// The raw stream of `run(job)` in the rig's game folder; `run(_:)` below collects it.
-  func stream(_ job: GameJob, in folder: URL? = nil) -> AsyncThrowingStream<JobProgress, Error> {
-    client.run(job, in: folder ?? game)
-  }
-
-  /// Everything `run(job)` reports, or the error it ends with.
-  func run(_ job: GameJob) async -> (progress: [JobProgress], error: (any Error)?) {
-    var progress: [JobProgress] = []
-    do {
-      for try await update in stream(job) { progress.append(update) }
-      return (progress, nil)
-    } catch {
-      return (progress, error)
-    }
-  }
-}
-
-extension FakeRelease {
-  /// A tiny but recognisable game: the executable, the version file and the three files the launch moves aside.
-  static func game(_ tag: String, extra: [String: Data] = [:], diffTags: [String] = []) -> FakeRelease {
-    var files: [String: Data] = [
-      "YuanShen.exe": Data("MZ \(tag)".utf8),
-      "YuanShen_Data/globalgamemanagers": Data(("\0" + "\(tag)_100_200" + "\0").utf8),
-      "YuanShen_Data/Plugins/crashreport.exe": Data("crashreport \(tag)".utf8),
-      "YuanShen_Data/Plugins/vulkan-1.dll": Data("vulkan \(tag)".utf8),
-      "YuanShen_Data/upload_crash.exe": Data("upload_crash \(tag)".utf8),
-      "pkg_version": Data("pkg \(tag)".utf8),
-    ]
-    for (path, content) in extra { files[path] = content }
-    return FakeRelease(tag: tag, files: files, diffTags: diffTags)
+      Data("[General]\r\nchannel=1\r\ncps=mihoyo\r\ngame_version=\(version)\r\nsdk_version=\r\nsub_channel=1\r\n".utf8))
   }
 }

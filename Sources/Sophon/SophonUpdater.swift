@@ -66,8 +66,13 @@ struct SophonPredownloadRecord: Sendable, Equatable, Codable {
 package struct SophonUpdater: Sendable {
   private let downloader: SophonDownloader
 
+  /// Shares `downloader` with whoever else downloads chunks, so there is one configuration and one session.
+  package init(downloader: SophonDownloader) {
+    self.downloader = downloader
+  }
+
   package init(session: URLSession = .shared, configuration: SophonDownloadConfiguration = .init()) {
-    downloader = SophonDownloader(session: session, configuration: configuration)
+    self.init(downloader: SophonDownloader(session: session, configuration: configuration))
   }
 
   // MARK: - Pre-download record

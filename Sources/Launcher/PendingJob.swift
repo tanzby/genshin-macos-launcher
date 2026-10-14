@@ -19,8 +19,9 @@ extension PendingJob {
 }
 
 /// Reads and writes `job.json`. Unknown fields are ignored; an unreadable file counts as absent.
-struct PendingJobStore: Sendable {
-  static let directoryName = ".genshin-launcher-tmp"
+package struct PendingJobStore: Sendable {
+  /// The one definition of the temp folder name; the game module hands it to Sophon, which keeps its chunk cache there.
+  package static let directoryName = ".genshin-launcher-tmp"
   static let fileName = "job.json"
 
   let gameDirectory: URL

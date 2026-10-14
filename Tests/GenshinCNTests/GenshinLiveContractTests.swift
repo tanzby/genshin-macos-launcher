@@ -3,6 +3,7 @@ import Foundation
 import Testing
 import TestSupport
 
+@testable import GenshinCN
 @testable import Sophon
 
 /// Read-only checks against the real CN servers. Skipped unless `GENSHIN_LAUNCHER_LIVE=1`; the
@@ -11,8 +12,8 @@ import TestSupport
   .serialized,
   .enabled(if: ProcessInfo.processInfo.environment["GENSHIN_LAUNCHER_LIVE"] == "1", "set GENSHIN_LAUNCHER_LIVE=1")
 )
-struct SophonLiveContractTests {
-  private let api = SophonAPI()
+struct GenshinLiveContractTests {
+  private let api = SophonAPI(endpoints: GenshinCN.sophonGame.endpoints)
 
   @Test func APP_009_live_branchesBuildAndPatchBuildAnswer() async throws {
     let main = try #require(try await api.gameBranches().main)

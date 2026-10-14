@@ -4,17 +4,6 @@ import Platform
 import Sophon
 import Wine
 
-enum GenshinCNClientError: Error, Sendable, Equatable {
-  /// The folder holds no (complete) install, so there is nothing to update or repair.
-  case notInstalled
-  /// Repair needs the latest version (REP-002); update first.
-  case outdated(installed: String, latest: String)
-  /// The installed version is already the latest (UPG-006).
-  case noUpdate
-  /// The server has no pre-download newer than the installed version.
-  case noPreDownload
-}
-
 /// What `GenshinCNClient` needs from the Wine side to start the game. `GameSession` is the production implementation.
 package protocol GameLaunching: Sendable {
   func launch(_ recipe: LaunchRecipe, onStarted: @escaping @Sendable () -> Void) async -> LaunchResult
@@ -32,9 +21,7 @@ public final class GenshinCNClient: GameClient {
   let dataDirectory: URL
   let protonExtras: URL
   let launcher: any GameLaunching
-  let sophon: SophonAPI
-  let downloader: SophonDownloader
-  let updater: SophonUpdater
+  let sophon: SophonClient
   let background: BackgroundImageProvider?
   /// The Wine loader the game starts with; when it is gone the launch asks for a Wine reinstall.
   let wineLoader: URL?
@@ -44,9 +31,7 @@ public final class GenshinCNClient: GameClient {
     dataDirectory: URL,
     protonExtras: URL,
     launcher: any GameLaunching,
-    sophon: SophonAPI = SophonAPI(),
-    downloader: SophonDownloader = SophonDownloader(),
-    updater: SophonUpdater = SophonUpdater(),
+    sophon: SophonClient = SophonClient(game: GenshinCN.sophonGame),
     background: BackgroundImageProvider? = nil,
     wineLoader: URL? = nil
   ) {
@@ -54,8 +39,6 @@ public final class GenshinCNClient: GameClient {
     self.protonExtras = protonExtras
     self.launcher = launcher
     self.sophon = sophon
-    self.downloader = downloader
-    self.updater = updater
     self.background = background
     self.wineLoader = wineLoader
   }
@@ -105,27 +88,10 @@ public final class GenshinCNClient: GameClient {
   }
 
   private func loadStatus(in directory: URL?) async throws -> GameStatus {
-    // A broken or non-China install throws `brokenInstallation` (UPG-005) instead of reading as "no install".
-    let installed = try directory.flatMap { try SophonInstallation.installedVersion(in: $0) }
-    let branches: SophonGameBranches
-    do {
-      branches = try await sophon.gameBranches()
-    } catch where Self.isOffline(error) {
-      return GameStatus(localVersion: installed)
-    }
-    guard let main = branches.main else { throw SophonError.malformedResponse }
-
-    var status = GameStatus(localVersion: installed, remoteVersion: main.tag)
-    guard let installed, let directory else { return status }
-    status.canUpdate = SophonVersion.isOlder(installed, than: main.tag)
-    if let pre = branches.preDownload, SophonVersion.isOlder(installed, than: pre.tag) {
-      status.preDownloadVersion = pre.tag
-      status.canPreDownload =
-        pre.diffTags.contains(installed)
-        && !SophonUpdater.isPredownloaded(
-          pre.tag, from: installed, in: SophonInstallation.tempDirectory(in: directory))
-    }
-    return status
+    let status = try await sophon.status(in: directory)
+    return GameStatus(
+      localVersion: status.installedVersion, remoteVersion: status.remoteVersion, canUpdate: status.canUpdate,
+      canPreDownload: status.canPreDownload, preDownloadVersion: status.preDownloadVersion)
   }
 
   // MARK: - Launch
@@ -172,19 +138,6 @@ public final class GenshinCNClient: GameClient {
 
   // MARK: - Errors
 
-  static func isOffline(_ error: any Error) -> Bool {
-    switch error {
-    case is URLError: true
-    case let error as SophonError:
-      switch error {
-      case .transport: true
-      case .http(let status): status >= 500  // a 4xx is a contract break, not "offline"
-      default: false
-      }
-    default: false
-    }
-  }
-
   /// Translates module errors into the ones the launcher knows (`GameClientError`).
   static func map(_ error: any Error) -> any Error {
     switch error {
@@ -192,7 +145,7 @@ public final class GenshinCNClient: GameClient {
       return error
     case let error as URLError where error.code == .cancelled:
       return CancellationError()
-    case _ where isOffline(error):
+    case _ where SophonError.isOffline(error):
       return GameClientError.network
     case let error as SophonError:
       switch error {

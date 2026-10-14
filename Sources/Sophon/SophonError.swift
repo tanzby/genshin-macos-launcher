@@ -30,6 +30,30 @@ package enum SophonError: Error, Equatable, Sendable {
   case installDirectoryNotEmpty
   /// `config.ini` is missing or its `game_version` line is not exactly one (INS-006, UPG-011).
   case invalidConfig
+  /// The folder holds no (complete) install, so there is nothing to update or repair.
+  case notInstalled
+  /// Repair needs the latest version (REP-002); update first.
+  case outdated(installed: String, latest: String)
+  /// The installed version is already the latest (UPG-006).
+  case noUpdate
+  /// The server has no pre-download newer than the installed version.
+  case noPreDownload
+}
+
+extension SophonError {
+  /// Transport faults and server faults read as "offline"; a 4xx is a contract break.
+  package static func isOffline(_ error: any Error) -> Bool {
+    switch error {
+    case is URLError: true
+    case let error as SophonError:
+      switch error {
+      case .transport: true
+      case .http(let status): status >= 500
+      default: false
+      }
+    default: false
+    }
+  }
 }
 
 extension SophonError: LocalizedError {
@@ -51,6 +75,10 @@ extension SophonError: LocalizedError {
     case .brokenInstallation: "Broken script or corrupted game installation"
     case .installDirectoryNotEmpty: "The specified install path is not empty"
     case .invalidConfig: "Invalid config.ini format"
+    case .notInstalled: "The game is not installed in this folder"
+    case .outdated(let installed, let latest): "Version \(installed) must be updated to \(latest) first"
+    case .noUpdate: "The installed version is already the latest"
+    case .noPreDownload: "There is no pre-download for the installed version"
     }
   }
 }
