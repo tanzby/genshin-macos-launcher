@@ -21,4 +21,4 @@ jobs:
       - name: Sophon contract tests
         env:
           GENSHIN_LAUNCHER_LIVE: "1"
-        run: swift test --filter SophonLiveContractTests
+        run: swift test --filter GenshinLiveContractTests

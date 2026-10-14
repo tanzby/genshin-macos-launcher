@@ -15,14 +15,6 @@ package struct SophonEndpoints: Sendable, Equatable {
     self.gameID = gameID
     self.launcherID = launcherID
   }
-
-  /// Genshin Impact, CN server.
-  package static let genshinCN = SophonEndpoints(
-    hypConnectBase: URL(string: "https://hyp-api.mihoyo.com/hyp/hyp-connect/api")!,
-    downloaderBase: URL(string: "https://api-takumi.mihoyo.com/downloader/sophon_chunk/api")!,
-    gameID: "1Z8W5NHUQb",
-    launcherID: "jGHBHlcOq1"
-  )
 }
 
 /// The Sophon protocol: branches, builds, patch builds and manifests. Stateless and cache-free,
@@ -31,7 +23,7 @@ package struct SophonAPI: Sendable {
   package let endpoints: SophonEndpoints
   let session: URLSession
 
-  package init(endpoints: SophonEndpoints = .genshinCN, session: URLSession = .shared) {
+  package init(endpoints: SophonEndpoints, session: URLSession = .shared) {
     self.endpoints = endpoints
     self.session = session
   }
@@ -107,26 +99,5 @@ package struct SophonAPI: Sendable {
     guard let http = response as? HTTPURLResponse else { throw SophonError.malformedResponse }
     guard http.statusCode == 200 else { throw SophonError.http(status: http.statusCode) }
     return data
-  }
-}
-
-/// Real client behind the `SophonClient` protocol.
-struct LiveSophonClient: SophonClient {
-  private let api: SophonAPI
-
-  init(api: SophonAPI = SophonAPI()) { self.api = api }
-
-  /// `installSize` is the compressed download size of the `game` category (what the chunks weigh).
-  func onlineInfo() async throws -> SophonOnlineInfo {
-    let branches = try await api.gameBranches()
-    guard let main = branches.main else { throw SophonError.malformedResponse }
-    let game = try await api.build(for: main).manifest(matching: "game")
-    guard let stats = game.stats else { throw SophonError.malformedResponse }
-    return SophonOnlineInfo(
-      latestVersion: main.tag,
-      installSize: stats.compressedSize,
-      patchableVersions: main.diffTags,
-      preDownload: branches.preDownload?.tag
-    )
   }
 }

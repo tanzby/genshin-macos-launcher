@@ -13,10 +13,6 @@ import TestSupport
 
 // MARK: - Fixture data
 
-private func md5Hex(_ data: Data) -> String {
-  Insecure.MD5.hash(data: data).map { String(format: "%02x", $0) }.joined()
-}
-
 private func bytes(seed: UInt64, count: Int) -> Data {
   var state = seed &* 0x9E37_79B9_7F4A_7C15 | 1
   var result = [UInt8]()
@@ -28,22 +24,6 @@ private func bytes(seed: UInt64, count: Int) -> Data {
     result.append(UInt8(truncatingIfNeeded: state >> 24))
   }
   return Data(result)
-}
-
-/// A valid zstd frame of stored blocks (the vendored zstd only decompresses).
-private func zstdRawFrame(_ raw: Data) -> Data {
-  var frame = Data([0x28, 0xB5, 0x2F, 0xFD, 0x00, 0x58])
-  let maxBlock = 128 * 1024
-  var offset = 0
-  repeat {
-    let size = min(maxBlock, raw.count - offset)
-    let last = offset + size >= raw.count
-    let header = UInt32(last ? 1 : 0) | UInt32(size << 3)
-    frame.append(contentsOf: [UInt8(header & 0xFF), UInt8((header >> 8) & 0xFF), UInt8((header >> 16) & 0xFF)])
-    frame.append(raw.subdata(in: offset..<(offset + size)))
-    offset += size
-  } while offset < raw.count
-  return frame
 }
 
 private struct LdiffMeta: Decodable {
@@ -240,9 +220,10 @@ private struct Rig {
 
   var updater: SophonUpdater {
     SophonUpdater(
-      session: session,
-      configuration: SophonDownloadConfiguration(
-        concurrency: 4, maxAttempts: 2, retryDelay: .zero, progressInterval: .zero))
+      downloader: SophonDownloader(
+        session: session,
+        configuration: SophonDownloadConfiguration(
+          concurrency: 4, maxAttempts: 2, retryDelay: .zero, progressInterval: .zero)))
   }
 
   func plan(from version: String = World.installed) async throws -> SophonUpdatePlan {

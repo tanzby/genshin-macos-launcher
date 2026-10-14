@@ -7,7 +7,7 @@ import TestSupport
 
 @Suite struct GenshinCNTests {
   @Test func clientIsAGameClientAndFallsBackToTheBundledBackgroundWithoutAProvider() async {
-    let rig = ClientRig(main: .game("5.6.0"))
+    let rig = ClientRig()
     let client: any GameClient = rig.client
     #expect(await client.backgroundImage() == .bundledDefault)
     #expect(GenshinCN.channel == "hk4ecn")
@@ -20,7 +20,7 @@ import TestSupport
         ? (200, BackgroundImageProviderTests.info([(BackgroundImageProviderTests.imageURL, false)]))
         : (200, BackgroundImageProviderTests.png)
     }
-    let rig = ClientRig(main: .game("5.6.0"))
+    let rig = ClientRig()
     let client = GenshinCNClient(
       dataDirectory: rig.data, protonExtras: rig.protonExtras, launcher: rig.launcher,
       background: BackgroundImageProvider(cacheDirectory: cache, session: session))

@@ -38,30 +38,6 @@ private func seedValue(_ label: String) -> Int {
   label.unicodeScalars.reduce(17) { ($0 &* 31 &+ Int($1.value)) & 0xFF_FFFF }
 }
 
-private func md5Hex(_ data: Data) -> String {
-  Insecure.MD5.hash(data: data).map { String(format: "%02x", $0) }.joined()
-}
-
-/// A valid zstd frame made of stored (raw) blocks of at most 128 KB. The vendored zstd cannot compress.
-private func zstdRawFrame(_ raw: Data) -> Data {
-  var frame = Data([0x28, 0xB5, 0x2F, 0xFD])  // magic
-  frame.append(0x00)  // descriptor: multi-segment, no checksum, no dictionary, no content size
-  frame.append(0x58)  // window descriptor
-  let maxBlock = 128 * 1024
-  var offset = 0
-  repeat {
-    let size = min(maxBlock, raw.count - offset)
-    let last = offset + size >= raw.count
-    let header = UInt32(last ? 1 : 0) | (0 << 1) | UInt32(size << 3)  // type 0 = raw
-    frame.append(contentsOf: [
-      UInt8(header & 0xFF), UInt8((header >> 8) & 0xFF), UInt8((header >> 16) & 0xFF),
-    ])
-    frame.append(raw.subdata(in: offset..<(offset + size)))
-    offset += size
-  } while offset < raw.count
-  return frame
-}
-
 /// One chunk as the CDN would serve it.
 private struct ChunkPiece {
   let id: String

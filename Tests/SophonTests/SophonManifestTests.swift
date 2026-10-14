@@ -145,7 +145,7 @@ import Testing
   @Test func APP_009_manifestIsDownloadedFromPrefixSlashId() async throws {
     let framed = try Fixture.data("manifest-chunk", "zst")
     let (session, id) = StubURLProtocol.session { _ in (200, framed) }
-    let api = SophonAPI(session: session)
+    let api = SophonAPI(endpoints: .recordedCN, session: session)
     let ref = SophonManifestRef.stub(
       id: "manifest_x", manifestPrefix: "https://cdn.example.invalid/manifests/a/b")
     let manifest = try await api.manifest(for: ref)
@@ -156,7 +156,7 @@ import Testing
 
   @Test func APP_009_manifestDownloadHTTPErrorIsNotParsed() async throws {
     let (session, _) = StubURLProtocol.session { _ in (404, Data("<html/>".utf8)) }
-    let api = SophonAPI(session: session)
+    let api = SophonAPI(endpoints: .recordedCN, session: session)
     let ref = SophonManifestRef.stub(id: "m", manifestPrefix: "https://cdn.example.invalid/m")
     await #expect(throws: SophonError.http(status: 404)) { _ = try await api.manifest(for: ref) }
   }
@@ -164,7 +164,7 @@ import Testing
   @Test func UPG_009_diffManifestIsDownloadedAndParsed() async throws {
     let framed = try Fixture.data("manifest-ldiff", "zst")
     let (session, _) = StubURLProtocol.session { _ in (200, framed) }
-    let api = SophonAPI(session: session)
+    let api = SophonAPI(endpoints: .recordedCN, session: session)
     let ref = SophonManifestRef.stub(id: "m", manifestPrefix: "https://cdn.example.invalid/m")
     #expect(try await api.diffManifest(for: ref).files.count == 3)
   }

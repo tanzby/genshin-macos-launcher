@@ -13,7 +13,7 @@ private let noop: @Sendable () -> Void = {}
 
 @Suite struct ClientLaunchTests {
   @Test func APP_019_recoverIsHandedToTheGameSession() async {
-    let rig = ClientRig(main: .game("5.6.0"))
+    let rig = ClientRig()
 
     await rig.client.recover()
 
@@ -33,9 +33,8 @@ private let noop: @Sendable () -> Void = {}
   }
 
   private func installedRig() -> ClientRig {
-    let release = FakeRelease.game("5.6.0")
-    let rig = ClientRig(main: release)
-    rig.install(release)
+    let rig = ClientRig()
+    rig.install("5.6.0")
     return rig
   }
 
@@ -84,6 +83,19 @@ private let noop: @Sendable () -> Void = {}
     #expect(recipe.registry.contains { $0.name == "WINDOWS_HDR_ON_h3132281285" && $0.action == .set(.dword(1)) })
   }
 
+  @Test func REP_005_aRepairNeedsNoMarkerResetBecauseEveryLaunchPreparesTheGameAgain() async throws {
+    let rig = installedRig()
+
+    _ = try await rig.client.launch(.init(gameDirectory: rig.game), onStarted: noop)
+    _ = try await rig.client.launch(.init(gameDirectory: rig.game), onStarted: noop)
+
+    #expect(rig.launcher.recipes.count == 2)
+    for recipe in rig.launcher.recipes {
+      #expect(recipe.moveAside.count == 3)
+      #expect(recipe.prefixCopies.count == 4)
+    }
+  }
+
   @Test func LCH_011_aGameDirectoryWithAQuoteIsRefusedBeforeAnythingRuns() async throws {
     let rig = installedRig()
     let bad = rig.root.appending(path: "Bad \"Dir\"", directoryHint: .isDirectory)
@@ -96,7 +108,7 @@ private let noop: @Sendable () -> Void = {}
   }
 
   @Test func LCH_001_aDirectoryWithoutTheGameIsRefusedBeforeAnythingRuns() async throws {
-    let rig = ClientRig(main: .game("5.6.0"))
+    let rig = ClientRig()
 
     let outcome = try await rig.client.launch(LaunchOptions(gameDirectory: rig.game), onStarted: noop)
 
@@ -183,17 +195,19 @@ final class Counter: @unchecked Sendable {
 }
 
 @Suite struct ClientErrorMappingTests {
+  @Test func INS_005_theTemporaryFolderOfTheSophonGameIsTheOneTheLauncherRecordsItsJobIn() {
+    #expect(GenshinCN.sophonGame.tempDirectoryName == ".genshin-launcher-tmp")
+    #expect(GenshinCN.sophonGame.executableName == GenshinCN.executableName)
+    let endpoints = GenshinCN.sophonGame.endpoints
+    #expect(endpoints.hypConnectBase.absoluteString == "https://hyp-api.mihoyo.com/hyp/hyp-connect/api")
+    #expect(endpoints.downloaderBase.absoluteString == "https://api-takumi.mihoyo.com/downloader/sophon_chunk/api")
+    #expect(endpoints.gameID == "1Z8W5NHUQb" && endpoints.launcherID == "jGHBHlcOq1")
+  }
+
   @Test func APP_013_networkProblemsBecomeNetworkErrors() {
     #expect(GenshinCNClient.map(SophonError.transport(code: -1009)) as? GameClientError == .network)
     #expect(GenshinCNClient.map(SophonError.http(status: 503)) as? GameClientError == .network)
     #expect(GenshinCNClient.map(URLError(.timedOut)) as? GameClientError == .network)
-  }
-
-  @Test func INS_012_onlyTransportFailuresAndServerErrorsCountAsOffline() {
-    #expect(GenshinCNClient.isOffline(SophonError.transport(code: -1009)))
-    #expect(GenshinCNClient.isOffline(SophonError.http(status: 502)))
-    #expect(!GenshinCNClient.isOffline(SophonError.http(status: 403)))
-    #expect(!GenshinCNClient.isOffline(SophonError.malformedResponse))
   }
 
   @Test func INS_008_corruptDataBecomesAVerificationFailure() {
@@ -210,7 +224,7 @@ final class Counter: @unchecked Sendable {
     #expect(GenshinCNClient.map(CancellationError()) is CancellationError)
     #expect(GenshinCNClient.map(URLError(.cancelled)) is CancellationError)
     #expect(GenshinCNClient.map(SophonError.installDirectoryNotEmpty) as? GameClientError == .installDirectoryNotEmpty)
-    #expect(GenshinCNClient.map(GenshinCNClientError.noUpdate) as? GenshinCNClientError == .noUpdate)
+    #expect(GenshinCNClient.map(SophonError.noUpdate) as? SophonError == .noUpdate)
   }
 }
 

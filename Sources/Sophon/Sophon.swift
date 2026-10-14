@@ -10,27 +10,52 @@ package enum SophonProgress: Sendable, Equatable {
   case finalizing
 }
 
-/// Latest remote state of the game branch. `preDownload` is `nil` when the branch is null.
-struct SophonOnlineInfo: Sendable, Equatable {
-  var latestVersion: String
-  var installSize: Int64
-  var patchableVersions: [String]
-  var preDownload: String?
+/// The game-specific facts Sophon needs, handed in by the game's module (ADR 0002: names, ids and the
+/// foreign-build list belong to `GenshinCN`, not to Sophon).
+package struct SophonGame: Sendable {
+  package var endpoints: SophonEndpoints
+  /// The folder holding `globalgamemanagers`, relative to the game directory.
+  package var dataFolder: String
+  package var executableName: String
+  /// Files (relative to the game directory) whose presence means a build of another channel, which is not
+  /// supported (UPG-005).
+  package var foreignBuildMarkers: [String]
+  /// Chunk cache, ldiff files, assembly folders and the launcher's `job.json`, inside the game directory.
+  package var tempDirectoryName: String
+  /// Puts back files the game's launch moved aside. Runs at the start of repair and update, after the install
+  /// is known to exist and before anything is verified or patched.
+  package var healBackups: @Sendable (URL) -> Void
 
-  init(
-    latestVersion: String,
-    installSize: Int64,
-    patchableVersions: [String] = [],
-    preDownload: String? = nil
+  package init(
+    endpoints: SophonEndpoints, dataFolder: String, executableName: String, foreignBuildMarkers: [String],
+    tempDirectoryName: String, healBackups: @escaping @Sendable (URL) -> Void = { _ in }
   ) {
-    self.latestVersion = latestVersion
-    self.installSize = installSize
-    self.patchableVersions = patchableVersions
-    self.preDownload = preDownload
+    self.endpoints = endpoints
+    self.dataFolder = dataFolder
+    self.executableName = executableName
+    self.foreignBuildMarkers = foreignBuildMarkers
+    self.tempDirectoryName = tempDirectoryName
+    self.healBackups = healBackups
   }
 }
 
-/// Entry point of the Sophon module. The implementation lands with the Sophon tickets.
-protocol SophonClient: Sendable {
-  func onlineInfo() async throws -> SophonOnlineInfo
+/// The four jobs Sophon runs in a game directory.
+package enum SophonJob: Sendable, Equatable {
+  case install, update, repair, preDownload
+}
+
+/// What the game directory and the server say about each other. Offline, only the local side is known.
+package struct SophonStatus: Sendable, Equatable {
+  package var installedVersion: String?
+  package var remoteVersion: String?
+  package var canUpdate = false
+  /// The pre-download branch's version while it is newer than the installed one, offered or already done.
+  package var preDownloadVersion: String?
+  /// A newer pre-download that can be patched from the installed version and is not downloaded yet.
+  package var canPreDownload = false
+
+  package init(installedVersion: String? = nil, remoteVersion: String? = nil) {
+    self.installedVersion = installedVersion
+    self.remoteVersion = remoteVersion
+  }
 }

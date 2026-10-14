@@ -14,7 +14,7 @@ private func makeClient(
     guard let route = routes[path] else { return (404, Data()) }
     return route
   }
-  return (SophonAPI(session: session), id)
+  return (SophonAPI(endpoints: .recordedCN, session: session), id)
 }
 
 private func standardRoutes() throws -> [String: (status: Int, body: Data)] {
@@ -209,35 +209,6 @@ private func standardRoutes() throws -> [String: (status: Int, body: Data)] {
     let message = error?.localizedDescription ?? ""
     #expect(!message.contains("REDACTED"))
   }
-
-  // MARK: online info
-
-  @Test func APP_008_onlineInfoCombinesBranchesAndGameStats() async throws {
-    let (session, _) = StubURLProtocol.session { request in
-      let routes = try standardRoutes()
-      return routes[request.url!.path] ?? (404, Data())
-    }
-    let info = try await LiveSophonClient(api: SophonAPI(session: session)).onlineInfo()
-    #expect(info.latestVersion == "7.1.0")
-    #expect(info.patchableVersions == ["7.0.0", "6.7.0"])
-    #expect(info.installSize == 128_308_580_902)
-    #expect(info.preDownload == nil)
-  }
-
-  @Test func APP_008_onlineInfoReportsThePreDownloadVersion() async throws {
-    let json = """
-      {"retcode":0,"message":"OK","data":{"game_branches":[{
-       "main":{"package_id":"p1","branch":"main","password":"x","tag":"7.1.0","diff_tags":[],"categories":[]},
-       "pre_download":{"package_id":"p2","branch":"predownload","password":"y","tag":"7.2.0","diff_tags":["7.1.0"],"categories":[]}}]}}
-      """
-    let (session, _) = StubURLProtocol.session { request in
-      var routes = try standardRoutes()
-      routes["/hyp/hyp-connect/api/getGameBranches"] = (200, Data(json.utf8))
-      return routes[request.url!.path] ?? (404, Data())
-    }
-    let info = try await LiveSophonClient(api: SophonAPI(session: session)).onlineInfo()
-    #expect(info.preDownload == "7.2.0")
-  }
 }
 
 private func decodedBuild(fields: [String]) throws -> SophonBuild {
@@ -258,7 +229,7 @@ private func decodedBuild(fields: [String]) throws -> SophonBuild {
     let (session, _) = StubURLProtocol.session { _ in (200, Data()) }
     let ref = SophonManifestRef.stub(id: "m", manifestPrefix: "file:///etc")
     await #expect(throws: SophonError.malformedResponse) {
-      _ = try await SophonAPI(session: session).manifest(for: ref)
+      _ = try await SophonAPI(endpoints: .recordedCN, session: session).manifest(for: ref)
     }
   }
 

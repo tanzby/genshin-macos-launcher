@@ -1,11 +1,10 @@
 import CryptoKit
 import Foundation
-import Sophon
 import SwiftProtobuf
 
 @testable import Sophon
 
-// An in-memory Sophon service for the GenshinCNClient tests: getGameBranches, getBuild, getPatchBuild,
+// An in-memory Sophon service for the SophonClient tests: getGameBranches, getBuild, getPatchBuild,
 // manifests and chunks, all served through a `URLProtocol` stub. Chunks are zstd frames made of raw blocks
 // (the vendored zstd cannot compress). The bytes of the files are short marker strings, never secrets.
 
@@ -70,11 +69,18 @@ struct FakeRelease {
   var compressedSize: Int { sortedPaths.reduce(0) { $0 + frame($1).count } }
 }
 
-final class FakeCDN: @unchecked Sendable {
+final class FakeGameCDN: @unchecked Sendable {
   static let hyp = "https://hyp.test/api"
   static let downloader = "https://dl.test/api"
   static let endpoints = SophonEndpoints(
     hypConnectBase: URL(string: hyp)!, downloaderBase: URL(string: downloader)!, gameID: "game", launcherID: "launcher")
+  /// A game named like the one the fake releases hold, so `SophonGame` is exercised with real-looking names.
+  static func game(healBackups: @escaping @Sendable (URL) -> Void = { _ in }) -> SophonGame {
+    SophonGame(
+      endpoints: endpoints, dataFolder: "YuanShen_Data", executableName: "YuanShen.exe",
+      foreignBuildMarkers: ["YuanShen_Data/Plugins/PCGameSDK.dll"], tempDirectoryName: ".genshin-launcher-tmp",
+      healBackups: healBackups)
+  }
 
   private let lock = NSLock()
   private var _main: FakeRelease
@@ -118,7 +124,6 @@ final class FakeCDN: @unchecked Sendable {
     StubURLProtocol.session(reply: { [weak self] request in self?.handle(request) ?? .failure(.cancelled) }).session
   }()
 
-  var api: SophonAPI { SophonAPI(endpoints: Self.endpoints, session: session) }
 
   private func handle(_ request: URLRequest) -> StubReply {
     let url = request.url!

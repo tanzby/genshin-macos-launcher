@@ -62,14 +62,14 @@
 | APP-006 | aria2 下载任务的去重与续传 | 作废 | [#17](https://github.com/tanzby/yet-another-anime-game-launcher/issues/17)/[#13](https://github.com/tanzby/yet-another-anime-game-launcher/issues/13) 无 sidecar/Neutralino | — |  |
 | APP-007 | Sophon 服务进程的启动与生命周期 | 作废 | [#17](https://github.com/tanzby/yet-another-anime-game-launcher/issues/17)/[#13](https://github.com/tanzby/yet-another-anime-game-launcher/issues/13) 无 sidecar/Neutralino | — |  |
 | APP-008 | 在线游戏信息 | 改写 | [#26](https://github.com/tanzby/yet-another-anime-game-launcher/issues/26) 端点/缓存 | 组件、线上 | `APP_008_*`（SophonProtocolTests、SophonManifestTests） |
-| APP-009 | CN 的 HoYoPlay / Sophon 接口端点 | 改写 | [#26](https://github.com/tanzby/yet-another-anime-game-launcher/issues/26) 端点/缓存 | 组件、线上 | `APP_009_*`（SophonProtocolTests、SophonManifestTests、SophonLiveContractTests） |
+| APP-009 | CN 的 HoYoPlay / Sophon 接口端点 | 改写 | [#26](https://github.com/tanzby/yet-another-anime-game-launcher/issues/26) 端点/缓存 | 组件、线上 | `APP_009_*`（SophonProtocolTests、SophonManifestTests、GenshinLiveContractTests） |
 | APP-010 | 在线信息查询失败 | 改写 | [#28](https://github.com/tanzby/yet-another-anime-game-launcher/issues/28) A1-A3 | 组件、线上 | `APP_010_*` |
-| APP-011 | 本地安装状态判定 | 照搬 | TS 行为不变，但依 ADR 0002 在 Sophon/Launcher 重做 | 单元 | `APP_011_*`（ClientParityStatusTests、ParityGapTests） |
-| APP-012 | 从 globalgamemanagers 读取游戏版本 | 改写 | ADR 0002 / UPG-005：Sophon 按构建串模式（`\0x.y.z_n_n\0`）读版本，不再用 `ic.app-category.` 后的固定偏移 | 单元 | `APP_012_*`（ClientParityStatusTests）；版本串解析另见 `UPG_005_*` |
+| APP-011 | 本地安装状态判定 | 照搬 | TS 行为不变，但依 ADR 0002 在 Sophon/Launcher 重做 | 单元 | `APP_011_*`（SophonClientParityStatusTests、ParityGapTests） |
+| APP-012 | 从 globalgamemanagers 读取游戏版本 | 改写 | ADR 0002 / UPG-005：Sophon 按构建串模式（`\0x.y.z_n_n\0`）读版本，不再用 `ic.app-category.` 后的固定偏移 | 单元 | `APP_012_*`（SophonClientParityStatusTests）；版本串解析另见 `UPG_005_*` |
 | APP-013 | 任务队列串行执行，出错即致命 | 改写 | [#28](https://github.com/tanzby/yet-another-anime-game-launcher/issues/28) A1-A3 | 组件 | `APP_013_*` |
-| APP-014 | 版本不可读时告警 | 改写 | UPG-005：版本不可读是 `brokenInstallation` 错误，不再按 0.0.0 走更新（会重置安装） | 组件 | `APP_014_*`（ClientParityStatusTests、ParityGapTests） |
+| APP-014 | 版本不可读时告警 | 改写 | UPG-005：版本不可读是 `brokenInstallation` 错误，不再按 0.0.0 走更新（会重置安装） | 组件 | `APP_014_*`（SophonClientParityStatusTests、ParityGapTests） |
 | APP-015 | 预下载队列与主队列可以并发 | 改写 | [#28](https://github.com/tanzby/yet-another-anime-game-launcher/issues/28) A1-A3 | 组件 | `APP_015_*` |
-| APP-016 | 是否需要更新 | 照搬 | TS 行为不变，但依 ADR 0002 在 Sophon/Launcher 重做 | 组件 | `APP_016_*`（ClientParityStatusTests、ParityGapTests） |
+| APP-016 | 是否需要更新 | 照搬 | TS 行为不变，但依 ADR 0002 在 Sophon/Launcher 重做 | 组件 | `APP_016_*`（SophonClientParityStatusTests、ParityGapTests） |
 | APP-017 | 主按钮的文案与动作 | 改写 | [#21](https://github.com/tanzby/yet-another-anime-game-launcher/issues/21) SwiftUI 主界面 / 设置窗口重新设计 | 组件 |`APP_017_*`（MainPresentationTests、MainControllerTests） |
 | APP-018 | 设置按钮的可见性 | 改写 | [#21](https://github.com/tanzby/yet-another-anime-game-launcher/issues/21) SwiftUI 主界面 / 设置窗口重新设计 | 组件 | `APP_018_*`（AppSourceTests：「⋯」菜单里的设置入口始终可点，启动用设置快照） |
 | APP-019 | 启动器启动时还原残留补丁（init） | 改写 | [#28](https://github.com/tanzby/yet-another-anime-game-launcher/issues/28) B12：启动时 GameSession.recover() 自愈 | 组件 | `APP_019_*`（ClientLaunchTests、LauncherClientHandoffTests；GameSession 侧见 LCH_038）；diag：`genshin-launcher-diag` |
@@ -111,21 +111,21 @@
 | CFG-033 | 检查启动器更新 | 作废 | [#19](https://github.com/tanzby/yet-another-anime-game-launcher/issues/19) Sparkle | — |  |
 | CFG-034 | Licenses 标签页 | 改写 | [#21](https://github.com/tanzby/yet-another-anime-game-launcher/issues/21) SwiftUI 主界面 / 设置窗口重新设计 | 组件 | `CFG_034_*`（AppSourceTests：Valve 许可证在应用内列出并随文件分发） |
 | INS-001 | 安装目录选择的校验 | 照搬 | TS 行为不变，但依 ADR 0002 在 Sophon/Launcher 重做 | 组件 |  |
-| INS-002 | 判定"已有安装"还是"全新安装" | 照搬 | TS 行为不变，但依 ADR 0002 在 Sophon/Launcher 重做 | 组件 | `INS_002_*`（ClientStatusTests） |
-| INS-003 | 全新安装主流程（TS 侧） | 照搬 | 行为不变（流程由 Launcher + Fake GameClient 承载） | 组件 | `INS_003_*`（ClientInstallTests） |
-| INS-004 | 全新安装前的磁盘空间检查 | 改写 | [#28](https://github.com/tanzby/yet-another-anime-game-launcher/issues/28) A4 | 组件 | `INS_004_*`；`INS_004_*`（ClientDiskSpaceTests；Launcher 侧见 LauncherJobTests） |
-| INS-005 | Sophon 安装的前置条件与 config.ini 模板 | 照搬 | TS 行为不变，但依 ADR 0002 在 Sophon/Launcher 重做 | 单元 | `INS_005_*`（SophonInstallationTests、ClientInstallTests） |
-| INS-006 | config.ini 中 game_version 的两次写入 | 照搬 | TS 行为不变，但依 ADR 0002 在 Sophon/Launcher 重做 | 单元 | `INS_006_*`（ClientInstallTests） |
+| INS-002 | 判定"已有安装"还是"全新安装" | 照搬 | TS 行为不变，但依 ADR 0002 在 Sophon/Launcher 重做 | 组件 | `INS_002_*`（SophonClientStatusTests） |
+| INS-003 | 全新安装主流程（TS 侧） | 照搬 | 行为不变（流程由 Launcher + Fake GameClient 承载） | 组件 | `INS_003_*`（SophonClientInstallTests） |
+| INS-004 | 全新安装前的磁盘空间检查 | 改写 | [#28](https://github.com/tanzby/yet-another-anime-game-launcher/issues/28) A4 | 组件 | `INS_004_*`；`INS_004_*`（SophonClientDiskSpaceTests；Launcher 侧见 LauncherJobTests） |
+| INS-005 | Sophon 安装的前置条件与 config.ini 模板 | 照搬 | TS 行为不变，但依 ADR 0002 在 Sophon/Launcher 重做 | 单元 | `INS_005_*`（SophonInstallationTests、SophonClientInstallTests） |
+| INS-006 | config.ini 中 game_version 的两次写入 | 照搬 | TS 行为不变，但依 ADR 0002 在 Sophon/Launcher 重做 | 单元 | `INS_006_*`（SophonClientInstallTests） |
 | INS-007 | 下载顺序与并发 | 照搬 | 行为不变（流程由 Launcher + Fake GameClient 承载） | 组件 | `INS_007_*`（SophonDownloaderTests） |
 | INS-008 | 单个文件的 chunk 下载、组装与校验 | 改写 | [#28](https://github.com/tanzby/yet-another-anime-game-launcher/issues/28) C 负面用例 | 单元 | `INS_008_*`（SophonDownloaderTests） |
 | INS-009 | chunk 和 ldiff 的断点续传 | 改写 | [#28](https://github.com/tanzby/yet-another-anime-game-launcher/issues/28) C 负面用例 | 单元 | `INS_009_*`（SophonDownloaderTests） |
 | INS-010 | 文件级重试 | 改写 | [#28](https://github.com/tanzby/yet-another-anime-game-launcher/issues/28) C 负面用例 | 单元 | `INS_010_*`（SophonDownloaderTests） |
 | INS-011 | 文件路径安全校验 | 照搬 | TS 行为不变，但依 ADR 0002 在 Sophon/Launcher 重做 | 单元 | `INS_011_*`（SophonDownloaderTests） |
-| INS-012 | 选中已有目录：旧版本，可以增量更新 | 照搬 | TS 行为不变，但依 ADR 0002 在 Sophon/Launcher 重做 | 组件 | `INS_012_*`（ClientStatusTests：离线保留本地版本） |
-| INS-013 | 选中已有目录：版本太旧 | 照搬 | TS 行为不变，但依 ADR 0002 在 Sophon/Launcher 重做 | 组件 | `INS_013_*`（ClientUpdateTests：补丁清单不认的旧版本改为按 chunk 清单整体同步，不再弹 UNSUPPORTED_VERSION） |
-| INS-014 | 选中已有目录：已是最新版 | 照搬 | TS 行为不变，但依 ADR 0002 在 Sophon/Launcher 重做 | 组件 | `INS_014_*`（ClientStatusTests） |
+| INS-012 | 选中已有目录：旧版本，可以增量更新 | 照搬 | TS 行为不变，但依 ADR 0002 在 Sophon/Launcher 重做 | 组件 | `INS_012_*`（SophonClientStatusTests：离线保留本地版本） |
+| INS-013 | 选中已有目录：版本太旧 | 照搬 | TS 行为不变，但依 ADR 0002 在 Sophon/Launcher 重做 | 组件 | `INS_013_*`（SophonClientUpdateTests：补丁清单不认的旧版本改为按 chunk 清单整体同步，不再弹 UNSUPPORTED_VERSION） |
+| INS-014 | 选中已有目录：已是最新版 | 照搬 | TS 行为不变，但依 ADR 0002 在 Sophon/Launcher 重做 | 组件 | `INS_014_*`（SophonClientStatusTests） |
 | INS-015 | 安装中断后的恢复 | 改写 | [#28](https://github.com/tanzby/yet-another-anime-game-launcher/issues/28) C32 / ADR 0002 暂停继续 | 组件 | `INS_015_*`（Launcher 侧 job.json 与续跑） |
-| INS-016 | Sophon 接口缓存与清理 | 改写 | [#26](https://github.com/tanzby/yet-another-anime-game-launcher/issues/26) 端点/缓存 | 单元 | `INS_016_*`（SophonInstallationTests、ClientRepairTests） |
+| INS-016 | Sophon 接口缓存与清理 | 改写 | [#26](https://github.com/tanzby/yet-another-anime-game-launcher/issues/26) 端点/缓存 | 单元 | `INS_016_*`（SophonInstallationTests、SophonClientRepairTests） |
 | LCH-001 | 启动任务的整体顺序 | 改写 | [#28](https://github.com/tanzby/yet-another-anime-game-launcher/issues/28) B12/A7：无 ReShade 步骤，DXMT 随 Wine 装好，还原改为 journal（ADR 0002 已修订） | 单元 | GameSessionLaunchTests |
 | LCH-002 | 按版本下载 ReShade | 作废 | [#28](https://github.com/tanzby/yet-another-anime-game-launcher/issues/28) A7 删 ReShade（ADR 0002 已按此修订） | — |  |
 | LCH-003 | 启动前强制清理 prefix 中的残留进程 | 照搬 | TS 行为不变；LaunchRecipe/GameSession 重做 | diag | GameSessionLaunchTests、GameSessionMutationTests |
@@ -139,11 +139,11 @@
 | LCH-011 | Steam patch 启动路径 | 改写 | [#28](https://github.com/tanzby/yet-another-anime-game-launcher/issues/28) B14：启动命令只有 `steam.exe <游戏>`，不带 `-platform_type … -is_cloud 1`、不复制驱动，与 TS 的 Steam patch 路径一致（#57 实测：多这些并无影响，经 `cmd` 才会失败） | diag | GenshinLaunchRecipeTests（启动命令 golden）；真机由 genshin-launcher-diag 的 LCH-006/007 检查 |
 | LCH-012 | 补丁幂等 | 改写 | [#28](https://github.com/tanzby/yet-another-anime-game-launcher/issues/28) B12：启动前准备幂等，.bak 存在则不覆盖 | 单元 | GameSessionMutationTests |
 | LCH-013 | patch-off 只跳过对游戏文件的修改 | 作废 | [#28](https://github.com/tanzby/yet-another-anime-game-launcher/issues/28) A9 删除的开关 | — |  |
-| LCH-014 | CN 版启动前移走三个文件 | 改写 | [#28](https://github.com/tanzby/yet-another-anime-game-launcher/issues/28) B12/A9：补丁永远应用（无 patch-off）；`.bak` 已存在时不覆盖，启动时自愈 | 单元 | GameSessionMutationTests、GenshinLaunchRecipeTests；diag：`genshin-launcher-diag` |
+| LCH-014 | CN 版启动前移走三个文件 | 改写 | [#28](https://github.com/tanzby/yet-another-anime-game-launcher/issues/28) B12/A9：补丁永远应用（无 patch-off）；`.bak` 已存在时不覆盖，启动时自愈 | 单元 | GameSessionMutationTests、GenshinLaunchRecipeTests、SophonClientRepairTests（自愈钩子）、ClientJobMappingTests（接线）；diag：`genshin-launcher-diag` |
 | LCH-015 | workaround3 对 hk4ecn 无效果 | 作废 | [#28](https://github.com/tanzby/yet-another-anime-game-launcher/issues/28) A9 删除的开关 | — |  |
 | LCH-016 | 差分补丁和新增文件机制（CN 下列表为空） | 作废 | 死/开发便利/无版本选择 UI/空列表 | — |  |
 | LCH-017 | ReShade 注入游戏目录 | 作废 | [#28](https://github.com/tanzby/yet-another-anime-game-launcher/issues/28) A7 删 ReShade（ADR 0002 已按此修订） | — |  |
-| LCH-018 | 把 steam.exe 和 lsteamclient 部署到 prefix | 照搬 | TS 行为不变；LaunchRecipe/GameSession 重做 | diag | GameSessionMutationTests、GenshinLaunchRecipeTests；diag：`genshin-launcher-diag` |
+| LCH-018 | 把 steam.exe 和 lsteamclient 部署到 prefix | 照搬 | TS 行为不变；LaunchRecipe/GameSession 重做 | diag | GameSessionMutationTests、GenshinLaunchRecipeTests、SophonClientRepairTests（自愈钩子）、ClientJobMappingTests（接线）；diag：`genshin-launcher-diag` |
 | LCH-019 | patched 标记 | 改写 | [#28](https://github.com/tanzby/yet-another-anime-game-launcher/issues/28) B12：无 patched 标记，状态只看文件系统和 journal | 单元 | GameSessionMutationTests |
 | LCH-020 | 每次启动生成一个游戏日志 | 改写 | [#28](https://github.com/tanzby/yet-another-anime-game-launcher/issues/28) B18 | 单元 | GameSessionMutationTests |
 | LCH-021 | 屏蔽网络（临时修改 hosts 10 秒） | 改写 | [#29](https://github.com/tanzby/yet-another-anime-game-launcher/issues/29)/ADR 0001 | 单元 | `LCH_021_*`（HostsBlocklistTests） |
@@ -165,20 +165,20 @@
 | LCH-037 | 正常退出后撤销 HDR 和分辨率注册表 | 改写 | [#28](https://github.com/tanzby/yet-another-anime-game-launcher/issues/28) B16 | 单元 | GameSessionLaunchTests |
 | LCH-038 | 启动失败或崩溃时不撤销注册表 | 改写 | [#28](https://github.com/tanzby/yet-another-anime-game-launcher/issues/28) B12：崩溃残留由 recover() 与幂等写入自愈 | 单元 | GameSessionLaunchTests、GameSessionMutationTests |
 | LCH-039 | 退出后还原（原：删除 config.bat 并还原） | 改写 | [#28](https://github.com/tanzby/yet-another-anime-game-launcher/issues/28) B12：按 journal 还原游戏文件，无 DXMT/ReShade/patched 还原；不再有 config.bat 可删（见 LCH-010） | 单元 | GameSessionLaunchTests |
-| PRE-001 | 何时显示预下载提示 | 改写 | [#26](https://github.com/tanzby/yet-another-anime-game-launcher/issues/26) | 组件、线上 | `PRE_001_*`（SophonUpdaterTests：按目标版本的预下载记录；提示显示逻辑属 Launcher）；`PRE_001_*`（ClientStatusTests、ClientPreDownloadTests） |
-| PRE-002 | 执行预下载 | 改写 | [#26](https://github.com/tanzby/yet-another-anime-game-launcher/issues/26) | 组件、线上 | `PRE_002_*`（SophonUpdaterTests）、`PRE_002_live_*`；`PRE_002_*`（ClientPreDownloadTests） |
-| PRE-003 | 预下载版本的显示 | 照搬 | 行为不变（流程由 Launcher + Fake GameClient 承载） | 组件 | `PRE_003_*`（ClientStatusTests） |
-| PRG-001 | 任务事件推送（WebSocket） | 改写 | [#28](https://github.com/tanzby/yet-another-anime-game-launcher/issues/28) C 负面用例 | 单元 | `PRG_001_*`（ClientParityStatusTests：作业先结束、后读事件，事件和结束/错误都不丢） |
+| PRE-001 | 何时显示预下载提示 | 改写 | [#26](https://github.com/tanzby/yet-another-anime-game-launcher/issues/26) | 组件、线上 | `PRE_001_*`（SophonUpdaterTests：按目标版本的预下载记录；提示显示逻辑属 Launcher）；`PRE_001_*`（SophonClientStatusTests、SophonClientPreDownloadTests） |
+| PRE-002 | 执行预下载 | 改写 | [#26](https://github.com/tanzby/yet-another-anime-game-launcher/issues/26) | 组件、线上 | `PRE_002_*`（SophonUpdaterTests）、`PRE_002_live_*`；`PRE_002_*`（SophonClientPreDownloadTests） |
+| PRE-003 | 预下载版本的显示 | 照搬 | 行为不变（流程由 Launcher + Fake GameClient 承载） | 组件 | `PRE_003_*`（SophonClientStatusTests） |
+| PRG-001 | 任务事件推送（WebSocket） | 改写 | [#28](https://github.com/tanzby/yet-another-anime-game-launcher/issues/28) C 负面用例 | 单元 | `PRG_001_*`（ClientJobMappingTests：作业先结束、后读事件，错误不丢；进度事件的首尾见 SophonClientInstallTests） |
 | PRG-002 | 进度与速度计算 | 改写 | [#21](https://github.com/tanzby/yet-another-anime-game-launcher/issues/21) SwiftUI 主界面 / 设置窗口重新设计 | 单元 |`PRG_002_*`（MainPresentationTests） |
 | PRG-003 | 事件与界面文案的对应关系 | 改写 | [#21](https://github.com/tanzby/yet-another-anime-game-launcher/issues/21) SwiftUI 主界面 / 设置窗口重新设计 | 单元 |`PRG_003_*`（MainPresentationTests、EventNotifierTests） |
 | PRG-004 | 字节数的可读格式 | 改写 | [#21](https://github.com/tanzby/yet-another-anime-game-launcher/issues/21) SwiftUI 主界面 / 设置窗口重新设计 | 单元 |`PRG_004_*`（MainPresentationTests） |
 | PRG-005 | 进度条显示规则 | 改写 | [#21](https://github.com/tanzby/yet-another-anime-game-launcher/issues/21) SwiftUI 主界面 / 设置窗口重新设计 | 单元 |`PRG_005_*`（MainPresentationTests） |
 | PRG-006 | 取消功能没有接入 | 改写 | [#21](https://github.com/tanzby/yet-another-anime-game-launcher/issues/21) SwiftUI 主界面 / 设置窗口重新设计 | 单元 | `PRG_006_*` |
-| REP-001 | 修复的入口 | 照搬 | TS 行为不变，但依 ADR 0002 在 Sophon/Launcher 重做 | 单元 | `REP_001_*`（ClientRepairTests） |
+| REP-001 | 修复的入口 | 照搬 | TS 行为不变，但依 ADR 0002 在 Sophon/Launcher 重做 | 单元 | `REP_001_*`（SophonClientRepairTests） |
 | REP-002 | 前置条件：版本必须是最新 | 照搬 | TS 行为不变，但依 ADR 0002 在 Sophon/Launcher 重做 | 单元 | `REP_002_*`（Launcher 侧前置条件） |
 | REP-003 | 文件校验 | 照搬 | TS 行为不变，但依 ADR 0002 在 Sophon/Launcher 重做 | 单元 | `REP_003_*`（SophonDownloaderTests） |
 | REP-004 | 修复不了"大小对、MD5 错"的文件 | 改写 | [#26](https://github.com/tanzby/yet-another-anime-game-launcher/issues/26) | 单元 | `REP_004_*`（SophonDownloaderTests） |
-| REP-005 | hk4e 的完整性检查不清除 `patched` | 改写 | [#28](https://github.com/tanzby/yet-another-anime-game-launcher/issues/28) B12：DXMT 不再注入，修复后无需清标记 | 单元 | `REP_005_*`（ClientRepairLaunchTests） |
+| REP-005 | hk4e 的完整性检查不清除 `patched` | 改写 | [#28](https://github.com/tanzby/yet-another-anime-game-launcher/issues/28) B12：DXMT 不再注入，修复后无需清标记 | 单元 | `REP_005_*`（ClientLaunchTests） |
 | UPD-001 | 应用版本号的来源 | 作废 | [#19](https://github.com/tanzby/yet-another-anime-game-launcher/issues/19) Sparkle 取代 TS updater | — |  |
 | UPD-002 | 开发版跳过自更新 | 作废 | [#19](https://github.com/tanzby/yet-another-anime-game-launcher/issues/19) Sparkle 取代 TS updater | — |  |
 | UPD-003 | 识别渠道 | 作废 | [#19](https://github.com/tanzby/yet-another-anime-game-launcher/issues/19) Sparkle 取代 TS updater | — |  |
@@ -197,20 +197,20 @@
 | UPD-016 | 代理不作用于启动器自身的网络请求 | 改写 | [#28](https://github.com/tanzby/yet-another-anime-game-launcher/issues/28) B17 | 单元 | `UPD_016_*`（AppSourceTests：只有 launch recipe 提到代理） |
 | UPD-017 | Bundle 标识与 Info.plist | 改写 | [#28](https://github.com/tanzby/yet-another-anime-game-launcher/issues/28) A11 | 单元 | `UPD_017_*`（ParityGapTests、AppSourceTests） |
 | UPD-018 | sidecar 的可执行权限 | 作废 | [#19](https://github.com/tanzby/yet-another-anime-game-launcher/issues/19) Sparkle 取代 TS updater | — |  |
-| UPG-001 | 更新资格 | 照搬 | TS 行为不变，但依 ADR 0002 在 Sophon/Launcher 重做 | 单元 | `UPG_001_*`（ClientStatusTests） |
+| UPG-001 | 更新资格 | 照搬 | TS 行为不变，但依 ADR 0002 在 Sophon/Launcher 重做 | 单元 | `UPG_001_*`（SophonClientStatusTests） |
 | UPG-002 | 3.6.0 及以上版本的音频目录迁移 | 作废 | [#26](https://github.com/tanzby/yet-another-anime-game-launcher/issues/26) D3 放弃音频迁移 | — |  |
-| UPG-003 | 更新请求与 Sophon 的处理顺序 | 照搬 | TS 行为不变，但依 ADR 0002 在 Sophon/Launcher 重做 | 单元 | `UPG_003_*`（ClientUpdateTests） |
+| UPG-003 | 更新请求与 Sophon 的处理顺序 | 照搬 | TS 行为不变，但依 ADR 0002 在 Sophon/Launcher 重做 | 单元 | `UPG_003_*`（SophonClientUpdateTests） |
 | UPG-004 | CN 的更新和预下载请求必然失败 | 改写 | [#26](https://github.com/tanzby/yet-another-anime-game-launcher/issues/26) | 单元、线上 | `UPG_004_*`（SophonProtocolTests）、`APP_009_live_*` |
-| UPG-005 | Sophon 判定发行类型与已安装版本 | 照搬 | TS 行为不变，但依 ADR 0002 在 Sophon/Launcher 重做 | 单元 | `UPG_005_*`（SophonInstallationTests、ClientStatusTests、ClientUpdateTests） |
-| UPG-006 | 没有可用更新时报错 | 照搬 | TS 行为不变，但依 ADR 0002 在 Sophon/Launcher 重做 | 单元 | `UPG_006_*`（ClientUpdateTests） |
+| UPG-005 | Sophon 判定发行类型与已安装版本 | 照搬 | TS 行为不变，但依 ADR 0002 在 Sophon/Launcher 重做 | 单元 | `UPG_005_*`（SophonInstallationTests、SophonClientStatusTests、SophonClientUpdateTests） |
+| UPG-006 | 没有可用更新时报错 | 照搬 | TS 行为不变，但依 ADR 0002 在 Sophon/Launcher 重做 | 单元 | `UPG_006_*`（SophonClientUpdateTests） |
 | UPG-007 | 删除旧文件（files_delete） | 照搬 | TS 行为不变，但依 ADR 0002 在 Sophon/Launcher 重做 | 单元 | `UPG_007_*`（SophonUpdaterTests） |
 | UPG-008 | 单个文件的 ldiff 下载决策 | 照搬 | TS 行为不变，但依 ADR 0002 在 Sophon/Launcher 重做 | 单元 | `UPG_008_*`（SophonUpdaterTests） |
 | UPG-009 | 应用 ldiff（hpatchz） | 改写 | [#26](https://github.com/tanzby/yet-another-anime-game-launcher/issues/26) | 单元 | `UPG_009_*`（SophonUpdaterTests、HDiffPatcherTests）、`UPG_009_live_*` |
 | UPG-010 | 下载新增文件和需要整体替换的文件 | 照搬 | TS 行为不变，但依 ADR 0002 在 Sophon/Launcher 重做 | 单元 | `UPG_010_*`（SophonUpdaterTests） |
-| UPG-011 | 更新后的快速校验与写入 config.ini | 照搬 | TS 行为不变，但依 ADR 0002 在 Sophon/Launcher 重做 | 单元 | `UPG_011_*`（SophonUpdaterTests：Sophon 侧的大小与旧文件校验；写 config.ini 由 GenshinCN 负责）；`UPG_011_*`（SophonInstallationTests、ClientUpdateTests） |
-| UPG-012 | 清理 ldiff | 照搬 | TS 行为不变，但依 ADR 0002 在 Sophon/Launcher 重做 | 单元 | `UPG_012_*`（SophonUpdaterTests）；`UPG_012_*`（ClientUpdateTests） |
+| UPG-011 | 更新后的快速校验与写入 config.ini | 照搬 | TS 行为不变，但依 ADR 0002 在 Sophon/Launcher 重做 | 单元 | `UPG_011_*`（SophonUpdaterTests：Sophon 侧的大小与旧文件校验；写 config.ini 由 SophonClient 负责）；`UPG_011_*`（SophonInstallationTests、SophonClientUpdateTests） |
+| UPG-012 | 清理 ldiff | 照搬 | TS 行为不变，但依 ADR 0002 在 Sophon/Launcher 重做 | 单元 | `UPG_012_*`（SophonUpdaterTests）；`UPG_012_*`（SophonClientUpdateTests） |
 | UPG-013 | 更新完成后启动器侧的状态 | 照搬 | TS 行为不变，但依 ADR 0002 在 Sophon/Launcher 重做 | 单元 | `UPG_013_*` |
-| UPG-014 | 更新和修复的处理范围 | 照搬 | [#28](https://github.com/tanzby/yet-another-anime-game-launcher/issues/28) A5 语音包不管（有意照搬） | 单元 | `UPG_014_*`（ClientRepairTests） |
+| UPG-014 | 更新和修复的处理范围 | 照搬 | [#28](https://github.com/tanzby/yet-another-anime-game-launcher/issues/28) A5 语音包不管（有意照搬） | 单元 | `UPG_014_*`（SophonClientRepairTests） |
 | WIN-001 | 内置的 Wine 发行版清单 | 改写 | ADR 0001/0002 / [#27](https://github.com/tanzby/yet-another-anime-game-launcher/issues/27) (removexattr 不提权) | 单元 | WineStatusTests（pinned 清单） |
 | WIN-002 | 默认的 Wine 版本 | 改写 | [#29](https://github.com/tanzby/yet-another-anime-game-launcher/issues/29)/ADR 0001；DXMT 版本取自 App 内 bundle 的 VERSION（ADR 0003） | 单元 | WineStatusTests（固定 Wine 版本；DXMT bundle 的 VERSION） |
 | WIN-003 | 判断 Wine 是否就绪 | 改写 | [#29](https://github.com/tanzby/yet-another-anime-game-launcher/issues/29)/ADR 0001 | 单元 | WineStatusTests（磁盘与版本戳判定） |

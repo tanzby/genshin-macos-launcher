@@ -1,6 +1,8 @@
 import Foundation
 import Testing
 
+@testable import Sophon
+
 /// Serves canned responses to a `URLSession`. Handlers are keyed by a per-session id header so tests
 /// that run in parallel never see each other's requests.
 final class StubURLProtocol: URLProtocol, @unchecked Sendable {
@@ -141,6 +143,16 @@ final class StubURLProtocol: URLProtocol, @unchecked Sendable {
   }
 
   override func stopLoading() { _ = finishOnce() }
+}
+
+extension SophonEndpoints {
+  /// The endpoints the recorded fixtures were taken from (Genshin Impact, CN). The real constants live in
+  /// GenshinCN; its tests check them against the same values.
+  static let recordedCN = SophonEndpoints(
+    hypConnectBase: URL(string: "https://hyp-api.mihoyo.com/hyp/hyp-connect/api")!,
+    downloaderBase: URL(string: "https://api-takumi.mihoyo.com/downloader/sophon_chunk/api")!,
+    gameID: "1Z8W5NHUQb",
+    launcherID: "jGHBHlcOq1")
 }
 
 enum Fixture {

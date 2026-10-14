@@ -21,7 +21,7 @@ GenshinLauncherApp (XcodeGen app)   SwiftUI 视图、Sparkle、系统通知、�
  │    └─> Wine            WineRuntime(actor)、GameSession(执行 LaunchRecipe、Launch Mutations + journal)、GameHost 准备；游戏无关
  ├─> Diagnostics          --autolaunch 入口与 logs/launcher.log（genshin-launcher-diag 用，#76）；依赖 Launcher、Platform
  └─> GenshinCN            原神 CN 常量、LaunchRecipe、GenshinCNClient: GameClient（组合 Sophon + Wine + Platform）
-      └─> Sophon          SophonClient、已装版本检测；依赖 swift-protobuf、libzstd、CHDiffPatch(C target)
+      └─> Sophon          SophonClient（一个 Job 从头到尾）、已装版本检测；依赖 swift-protobuf、libzstd、CHDiffPatch(C target)
 x86_64 helper（XcodeGen target，放进 Contents/Helpers/）: GenshinLauncherWineShim、GenshinLauncherGameHost，源码在 Helpers/
 ```
 
@@ -67,9 +67,9 @@ protocol GameClient: Sendable {
 - **安装的前置条件**：目录为空，或只含 `.genshin-launcher-tmp`（带 `job.json`）和中断安装留下的半成品。TS 的「必须为空」与幂等重跑冲突，因此放宽。
 - **Wine 准备不是持久化的 Pending Job。** 它发生在游戏目录存在之前，状态由 `<data>/wine/` 的版本戳推导：版本戳缺失或与固定版本不一致，就重新准备（下载走 `Downloader` 的 Range 续传，半成品留在 `<destination>.part`）。只有游戏作业（install、update、preDownload、repair）写 `job.json`。`LauncherModel` 通过 `WinePreparing` 缝（生产实现 `WineRuntime`，测试用 Fake）把它接进状态机：`LauncherPhase.preparingWine` 占用独占槽，暂停 = 取消并等停稳，出错回空闲、`primaryAction == .prepareWine`、可重试；Wine 未就绪时 install、update、repair、预下载和启动都返回 `wineNotReady`。`bootstrap()` 按启动顺序先准备 Wine，就绪后才读取游戏状态。
 - **长作业与睡眠**：下载、更新、修复期间持有 `ProcessInfo.beginActivity`，避免 App Nap 和空闲睡眠打断。
-- **进度**：`Sophon` 对外只暴露收窄枚举 `SophonProgress`（`preparing`、`downloading(done,total)`、`verifying(done,total)`、`patching(done,total)`、`finalizing`）。操作形状是 `SophonClient.run(_:in:) -> AsyncThrowingStream<SophonProgress, Error>`，取消语义见下。生产端限流，每秒最多 4 条。速度和剩余时间由 `Launcher` 用滑动窗口计算，`Sophon` 不算。`Platform` 的下载（Wine 与 DXMT）有自己的进度类型，`Launcher` 把它们和 `SophonProgress` 一起映射成统一的 `JobProgress`。
-- **Sophon 接口**：`onlineInfo() async throws -> OnlineInfo`（最新版本、安装大小、可增量更新的旧版本、`preDownload: 目标版本?`，分支为 null 是 `nil`，不是异常）；已装版本检测（`globalgamemanagers` 正则与 `config.ini` 取较小值）也在 `Sophon`，因为 `config.ini` 由它写。
-- **临时目录**：`<game>/.genshin-launcher-tmp`（chunk 缓存、ldiff、组装中文件、`job.json`）。放在游戏目录内，是因为游戏目录可能在外置盘，只有同卷才能原子 rename 移入。TS 的位置也是游戏目录内（`.tmp`、`ldiff`），这里换新名字，并在 Sophon 首次运行时删掉遗留的 `<game>/.tmp` 和 `<game>/ldiff`，但只在该目录里存在 `config.ini` 或 `YuanShen.exe`（即确认是游戏目录）时才删。文件名用完整相对路径，修掉 TS 里按 basename 命名导致撞名的问题。
+- **进度**：`Sophon` 对外只暴露收窄枚举 `SophonProgress`（`preparing`、`downloading(done,total)`、`verifying(done,total)`、`patching(done,total)`、`finalizing`）。操作形状是 `SophonClient.run(_:in:progress:) async throws`（修订，架构评审 2026-10-14：不返回流，进度走闭包；排队与流在 `GenshinCNClient` 里，它把闭包接到 `AsyncThrowingStream<JobProgress, Error>`，并串行化作业），取消语义见下。生产端限流，每秒最多 4 条。速度和剩余时间由 `Launcher` 用滑动窗口计算，`Sophon` 不算。`Platform` 的下载（Wine 与 DXMT）有自己的进度类型，`Launcher` 把它们和 `SophonProgress` 一起映射成统一的 `JobProgress`。
+- **Sophon 接口**（修订，架构评审 2026-10-14）：`SophonClient` 是 Sophon 的唯一入口，端到端持有 Job。`status(in:) -> SophonStatus`（已装版本、最新版本、可更新、预下载版本、可预下载；分支为 null 的预下载是 `nil`，不是异常；离线时远端为空）、`requiredDiskSpace(for:in:)`、`run(_:in:progress:)`。install / update / repair / preDownload 的顺序（INS-006 等）、ldiff 与整体同步的分支、「已预下载」的判定都只在这里写一次；一个 `SophonDownloader` 由 `SophonUpdater` 共用。游戏相关的事实由调用方以值类型 `SophonGame` 传入（端点与 game_id、数据目录名、可执行文件名、外服构建标记如 `PCGameSDK.dll`、临时目录名，以及启动移走文件的自愈钩子），Sophon 里没有任何 `YuanShen` 字样；`GenshinCN` 从自己的常量构造它。原先的 `SophonClient` 协议、`onlineInfo()` 与 `SophonOnlineInfo` 删除（只有测试用到）。已装版本检测（`globalgamemanagers` 正则与 `config.ini` 取较小值）也在 `Sophon`，因为 `config.ini` 由它写。
+- **临时目录**：`<game>/.genshin-launcher-tmp`（名字只在 `Launcher` 的 `PendingJobStore.directoryName` 定义一处，`GenshinCN` 把它放进 `SophonGame`；`Sophon` 不依赖 `Launcher`。内容：chunk 缓存、ldiff、组装中文件、`job.json`）。放在游戏目录内，是因为游戏目录可能在外置盘，只有同卷才能原子 rename 移入。TS 的位置也是游戏目录内（`.tmp`、`ldiff`），这里换新名字，并在 Sophon 首次运行时删掉遗留的 `<game>/.tmp` 和 `<game>/ldiff`，但只在该目录里存在 `config.ini` 或 `YuanShen.exe`（即确认是游戏目录）时才删。文件名用完整相对路径，修掉 TS 里按 basename 命名导致撞名的问题。
 
 ## 存储、清场与提权
 

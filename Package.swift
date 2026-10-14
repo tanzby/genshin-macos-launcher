@@ -2,7 +2,7 @@
 import PackageDescription
 
 // Dependency direction (ADR 0002), each arrow points at a dependency:
-//   GenshinCN -> Launcher, Sophon, Wine, Platform
+//   GenshinCN -> Launcher, Sophon, Wine, Platform (it hands Sophon a SophonGame; Sophon knows no game by name)
 //   Launcher  -> Platform, Wine
 //   Wine      -> Platform
 //   Sophon    -> swift-protobuf, CZstd (vendored facebook/zstd, decompression only),
