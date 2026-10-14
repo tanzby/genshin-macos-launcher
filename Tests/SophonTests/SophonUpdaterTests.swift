@@ -220,9 +220,10 @@ private struct Rig {
 
   var updater: SophonUpdater {
     SophonUpdater(
-      session: session,
-      configuration: SophonDownloadConfiguration(
-        concurrency: 4, maxAttempts: 2, retryDelay: .zero, progressInterval: .zero))
+      downloader: SophonDownloader(
+        session: session,
+        configuration: SophonDownloadConfiguration(
+          concurrency: 4, maxAttempts: 2, retryDelay: .zero, progressInterval: .zero)))
   }
 
   func plan(from version: String = World.installed) async throws -> SophonUpdatePlan {

@@ -102,8 +102,6 @@ final class ClientRig: @unchecked Sendable {
 
   func url(_ path: String) -> URL { game.appending(path: path) }
 
-  func read(_ path: String) -> Data? { try? Data(contentsOf: url(path)) }
-
   func write(_ path: String, _ data: Data) {
     try! FileManager.default.createDirectory(
       at: url(path).deletingLastPathComponent(), withIntermediateDirectories: true)

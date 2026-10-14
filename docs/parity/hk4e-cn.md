@@ -207,7 +207,7 @@
 | UPG-008 | 单个文件的 ldiff 下载决策 | 照搬 | TS 行为不变，但依 ADR 0002 在 Sophon/Launcher 重做 | 单元 | `UPG_008_*`（SophonUpdaterTests） |
 | UPG-009 | 应用 ldiff（hpatchz） | 改写 | [#26](https://github.com/tanzby/yet-another-anime-game-launcher/issues/26) | 单元 | `UPG_009_*`（SophonUpdaterTests、HDiffPatcherTests）、`UPG_009_live_*` |
 | UPG-010 | 下载新增文件和需要整体替换的文件 | 照搬 | TS 行为不变，但依 ADR 0002 在 Sophon/Launcher 重做 | 单元 | `UPG_010_*`（SophonUpdaterTests） |
-| UPG-011 | 更新后的快速校验与写入 config.ini | 照搬 | TS 行为不变，但依 ADR 0002 在 Sophon/Launcher 重做 | 单元 | `UPG_011_*`（SophonUpdaterTests：Sophon 侧的大小与旧文件校验；写 config.ini 由 GenshinCN 负责）；`UPG_011_*`（SophonInstallationTests、SophonClientUpdateTests） |
+| UPG-011 | 更新后的快速校验与写入 config.ini | 照搬 | TS 行为不变，但依 ADR 0002 在 Sophon/Launcher 重做 | 单元 | `UPG_011_*`（SophonUpdaterTests：Sophon 侧的大小与旧文件校验；写 config.ini 由 SophonClient 负责）；`UPG_011_*`（SophonInstallationTests、SophonClientUpdateTests） |
 | UPG-012 | 清理 ldiff | 照搬 | TS 行为不变，但依 ADR 0002 在 Sophon/Launcher 重做 | 单元 | `UPG_012_*`（SophonUpdaterTests）；`UPG_012_*`（SophonClientUpdateTests） |
 | UPG-013 | 更新完成后启动器侧的状态 | 照搬 | TS 行为不变，但依 ADR 0002 在 Sophon/Launcher 重做 | 单元 | `UPG_013_*` |
 | UPG-014 | 更新和修复的处理范围 | 照搬 | [#28](https://github.com/tanzby/yet-another-anime-game-launcher/issues/28) A5 语音包不管（有意照搬） | 单元 | `UPG_014_*`（SophonClientRepairTests） |

@@ -9,11 +9,11 @@ private let log = Logger(subsystem: "io.github.tanzby.genshin-launcher", categor
 /// `SophonGame`, a directory and a progress closure. Every job is idempotent: pausing is cancelling, and running
 /// it again with the same arguments continues from what is on disk.
 package struct SophonClient: Sendable {
-  let game: SophonGame
-  let api: SophonAPI
-  let downloader: SophonDownloader
-  let updater: SophonUpdater
-  let installation: SophonInstallation
+  private let game: SophonGame
+  private let api: SophonAPI
+  private let downloader: SophonDownloader
+  private let updater: SophonUpdater
+  private let installation: SophonInstallation
 
   package init(
     game: SophonGame, session: URLSession = .shared, configuration: SophonDownloadConfiguration = .init()

@@ -71,9 +71,6 @@ package struct SophonUpdater: Sendable {
     self.downloader = downloader
   }
 
-  package init(session: URLSession = .shared, configuration: SophonDownloadConfiguration = .init()) {
-    self.init(downloader: SophonDownloader(session: session, configuration: configuration))
-  }
 
   // MARK: - Pre-download record
 

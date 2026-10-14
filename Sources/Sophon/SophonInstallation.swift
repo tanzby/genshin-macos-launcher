@@ -37,7 +37,7 @@ package struct SophonInstallation: Sendable {
   }
 
   /// The installed version, or `nil` when there is no (complete) install: no
-  /// `globalgamemanagers` yet (a lost `YuanShen.exe` alone is damage that repair fixes), or `config.ini` still holds the install template's `0.0.0`. The smaller of
+  /// `globalgamemanagers` yet (a lost executable alone is damage that repair fixes), or `config.ini` still holds the install template's `0.0.0`. The smaller of
   /// `globalgamemanagers` and `config.ini` wins, because `config.ini` is written last (UPG-005, UPG-011).
   package func installedVersion(in gameDirectory: URL) throws -> String? {
     let fileManager = FileManager.default
