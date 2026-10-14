@@ -215,7 +215,7 @@
 | WIN-002 | 默认的 Wine 版本 | 改写 | [#29](https://github.com/tanzby/yet-another-anime-game-launcher/issues/29)/ADR 0001；DXMT 版本取自 App 内 bundle 的 VERSION（ADR 0003） | 单元 | WineStatusTests（固定 Wine 版本；DXMT bundle 的 VERSION） |
 | WIN-003 | 判断 Wine 是否就绪 | 改写 | [#29](https://github.com/tanzby/yet-another-anime-game-launcher/issues/29)/ADR 0001 | 单元 | WineStatusTests（磁盘与版本戳判定） |
 | WIN-004 | wine_tag 不在清单中时强制重装 | 改写 | [#29](https://github.com/tanzby/yet-another-anime-game-launcher/issues/29)/ADR 0001 | 单元 | WineStatusTests（旧 tag 即不符；不依赖 shim 文件） |
-| WIN-005 | 启动时按 Wine 状态分流 | 改写 | ADR 0001/0002 / [#27](https://github.com/tanzby/yet-another-anime-game-launcher/issues/27) (removexattr 不提权) | 单元 | `WIN_005_*`（LauncherWineTests：Wine 未就绪即准备、已就绪跳过、暂停 / 继续、出错回空闲可重试、不写 job.json） |
+| WIN-005 | 启动时按 Wine 状态分流 | 改写 | ADR 0001/0002 / [#27](https://github.com/tanzby/yet-another-anime-game-launcher/issues/27) (removexattr 不提权) | 单元 | `WIN_005_*`（LauncherWineTests：Wine 未就绪即准备、已就绪跳过、暂停 / 继续、出错回空闲可重试、不写 job.json、启动失败后重读 Wine 状态） |
 | WIN-006 | 安装或切换 Wine 时先删除 prefix | 改写 | [#29](https://github.com/tanzby/yet-another-anime-game-launcher/issues/29)/ADR 0001 | 单元 | WineInstallTests（重装先下后删，prefix 一并重建）、WineInstallResumeTests（空间预检在下载与删除之前） |
 | WIN-007 | 下载 Wine 安装包并判断格式 | 照搬 | Wine 运行时行为不变 | 单元 | WineInstallTests、WineInstallResumeTests（并行下载、稳定路径）、DownloaderTests、DownloaderResumeTests（Range 续传） |
 | WIN-008 | 解压规则 | 照搬 | Wine 运行时行为不变 | 单元 | WineInstallTests、WineInstallResumeTests（失败带 tar/ditto 输出）、SystemProcessRunnerTests |

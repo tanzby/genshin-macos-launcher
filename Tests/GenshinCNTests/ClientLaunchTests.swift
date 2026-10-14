@@ -12,19 +12,6 @@ import Wine
 private let noop: @Sendable () -> Void = {}
 
 @Suite struct ClientLaunchTests {
-  @Test func WIN_005_aMissingWineLoaderAsksForAReinstallBeforeAnythingIsLaunched() async throws {
-    let rig = ClientRig(main: .game("5.6.0"))
-    rig.install(.game("5.6.0"))
-    let client = GenshinCNClient(
-      dataDirectory: rig.data, protonExtras: rig.protonExtras, launcher: rig.launcher,
-      wineLoader: rig.root.appending(path: "wine/bin/wine"))
-
-    await #expect(throws: GameClientError.wineReinstallRequired) {
-      _ = try await client.launch(.init(gameDirectory: rig.game), onStarted: {})
-    }
-    #expect(rig.launcher.recipes.isEmpty)
-  }
-
   @Test func APP_019_recoverIsHandedToTheGameSession() async {
     let rig = ClientRig(main: .game("5.6.0"))
 
