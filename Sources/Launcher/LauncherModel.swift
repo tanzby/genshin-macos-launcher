@@ -88,6 +88,9 @@ public final class LauncherModel {
   /// `GameSession.recover()` has run in this process; it must not run again while a game may be running.
   private var hasRecovered = false
   private var recovery: Task<Void, Never>?
+  /// The running `bootstrap()`; overlapping callers (window shown, window activated) wait for it instead of starting
+  /// a second one.
+  private var bootstrapping: Task<Bool, Never>?
 
   public init(
     client: any GameClient,
@@ -120,23 +123,35 @@ public final class LauncherModel {
   /// A missing Wine is prepared here, so recovery and the game status only come once Wine is ready; if the
   /// preparation is paused or fails, `bootstrap()` returns without them (`lastError` and `events` say why).
   public func bootstrap() async {
-    guard jobs.exclusive == .idle, !isPausing, !isShuttingDown else { return }
-    guard await rosettaIsAvailable() else { return }
+    let run = bootstrapping ?? Task { await runBootstrap() }
+    let owns = bootstrapping == nil
+    bootstrapping = run
+    // The caller that started the run owns it: cancelling that caller cancels the run, as if it ran in its own Task.
+    let preparing = await withTaskCancellationHandler { await run.value } onCancel: { if owns { run.cancel() } }
+    if owns { bootstrapping = nil }
+    // Outside the shared run: a caller arriving now finds the slot taken and returns, like one that found Wine busy.
+    if preparing {
+      await jobs.waitForExclusive()  // the preparation reads the game status itself once Wine is ready
+    }
+  }
+
+  /// True when it leaves a Wine preparation running in the exclusive slot, which the callers then wait for.
+  private func runBootstrap() async -> Bool {
+    guard jobs.exclusive == .idle, !isPausing, !isShuttingDown else { return false }
+    guard await rosettaIsAvailable() else { return false }
     hasBootstrapped = true
     await refreshWine()
     guard isWineMissing else {
       await recoverOnce()
       await refresh()
-      return
+      return false
     }
     do {
       try await startWinePreparation()
     } catch {
-      // Someone else (the user pressing "prepare Wine") got the slot while the status was being read.
-      guard jobs.exclusive == .preparingWine else { return }
+      // Someone else (the user pressing "prepare Wine") got the slot while the status was being read: wait for theirs.
     }
-    guard jobs.exclusive == .preparingWine else { return }
-    await jobs.waitForExclusive()  // the preparation reads the game status itself once Wine is ready
+    return jobs.exclusive == .preparingWine
   }
 
   /// Re-reads the Wine state from the disk. Without a `WinePreparing` the launcher assumes Wine is fine.

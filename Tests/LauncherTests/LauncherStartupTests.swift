@@ -105,24 +105,22 @@ private struct Harness {
     #expect(h.model.phase == .idle)
   }
 
-  @Test func APP_001_overlappingBootstrapsWaitForTheSameRecovery() async throws {
+  @Test func APP_001_overlappingBootstrapsShareOneRun() async throws {
     let h = Harness(wine: .ready)
     h.probe.stallRecovery()
     let model = h.model
     let first = Task { @MainActor in await model.bootstrap() }
     try await h.probe.recoveryStarted.pop("the recovery to begin")
     let second = Task { @MainActor in await model.bootstrap() }
-    h.wine.stallsStatus.withLock { $0 = true }
-    try await h.wine.statusQueries.pop("the second bootstrap's Wine status read")
-    h.wine.stallsStatus.withLock { $0 = false }
-    h.wine.statusGate.push(())
     for _ in 0..<20 { await Task.yield() }
     #expect(h.fake.statusCalls == 0, "no game status read while the recovery is still running")
     h.probe.recoveryGate.push(())
     await first.value
     await second.value
+    #expect(h.probe.rosettaChecks == 1)
+    #expect(h.wine.statusCalls == 1)
     #expect(h.probe.recoveries == [0], "one recovery, finished before any game status read")
-    #expect(h.fake.statusCalls == 2)
+    #expect(h.fake.statusCalls == 1)
   }
 
   @Test func APP_001_jobsAndLaunchAreBusyWhileTheRecoveryRuns() async throws {
