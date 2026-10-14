@@ -33,7 +33,7 @@ private func seedCrashFiles(_ f: LaunchFixture) throws -> [URL] {
     f.gameFile("YuanShen_Data/upload_crash.exe"), f.gameFile("YuanShen_Data/Plugins/crashreport.exe"),
     f.gameFile("YuanShen_Data/Plugins/vulkan-1.dll"),
   ]
-  for (index, url) in urls.enumerated() { try launchWrite("ORIGINAL-FILE-\(index)", to: url) }
+  for (index, url) in urls.enumerated() { try writeFile("ORIGINAL-FILE-\(index)", to: url) }
   return urls
 }
 

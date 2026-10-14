@@ -1,6 +1,7 @@
 import Foundation
 import Platform
 import Testing
+import TestSupport
 
 @testable import Wine
 
@@ -158,7 +159,7 @@ private func expectNoGameHostVariables(_ f: LaunchFixture, sourceLocation: Sourc
 
   @Test func LCH_024_aShimThatIsAlreadyInstalledIsNotRewritten() async throws {
     try await withLaunchFixture(helperOptions) { f in
-      try launchWrite(LaunchBytes.shim, to: f.layout.unixWine)
+      try writeFile(LaunchBytes.shim, to: f.layout.unixWine)
       let longAgo = Date(timeIntervalSince1970: 1_000_000_000)
       try launchSetModificationDate(longAgo, of: f.layout.unixWine)
 
@@ -295,7 +296,7 @@ private func expectNoGameHostVariables(_ f: LaunchFixture, sourceLocation: Sourc
     try await withLaunchFixture(helperOptions) { f in
       _ = await f.session.launch(makeLaunchRecipe())
       #expect(f.runner.calls(.codesign).count == 1)
-      try launchWrite("FAKE-WINE-HOST-V2", to: f.layout.unixWineHost)
+      try writeFile("FAKE-WINE-HOST-V2", to: f.layout.unixWineHost)
 
       let result = await f.session.launch(makeLaunchRecipe())
 
@@ -311,7 +312,7 @@ private func expectNoGameHostVariables(_ f: LaunchFixture, sourceLocation: Sourc
     try await withLaunchFixture(helperOptions) { f in
       _ = await f.session.launch(makeLaunchRecipe())
       #expect(f.services.registered.count == 1)
-      try launchWrite("not a plist", to: f.infoPlist)
+      try writeFile("not a plist", to: f.infoPlist)
 
       let result = await f.session.launch(makeLaunchRecipe())
 

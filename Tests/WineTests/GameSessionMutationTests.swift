@@ -2,6 +2,7 @@ import Darwin
 import Foundation
 import Platform
 import Testing
+import TestSupport
 
 @testable import Wine
 
@@ -25,7 +26,7 @@ private func writeJournal(_ journal: LaunchJournal, for f: LaunchFixture) throws
   @Test func LCH_014_existingFilesAreRenamedToBakDuringTheGameAndRenamedBackAfterwards() async throws {
     try await withLaunchFixture { f in
       let files = crashFiles(f)
-      for (index, url) in files.enumerated() { try launchWrite("ORIGINAL-FILE-\(index)", to: url) }
+      for (index, url) in files.enumerated() { try writeFile("ORIGINAL-FILE-\(index)", to: url) }
       f.runner.watch(files + files.map { URL(filePath: $0.path + ".bak") })
 
       let result = await f.session.launch(makeLaunchRecipe(moveAside: files))
@@ -45,7 +46,7 @@ private func writeJournal(_ journal: LaunchJournal, for f: LaunchFixture) throws
   @Test func LCH_014_aFileThatDoesNotExistIsSkippedWithoutCreatingAnything() async throws {
     try await withLaunchFixture { f in
       let files = crashFiles(f)
-      try launchWrite("ONLY-ONE", to: files[0])
+      try writeFile("ONLY-ONE", to: files[0])
       f.runner.watch(files + files.map { URL(filePath: $0.path + ".bak") })
 
       let result = await f.session.launch(makeLaunchRecipe(moveAside: files))
@@ -67,8 +68,8 @@ private func writeJournal(_ journal: LaunchJournal, for f: LaunchFixture) throws
     try await withLaunchFixture { f in
       let file = f.gameFile("YuanShen_Data/Plugins/vulkan-1.dll")
       let bak = URL(filePath: file.path + ".bak")
-      try launchWrite("LIVE-FILE", to: file)
-      try launchWrite("STALE-BAK", to: bak)
+      try writeFile("LIVE-FILE", to: file)
+      try writeFile("STALE-BAK", to: bak)
       f.runner.watch([file, bak])
 
       let result = await f.session.launch(makeLaunchRecipe(moveAside: [file]))
@@ -86,7 +87,7 @@ private func writeJournal(_ journal: LaunchJournal, for f: LaunchFixture) throws
     try await withLaunchFixture { f in
       let file = f.gameFile("YuanShen_Data/Plugins/vulkan-1.dll")
       let bak = URL(filePath: file.path + ".bak")
-      try launchWrite("CLEAN-BACKUP", to: bak)
+      try writeFile("CLEAN-BACKUP", to: bak)
       f.runner.watch([file, bak])
 
       let result = await f.session.launch(makeLaunchRecipe(moveAside: [file]))
@@ -102,10 +103,10 @@ private func writeJournal(_ journal: LaunchJournal, for f: LaunchFixture) throws
     try await withLaunchFixture { f in
       let file = f.gameFile("YuanShen_Data/upload_crash.exe")
       let bak = URL(filePath: file.path + ".bak")
-      try launchWrite("OLD-FILE", to: file)
+      try writeFile("OLD-FILE", to: file)
       // a repair re-downloads the original while the launch is in flight
       f.runner.game.value = .custom { _ in
-        try launchWrite("REPAIRED-FILE", to: file)
+        try writeFile("REPAIRED-FILE", to: file)
         return 0
       }
 
@@ -121,7 +122,7 @@ private func writeJournal(_ journal: LaunchJournal, for f: LaunchFixture) throws
   @Test func LCH_014_filesAreMovedBeforeTheGameStartsAndTheirNamesAreInTheJournal() async throws {
     try await withLaunchFixture { f in
       let files = crashFiles(f)
-      for url in files { try launchWrite("CONTENT", to: url) }
+      for url in files { try writeFile("CONTENT", to: url) }
 
       let result = await f.session.launch(makeLaunchRecipe(moveAside: files))
 
@@ -147,7 +148,7 @@ private func writeJournal(_ journal: LaunchJournal, for f: LaunchFixture) throws
   @Test func LCH_018_copiesAreDeployedIntoThePrefixWindowsDirectoryCreatingMissingDirectories() async throws {
     try await withLaunchFixture { f in
       for name in ["steam64.exe", "steam32.exe", "lsteamclient64.dll", "lsteamclient32.dll"] {
-        try launchWrite("PAYLOAD-\(name)", to: f.protonExtra(name))
+        try writeFile("PAYLOAD-\(name)", to: f.protonExtra(name))
       }
       let targets = copies(f).map { f.layout.prefixWindows.appending(path: $0.destination) }
       f.runner.watch(targets)
@@ -166,7 +167,7 @@ private func writeJournal(_ journal: LaunchJournal, for f: LaunchFixture) throws
 
   @Test func LCH_018_copiesStayInThePrefixAfterTheGameExits() async throws {
     try await withLaunchFixture { f in
-      try launchWrite("PAYLOAD-STEAM", to: f.protonExtra("steam64.exe"))
+      try writeFile("PAYLOAD-STEAM", to: f.protonExtra("steam64.exe"))
       let target = f.layout.prefixWindows.appending(path: "system32/steam.exe")
       let copy = PrefixCopy(source: f.protonExtra("steam64.exe"), destination: "system32/steam.exe")
 
@@ -180,12 +181,12 @@ private func writeJournal(_ journal: LaunchJournal, for f: LaunchFixture) throws
 
   @Test func LCH_018_aDifferingFileInThePrefixIsOverwrittenButAnIdenticalOneIsNotRewritten() async throws {
     try await withLaunchFixture { f in
-      try launchWrite("NEW-STEAM", to: f.protonExtra("steam64.exe"))
-      try launchWrite("SAME-CLIENT", to: f.protonExtra("lsteamclient64.dll"))
+      try writeFile("NEW-STEAM", to: f.protonExtra("steam64.exe"))
+      try writeFile("SAME-CLIENT", to: f.protonExtra("lsteamclient64.dll"))
       let differing = f.layout.prefixWindows.appending(path: "system32/steam.exe")
       let identical = f.layout.prefixWindows.appending(path: "system32/lsteamclient.dll")
-      try launchWrite("OLD-STEAM", to: differing)
-      try launchWrite("SAME-CLIENT", to: identical)
+      try writeFile("OLD-STEAM", to: differing)
+      try writeFile("SAME-CLIENT", to: identical)
       let longAgo = Date(timeIntervalSince1970: 1_000_000_000)
       try launchSetModificationDate(longAgo, of: identical)
 
@@ -204,7 +205,7 @@ private func writeJournal(_ journal: LaunchJournal, for f: LaunchFixture) throws
 
   @Test func LCH_018_copiesAreNotPartOfTheJournal() async throws {
     try await withLaunchFixture { f in
-      try launchWrite("PAYLOAD-STEAM", to: f.protonExtra("steam64.exe"))
+      try writeFile("PAYLOAD-STEAM", to: f.protonExtra("steam64.exe"))
       let copy = PrefixCopy(source: f.protonExtra("steam64.exe"), destination: "system32/steam.exe")
       f.runner.watch([f.layout.prefixWindows.appending(path: "system32/steam.exe")])
 
@@ -229,7 +230,7 @@ private func writeJournal(_ journal: LaunchJournal, for f: LaunchFixture) throws
       f.runner.setRegistry(LaunchRegistry.miHoYoKey, "SomeText", .string("player value"))
       // heightName is absent: its original is "did not exist"
       let files = crashFiles(f)
-      try launchWrite("CONTENT", to: files[1])
+      try writeFile("CONTENT", to: files[1])
       let text = RegistryEdit(
         key: LaunchRegistry.miHoYoKey, name: "SomeText", action: .set(.string("forced")), restoresOnExit: true)
 
@@ -257,7 +258,7 @@ private func writeJournal(_ journal: LaunchJournal, for f: LaunchFixture) throws
     try await withLaunchFixture { f in
       f.runner.setRegistry(LaunchRegistry.miHoYoKey, LaunchRegistry.widthName, .dword(1280))
       let files = crashFiles(f)
-      try launchWrite("CONTENT", to: files[0])
+      try writeFile("CONTENT", to: files[0])
 
       let result = await f.session.launch(
         makeLaunchRecipe(registry: [LaunchRegistry.widthEdit(2560)], moveAside: files))
@@ -316,8 +317,8 @@ private func writeJournal(_ journal: LaunchJournal, for f: LaunchFixture) throws
       f.runner.setRegistry(key, LaunchRegistry.heightName, .dword(1600))
       f.runner.setRegistry(key, "SomeText", .string("forced"))
       let files = crashFiles(f)
-      try launchWrite("MOVED-0", to: URL(filePath: files[0].path + ".bak"))
-      try launchWrite("MOVED-2", to: URL(filePath: files[2].path + ".bak"))
+      try writeFile("MOVED-0", to: URL(filePath: files[0].path + ".bak"))
+      try writeFile("MOVED-2", to: URL(filePath: files[2].path + ".bak"))
       try writeJournal(
         LaunchJournal(
           movedAside: files.map(\.path),  // files[1] was never moved: nothing to rename, nothing to fail
@@ -365,8 +366,8 @@ private func writeJournal(_ journal: LaunchJournal, for f: LaunchFixture) throws
     try await withLaunchFixture { f in
       let file = f.gameFile("YuanShen_Data/upload_crash.exe")
       let bak = URL(filePath: file.path + ".bak")
-      try launchWrite("REPAIRED-ORIGINAL", to: file)
-      try launchWrite("OLD-BACKUP", to: bak)
+      try writeFile("REPAIRED-ORIGINAL", to: file)
+      try writeFile("OLD-BACKUP", to: bak)
       try writeJournal(LaunchJournal(movedAside: [file.path]), for: f)
 
       await f.session.recover()
@@ -529,11 +530,11 @@ private func writeJournal(_ journal: LaunchJournal, for f: LaunchFixture) throws
       let logs = f.layout.logsDirectory
       for index in 1...25 {
         let url = logs.appending(path: String(format: "game_17000000000%02d.log", index))
-        try launchWrite("old log \(index)", to: url)
+        try writeFile("old log \(index)", to: url)
         try launchSetModificationDate(Date(timeIntervalSince1970: 1_700_000_000 + Double(index)), of: url)
       }
-      try launchWrite("gamehost", to: logs.appending(path: "gamehost.log"))
-      try launchWrite("notes", to: logs.appending(path: "notes.txt"))
+      try writeFile("gamehost", to: logs.appending(path: "gamehost.log"))
+      try writeFile("notes", to: logs.appending(path: "notes.txt"))
 
       let result = await f.session.launch(makeLaunchRecipe())
 
@@ -552,7 +553,7 @@ private func writeJournal(_ journal: LaunchJournal, for f: LaunchFixture) throws
   @Test func LCH_019_noPatchedMarkerFileExistsBeforeDuringOrAfterALaunch() async throws {
     try await withLaunchFixture { f in
       let files = crashFiles(f)
-      for url in files { try launchWrite("CONTENT", to: url) }
+      for url in files { try writeFile("CONTENT", to: url) }
       let root = f.layout.root
       f.runner.game.value = .custom { _ in
         let during = wineRelativePaths(under: root).filter { $0.lowercased().contains("patched") }

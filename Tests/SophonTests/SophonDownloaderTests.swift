@@ -211,10 +211,7 @@ private struct Sandbox {
   }
 
   func write(_ relativePath: String, _ data: Data) throws {
-    let url = game.appendingPathComponent(relativePath)
-    try FileManager.default.createDirectory(
-      at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
-    try data.write(to: url)
+    try writeFile(data, to: game.appendingPathComponent(relativePath))
   }
 
   /// Relative paths (and sizes) of every regular file below `directory`.

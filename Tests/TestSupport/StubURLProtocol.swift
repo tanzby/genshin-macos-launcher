@@ -1,13 +1,10 @@
 import Foundation
-import Testing
-
-@testable import Sophon
 
 /// Serves canned responses to a `URLSession`. Handlers are keyed by a per-session id header so tests
 /// that run in parallel never see each other's requests.
-final class StubURLProtocol: URLProtocol, @unchecked Sendable {
-  typealias Handler = @Sendable (URLRequest) throws -> (status: Int, body: Data)
-  typealias ReplyHandler = @Sendable (URLRequest) -> StubReply
+public final class StubURLProtocol: URLProtocol, @unchecked Sendable {
+  public typealias Handler = @Sendable (URLRequest) throws -> (status: Int, body: Data)
+  public typealias ReplyHandler = @Sendable (URLRequest) -> StubReply
 
   private static let idHeader = "X-Stub-ID"
   private static let lock = NSLock()
@@ -18,7 +15,7 @@ final class StubURLProtocol: URLProtocol, @unchecked Sendable {
   nonisolated(unsafe) private static var maxInFlightCounts: [String: Int] = [:]
 
   /// A session whose requests are answered by `handler`.
-  static func session(_ handler: @escaping Handler) -> (session: URLSession, id: String) {
+  public static func session(_ handler: @escaping Handler) -> (session: URLSession, id: String) {
     let id = UUID().uuidString
     lock.withLock { handlers[id] = handler }
     let configuration = URLSessionConfiguration.ephemeral
@@ -29,7 +26,7 @@ final class StubURLProtocol: URLProtocol, @unchecked Sendable {
 
   /// A session whose requests are answered by `reply`. Unlike `session(_:)` it can serve partial
   /// bodies, delay, fail, or hold a response until a `StubGate` opens. Also tracks in-flight requests.
-  static func session(reply: @escaping ReplyHandler) -> (session: URLSession, id: String) {
+  public static func session(reply: @escaping ReplyHandler) -> (session: URLSession, id: String) {
     let id = UUID().uuidString
     lock.withLock { replyHandlers[id] = reply }
     let configuration = URLSessionConfiguration.ephemeral
@@ -39,15 +36,15 @@ final class StubURLProtocol: URLProtocol, @unchecked Sendable {
   }
 
   /// Requests of session `id` that have started and not yet finished, failed or been cancelled.
-  static func inFlight(_ id: String) -> Int { lock.withLock { inFlightCounts[id] ?? 0 } }
+  public static func inFlight(_ id: String) -> Int { lock.withLock { inFlightCounts[id] ?? 0 } }
   /// The highest `inFlight` value session `id` ever reached.
-  static func maxInFlight(_ id: String) -> Int { lock.withLock { maxInFlightCounts[id] ?? 0 } }
+  public static func maxInFlight(_ id: String) -> Int { lock.withLock { maxInFlightCounts[id] ?? 0 } }
 
   /// Requests seen so far by the session `id`, oldest first.
-  static func seen(_ id: String) -> [URLRequest] { lock.withLock { requests[id] ?? [] } }
+  public static func seen(_ id: String) -> [URLRequest] { lock.withLock { requests[id] ?? [] } }
 
-  override class func canInit(with request: URLRequest) -> Bool { true }
-  override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
+  override public class func canInit(with request: URLRequest) -> Bool { true }
+  override public class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
 
   private let stateLock = NSLock()
   private var finished = false
@@ -68,7 +65,7 @@ final class StubURLProtocol: URLProtocol, @unchecked Sendable {
 
   private var isFinished: Bool { stateLock.withLock { finished } }
 
-  override func startLoading() {
+  override public func startLoading() {
     let id = request.value(forHTTPHeaderField: Self.idHeader) ?? ""
     let (handler, replyHandler) = Self.lock.withLock { () -> (Handler?, ReplyHandler?) in
       Self.requests[id, default: []].append(request)
@@ -142,29 +139,11 @@ final class StubURLProtocol: URLProtocol, @unchecked Sendable {
     client?.urlProtocolDidFinishLoading(self)
   }
 
-  override func stopLoading() { _ = finishOnce() }
-}
-
-extension SophonEndpoints {
-  /// The endpoints the recorded fixtures were taken from (Genshin Impact, CN). The real constants live in
-  /// GenshinCN; its tests check them against the same values.
-  static let recordedCN = SophonEndpoints(
-    hypConnectBase: URL(string: "https://hyp-api.mihoyo.com/hyp/hyp-connect/api")!,
-    downloaderBase: URL(string: "https://api-takumi.mihoyo.com/downloader/sophon_chunk/api")!,
-    gameID: "1Z8W5NHUQb",
-    launcherID: "jGHBHlcOq1")
-}
-
-enum Fixture {
-  static func data(_ name: String, _ ext: String) throws -> Data {
-    let url = try #require(
-      Bundle.module.url(forResource: name, withExtension: ext, subdirectory: "Fixtures"))
-    return try Data(contentsOf: url)
-  }
+  override public func stopLoading() { _ = finishOnce() }
 }
 
 /// What `StubURLProtocol.session(reply:)` should do with one request.
-indirect enum StubReply: Sendable {
+public indirect enum StubReply: Sendable {
   /// Answer with `status` and `body` after `delay`. `Content-Length` defaults to the body size.
   case response(status: Int, body: Data, headers: [String: String] = [:], delay: Duration = .zero)
   /// Answer with the headers and only the first `sending` bytes of `body`, then fail the connection.
@@ -176,12 +155,14 @@ indirect enum StubReply: Sendable {
 }
 
 /// A one-shot latch a test opens to let held requests continue.
-final class StubGate: @unchecked Sendable {
+public final class StubGate: @unchecked Sendable {
   private let lock = NSLock()
   private var isOpen = false
   private var waiters: [@Sendable () -> Void] = []
 
-  func open() {
+  public init() {}
+
+  public func open() {
     let pending = lock.withLock { () -> [@Sendable () -> Void] in
       isOpen = true
       defer { waiters = [] }
@@ -191,7 +172,7 @@ final class StubGate: @unchecked Sendable {
   }
 
   /// Runs `work` once the gate is open (immediately if it already is). Never blocks.
-  func notify(_ work: @escaping @Sendable () -> Void) {
+  public func notify(_ work: @escaping @Sendable () -> Void) {
     let runNow = lock.withLock { () -> Bool in
       if !isOpen { waiters.append(work) }
       return isOpen

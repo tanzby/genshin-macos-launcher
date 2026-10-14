@@ -75,9 +75,7 @@ private final class Harness {
   }
 
   func writeJobFile(_ text: String) {
-    try! FileManager.default.createDirectory(
-      at: jobFileURL.deletingLastPathComponent(), withIntermediateDirectories: true)
-    try! Data(text.utf8).write(to: jobFileURL)
+    try! writeFile(text, to: jobFileURL)
   }
 
   /// Starts `job` and returns the index of the fake run it created.

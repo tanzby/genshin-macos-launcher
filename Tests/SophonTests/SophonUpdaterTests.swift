@@ -210,9 +210,7 @@ private struct Rig {
   }
 
   func write(_ path: String, _ data: Data) throws {
-    let url = game.appendingPathComponent(path)
-    try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
-    try data.write(to: url)
+    try writeFile(data, to: game.appendingPathComponent(path))
   }
 
   func read(_ path: String) -> Data? { try? Data(contentsOf: game.appendingPathComponent(path)) }

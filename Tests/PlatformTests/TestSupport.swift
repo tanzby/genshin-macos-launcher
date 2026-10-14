@@ -12,10 +12,7 @@ struct TempDir {
   }
 
   func makeFile(_ relative: String, contents: String = "x") throws {
-    let file = url.appending(path: relative)
-    try FileManager.default.createDirectory(
-      at: file.deletingLastPathComponent(), withIntermediateDirectories: true)
-    try contents.write(to: file, atomically: true, encoding: .utf8)
+    try writeFile(contents, to: url.appending(path: relative))
   }
 
   func exists(_ relative: String) -> Bool {

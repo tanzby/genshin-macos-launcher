@@ -1,5 +1,6 @@
 import CryptoKit
 import Foundation
+import TestSupport
 import SwiftProtobuf
 
 @testable import Sophon
