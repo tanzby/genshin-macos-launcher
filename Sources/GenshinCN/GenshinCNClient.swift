@@ -114,8 +114,7 @@ public final class GenshinCNClient: GameClient {
 
   private func recipe(for options: LaunchOptions) -> LaunchRecipe {
     GenshinLaunchRecipe.make(
-      settings: GenshinLaunchSettings(options), gameDirectory: options.gameDirectory, dataDirectory: dataDirectory,
-      protonExtras: protonExtras)
+      options: options, dataDirectory: dataDirectory, protonExtras: protonExtras)
   }
 
   /// The official launcher picture (APP-021); without a provider (tests) the bundled one.

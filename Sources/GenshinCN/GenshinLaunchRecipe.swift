@@ -2,34 +2,6 @@ import Foundation
 import Launcher
 import Wine
 
-/// The launch-time preferences that reach Wine (a snapshot, never read from `UserDefaults` here).
-struct GenshinLaunchSettings: Sendable, Equatable {
-  var retina: Bool
-  var leftCommandIsControl: Bool
-  var metalHUD: Bool
-  var hdr: Bool
-  var metalFX: Bool
-  /// `nil` = do not touch the game's own resolution. Positive values only; validation is the settings UI's job.
-  var customResolution: Resolution?
-  /// Raw `host:port`, passed through unchanged (LCH-034). `nil` or empty = no proxy.
-  var proxyHost: String?
-
-  typealias Resolution = LaunchOptions.Resolution
-
-  init(
-    retina: Bool = false, leftCommandIsControl: Bool = false, metalHUD: Bool = false, hdr: Bool = false,
-    metalFX: Bool = false, customResolution: Resolution? = nil, proxyHost: String? = nil
-  ) {
-    self.retina = retina
-    self.leftCommandIsControl = leftCommandIsControl
-    self.metalHUD = metalHUD
-    self.hdr = hdr
-    self.metalFX = metalFX
-    self.customResolution = customResolution
-    self.proxyHost = proxyHost
-  }
-}
-
 /// Builds the `LaunchRecipe` for Genshin CN. A pure function; golden-tested.
 ///
 /// Steam patch, Timeout Fix and Game Mode are always on (#28 A9): there are no switches for them.
@@ -65,20 +37,19 @@ public enum GenshinLaunchRecipe {
   }
 
   static func make(
-    settings: GenshinLaunchSettings,
-    gameDirectory: URL,
+    options: LaunchOptions,
     dataDirectory: URL,
     protonExtras protonExtrasDirectory: URL
   ) -> LaunchRecipe {
     // MetalFX only takes effect at the display's native size (LCH-004).
     // Out-of-range values are skipped like the TS launcher did (LCH-008); the settings UI validates input.
-    let resolution = settings.customResolution.flatMap { resolution -> (UInt32, UInt32)? in
+    let resolution = options.customResolution.flatMap { resolution -> (UInt32, UInt32)? in
       guard let width = UInt32(exactly: resolution.width), let height = UInt32(exactly: resolution.height),
         width > 0, height > 0
       else { return nil }
       return (width, height)
     }
-    let metalFX = settings.metalFX && resolution == nil
+    let metalFX = options.metalFX && resolution == nil
 
     var environment = [
       "WINE_ENABLE_TIMEOUT_FIX": "1",
@@ -88,9 +59,9 @@ public enum GenshinLaunchRecipe {
       "DXMT_CONFIG_FILE": dataDirectory.appending(path: "dxmt.conf").path,
       "GST_PLUGIN_FEATURE_RANK": "atdec:MAX,avdec_h264:MAX",
     ]
-    if settings.metalHUD { environment["MTL_HUD_ENABLED"] = "1" }
+    if options.metalHUD { environment["MTL_HUD_ENABLED"] = "1" }
     if metalFX { environment["DXMT_METALFX_SPATIAL_SWAPCHAIN"] = "1" }
-    if let proxy = settings.proxyHost, !proxy.isEmpty {
+    if let proxy = options.proxyHost, !proxy.isEmpty {
       environment["HTTP_PROXY"] = proxy
       environment["HTTPS_PROXY"] = proxy
     }
@@ -98,14 +69,14 @@ public enum GenshinLaunchRecipe {
     func yesNo(_ value: Bool) -> RegistryValue { .string(value ? "y" : "n") }
     var registry = [
       RegistryEdit(
-        key: macDriverKey, name: "RetinaMode", action: .set(yesNo(settings.retina && !metalFX)), restoresOnExit: false),
+        key: macDriverKey, name: "RetinaMode", action: .set(yesNo(options.retina && !metalFX)), restoresOnExit: false),
       RegistryEdit(
-        key: macDriverKey, name: "LeftCommandIsCtrl", action: .set(yesNo(settings.leftCommandIsControl)),
+        key: macDriverKey, name: "LeftCommandIsCtrl", action: .set(yesNo(options.leftCommandIsControl)),
         restoresOnExit: false),
     ]
     // HDR is written or deleted to match the setting on every launch; a crash leftover heals itself.
     registry.append(
-      settings.hdr
+      options.hdr
         ? RegistryEdit(key: gameKey, name: hdrValue, action: .set(.dword(1)), restoresOnExit: true)
         : RegistryEdit(key: gameKey, name: hdrValue, action: .delete, restoresOnExit: false))
     if let resolution {
@@ -119,11 +90,11 @@ public enum GenshinLaunchRecipe {
     return LaunchRecipe(
       environment: environment,
       registry: registry,
-      moveAside: movedAside.map { gameDirectory.appending(path: $0) },
+      moveAside: movedAside.map { options.gameDirectory.appending(path: $0) },
       prefixCopies: protonExtras.map {
         PrefixCopy(source: protonExtrasDirectory.appending(path: $0.0), destination: $0.1)
       },
-      command: command(gameDirectory: gameDirectory),
+      command: command(gameDirectory: options.gameDirectory),
       gameExecutableName: GenshinCN.executableName,
       gameDisplayName: displayName)
   }
@@ -134,16 +105,5 @@ public enum GenshinLaunchRecipe {
   static func command(gameDirectory: URL) -> [String] {
     let game = gameDirectory.appending(path: GenshinCN.executableName)
     return [#"C:\windows\system32\steam.exe"#, GameSession.windowsPath(game)]
-  }
-}
-
-extension GenshinLaunchSettings {
-  /// The settings part of a launch snapshot.
-  init(_ options: LaunchOptions) {
-    self.init(
-      retina: options.retina, leftCommandIsControl: options.leftCommandIsControl, metalHUD: options.metalHUD,
-      hdr: options.hdr, metalFX: options.metalFX,
-      customResolution: options.customResolution,
-      proxyHost: options.proxyHost)
   }
 }

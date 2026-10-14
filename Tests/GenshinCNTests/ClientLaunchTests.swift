@@ -165,23 +165,6 @@ final class Counter: @unchecked Sendable {
   var value: Int { lock.withLock { count } }
 }
 
-@Suite struct LaunchSettingsMappingTests {
-  @Test func LCH_004_launchOptionsMapOneToOneOntoTheRecipeSettings() {
-    let options = LaunchOptions(
-      gameDirectory: URL(filePath: "/Games/GI"), retina: true, leftCommandIsControl: true, metalHUD: true, hdr: true,
-      metalFX: true, customResolution: .init(width: 2560, height: 1440), proxyHost: "localhost:8080")
-
-    let settings = GenshinLaunchSettings(options)
-
-    #expect(
-      settings
-        == GenshinLaunchSettings(
-          retina: true, leftCommandIsControl: true, metalHUD: true, hdr: true, metalFX: true,
-          customResolution: .init(width: 2560, height: 1440), proxyHost: "localhost:8080"))
-    #expect(GenshinLaunchSettings(LaunchOptions(gameDirectory: URL(filePath: "/g"))) == GenshinLaunchSettings())
-  }
-}
-
 @Suite struct ClientErrorMappingTests {
   @Test func INS_005_theTemporaryFolderOfTheSophonGameIsTheOneTheLauncherRecordsItsJobIn() {
     #expect(GenshinCN.sophonGame.tempDirectoryName == ".genshin-launcher-tmp")
