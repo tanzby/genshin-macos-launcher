@@ -17,8 +17,7 @@ done
 # DXMT (scripts/build-dxmt) is checked when it was built into the bundle or REQUIRE_DXMT=1 (the release build).
 dxmt="$app/Contents/Resources/dxmt"
 if [ -d "$dxmt" ] || [ "${REQUIRE_DXMT:-0}" = 1 ]; then
-  for f in x86_64-windows/d3d10core.dll x86_64-windows/d3d11.dll x86_64-windows/dxgi.dll x86_64-windows/winemetal.dll \
-           x86_64-unix/winemetal.so VERSION COPYING.LIB LICENSE.LLVM; do
+  for f in $(grep -v '^#' scripts/dxmt-files); do
     [ -s "$dxmt/$f" ] || { echo "missing: dxmt/$f"; fail=1; }
   done
 fi

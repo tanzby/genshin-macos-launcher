@@ -275,6 +275,16 @@ private let thumbprint = "F09065E2D57F005BBD975DDCF9EB63F570764F17"
 }
 
 @Suite("WIN-020/021 DXMT installed once") struct WineInstallDXMTTests {
+  @Test func WIN_020_theDXMTFilesInstalledAreTheOnesTheBuildScriptShips() throws {
+    // scripts/dxmt-files is what scripts/build-dxmt puts into the app and what check-bundle and CI look for.
+    let list = URL(filePath: #filePath).deletingLastPathComponent().appending(path: "../../scripts/dxmt-files")
+    let shipped = try String(contentsOf: list, encoding: .utf8).split(separator: "\n").map(String.init)
+      .filter { !$0.hasPrefix("#") && !$0.isEmpty }
+    let windows = shipped.filter { $0.hasPrefix("x86_64-windows/") }.map { String($0.dropFirst("x86_64-windows/".count)) }
+    #expect(windows == WineLayout.dxmtWindowsFiles)
+    #expect(shipped.contains("x86_64-unix/winemetal.so"))
+  }
+
   @Test("WIN-020 d3d10core, d3d11, dxgi, winemetal DLLs land in wine/lib/wine/x86_64-windows with DXMT contents")
   func windowsDlls() async throws {
     try await withWineTempDirectory { dir in
