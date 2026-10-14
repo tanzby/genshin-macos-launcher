@@ -21,7 +21,11 @@ public final class LauncherModel {
   package private(set) var isRosettaMissing = false
   package private(set) var isOnline = false
   public private(set) var isPausing = false
-  public private(set) var progress: JobProgress?
+  public private(set) var progress: JobProgress? {
+    didSet { meter.update(progress) }
+  }
+  /// Speed and time remaining of `progress`, for the capsule.
+  public let meter = ProgressMeter()
   package private(set) var pendingJob: PendingJob?
   public private(set) var lastError: LauncherError?
   /// Read on every use, never copied: the app passes a closure over `SettingsModel`, so a folder picked a moment

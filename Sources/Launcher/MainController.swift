@@ -91,6 +91,21 @@ public final class MainController {
     await run { try await self.launcher.start(.repair) }
   }
 
+  /// Hands job events and newly announced versions to `notifier` until the calling Task is cancelled.
+  public func deliverNotifications(to notifier: EventNotifier) async {
+    async let events: Void = forwardEvents(to: notifier)
+    await forwardStatus(to: notifier)
+    await events
+  }
+
+  private func forwardEvents(to notifier: EventNotifier) async {
+    for await event in launcher.events { await notifier.handle(event) }
+  }
+
+  private func forwardStatus(to notifier: EventNotifier) async {
+    for await status in Observations({ self.launcher.status }) { await notifier.observe(status: status) }
+  }
+
   /// Asks for the administrator password, then has the launcher look at `/etc/hosts` again.
   public func applyHosts() async {
     await onboarding.applyHosts()

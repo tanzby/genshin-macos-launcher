@@ -15,10 +15,12 @@ public final class OnboardingModel {
   /// Shared with the launcher: onboarding only shows it.
   public let hosts: HostsModel
   private let settings: SettingsModel
+  private let gameDirectoryRules: GameDirectoryRules
 
-  public init(hosts: HostsModel, settings: SettingsModel) {
+  public init(hosts: HostsModel, settings: SettingsModel, gameDirectoryRules: GameDirectoryRules) {
     self.hosts = hosts
     self.settings = settings
+    self.gameDirectoryRules = gameDirectoryRules
   }
 
   public var allowsLaunch: Bool { hosts.allowsLaunch }
@@ -58,7 +60,11 @@ public final class OnboardingModel {
     await hosts.apply()
   }
 
-  public func useGameDirectory(_ url: URL) {
+  /// Stores `url` as the game folder when it can be one: empty, or holding the game. Otherwise throws the
+  /// `GameDirectoryProblem` and changes nothing.
+  public func chooseGameDirectory(_ url: URL) throws {
+    _ = try GameDirectoryValidator.validate(
+      url, gameExecutable: gameDirectoryRules.gameExecutable, isSupportedPath: gameDirectoryRules.isSupportedPath)
     settings.gameDirectory = url
     checkGameDirectory()
   }

@@ -21,7 +21,7 @@ private func makeController(
   let launcher = LauncherModel(
     client: client, hosts: hostsModel, startup: startup, gameDirectorySource: { settings.gameDirectory },
     availableDiskSpace: { _ in Int64.max })
-  let onboarding = OnboardingModel(hosts: hostsModel, settings: settings)
+  let onboarding = OnboardingModel(hosts: hostsModel, settings: settings, gameDirectoryRules: .test)
   return (MainController(launcher: launcher, settings: settings, onboarding: onboarding), client, settings)
 }
 
@@ -168,5 +168,20 @@ private func makeController(
     await controller.onboarding.applyHosts()  // not through the controller: nothing re-reads for the launcher
     #expect(controller.onboarding.allowsLaunch)
     #expect(controller.launcher.refusal(for: .launch) == nil)
+  }
+
+  @Test func PRG_003_theControllerHandsEventsAndNewVersionsToTheNotifier() async throws {
+    let (controller, client, _) = makeController(
+      status: GameStatus(localVersion: "5.0.0", remoteVersion: "5.1.0", canUpdate: true))
+    let delivery = FakeDelivery(granted: true)
+    let notifier = EventNotifier(delivery: delivery, defaults: makeTemporaryDefaults("mc-notify").defaults)
+    let forwarding = Task { await controller.deliverNotifications(to: notifier) }
+    defer { forwarding.cancel() }
+    await controller.refresh()
+    #expect(await pollUntil { delivery.delivered.contains(.updateAvailable(version: "5.1.0")) })
+    await controller.perform(.update)
+    let run = try await client.nextRun()
+    client.finish(run: run)
+    #expect(await pollUntil { delivery.delivered.contains(.jobFinished(.update)) })
   }
 }

@@ -13,6 +13,17 @@ public enum GameDirectoryKind: Sendable, Equatable {
   case existingGame
 }
 
+/// What the game asks of its folder: the executable that marks an existing installation, and the paths it can run from.
+public struct GameDirectoryRules: Sendable {
+  public var gameExecutable: String
+  public var isSupportedPath: @Sendable (URL) -> Bool
+
+  public init(gameExecutable: String, isSupportedPath: @escaping @Sendable (URL) -> Bool) {
+    self.gameExecutable = gameExecutable
+    self.isSupportedPath = isSupportedPath
+  }
+}
+
 public enum GameDirectoryValidator {
   /// nil = nothing there, false = a file, true = a directory.
   static func exists(_ url: URL) -> Bool? {
