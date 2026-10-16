@@ -16,3 +16,4 @@
 | [data-contract.md](data-contract.md) | 数据目录与设置存储 |
 | [sparkle.md](sparkle.md) | Sparkle 2 在未签名 App 上的集成 |
 | [wine-launch-contract.md](wine-launch-contract.md) | Wine/DXMT 启动契约 |
+| [fps-unlock.md](fps-unlock.md) | 第三方帧率解锁器逆向与落地路线（迁移后新增，地址指样本二进制） |
