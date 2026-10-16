@@ -65,14 +65,16 @@ package struct Downloader: Downloading {
     while true {
       if !mayResume { try? fileManager.removeItem(at: partial) }
       let offset = mayResume ? Self.fileSize(partial) : 0
+      let fetched: (total: Int64, sha256: String?)
       do {
-        total = try await fetch(from: url, into: partial, offset: offset, progress: progress)
+        fetched = try await fetch(from: url, into: partial, offset: offset, hashing: expected != nil, progress: progress)
       } catch DownloadRestart.fromScratch where offset > 0 {
         mayResume = false
         continue
       }
+      total = fetched.total
       if let expected {
-        let actual = try Self.sha256Hex(of: partial)
+        let actual = try fetched.sha256 ?? Self.sha256Hex(of: partial)
         guard actual == expected else {
           try? fileManager.removeItem(at: partial)
           if offset > 0 {  // the partial file was stale or damaged: one clean attempt
@@ -93,16 +95,18 @@ package struct Downloader: Downloading {
     progress(DownloadProgress(completed: Self.fileSize(destination), total: total))
   }
 
-  /// One request, appending to (or rewriting) `partial`. Returns the announced total size or -1.
+  /// One request, appending to (or rewriting) `partial`. Returns the announced total size or -1, and with `hashing`
+  /// the SHA-256 of the whole partial file, computed while it was written.
   private func fetch(
     from url: URL,
     into partial: URL,
     offset: Int64,
+    hashing: Bool,
     progress: @escaping @Sendable (DownloadProgress) -> Void
-  ) async throws -> Int64 {
+  ) async throws -> (total: Int64, sha256: String?) {
     var request = URLRequest(url: url)
     if offset > 0 { request.setValue("bytes=\(offset)-", forHTTPHeaderField: "Range") }
-    let delegate = StreamingDelegate(partial: partial, offset: offset, progress: progress)
+    let delegate = StreamingDelegate(partial: partial, offset: offset, hashing: hashing, progress: progress)
     let session = URLSession(configuration: configuration, delegate: delegate, delegateQueue: nil)
     defer { session.invalidateAndCancel() }
     let task = session.dataTask(with: request)
@@ -114,7 +118,7 @@ package struct Downloader: Downloading {
     } onCancel: {
       task.cancel()
     }
-    return delegate.total
+    return (delegate.total, delegate.sha256Hex)
   }
 
   /// Where `download` keeps the bytes of `destination` until they are complete and verified.
@@ -126,13 +130,22 @@ package struct Downloader: Downloading {
 
   /// Streaming SHA-256 so a 450 MB archive is never held in memory.
   package static func sha256Hex(of file: URL) throws -> String {
+    hex(try sha256(of: file))
+  }
+
+  /// The hasher state after the whole file, so more bytes can be appended to it.
+  static func sha256(of file: URL) throws -> SHA256 {
     let handle = try FileHandle(forReadingFrom: file)
     defer { try? handle.close() }
     var hasher = SHA256()
     while let chunk = try handle.read(upToCount: 1 << 20), !chunk.isEmpty {
       hasher.update(data: chunk)
     }
-    return hasher.finalize().map { String(format: "%02x", $0) }.joined()
+    return hasher
+  }
+
+  static func hex(_ hasher: SHA256) -> String {
+    hasher.finalize().map { String(format: "%02x", $0) }.joined()
   }
 }
 
@@ -143,6 +156,7 @@ private enum DownloadRestart: Error { case fromScratch }
 private final class StreamingDelegate: NSObject, URLSessionDataDelegate, @unchecked Sendable {
   private let partial: URL
   private let offset: Int64
+  private let hashing: Bool
   private let report: @Sendable (DownloadProgress) -> Void
 
   private let lock = NSLock()
@@ -152,19 +166,24 @@ private final class StreamingDelegate: NSObject, URLSessionDataDelegate, @unchec
   private var failure: (any Error)?
   private var finishedWithoutBody = false
   private var _total: Int64 = -1
+  /// Everything in the partial file so far, when `hashing`; nil when the file could not be read to start it.
+  private var hasher: SHA256?
   /// Blocks arrive thousands of times a second; progress goes out at most every `reportInterval`.
   /// `download` reports the final size itself.
   private static let reportInterval: Duration = .milliseconds(250)
   private var lastReport: ContinuousClock.Instant?
 
-  init(partial: URL, offset: Int64, progress: @escaping @Sendable (DownloadProgress) -> Void) {
+  init(partial: URL, offset: Int64, hashing: Bool, progress: @escaping @Sendable (DownloadProgress) -> Void) {
     self.partial = partial
     self.offset = offset
+    self.hashing = hashing
     self.report = progress
     self.completed = offset
   }
 
   var total: Int64 { lock.withLock { _total } }
+  /// The SHA-256 of the partial file, or nil when it was not hashed while written (the caller reads it back).
+  var sha256Hex: String? { lock.withLock { hasher.map(Downloader.hex) } }
 
   func start(_ continuation: CheckedContinuation<Void, any Error>) {
     lock.withLock { self.continuation = continuation }
@@ -199,6 +218,7 @@ private final class StreamingDelegate: NSObject, URLSessionDataDelegate, @unchec
           _total = offset
           finishedWithoutBody = true
         }
+        startHashing(truncate: false)
       default:
         throw DownloadError.httpStatus(http.statusCode)
       }
@@ -211,6 +231,7 @@ private final class StreamingDelegate: NSObject, URLSessionDataDelegate, @unchec
   func urlSession(_ session: URLSession, dataTask: URLSessionDataTask, didReceive data: Data) {
     do {
       try handle?.write(contentsOf: data)
+      lock.withLock { hasher?.update(data: data) }
     } catch {
       lock.withLock { failure = failure ?? error }
       dataTask.cancel()
@@ -254,6 +275,14 @@ private final class StreamingDelegate: NSObject, URLSessionDataDelegate, @unchec
     let handle = try FileHandle(forWritingTo: partial)
     if !truncate { try handle.seekToEnd() }
     self.handle = handle
+    startHashing(truncate: truncate)
+  }
+
+  /// A resumed file's prefix is hashed once here; the rest is added as it arrives.
+  private func startHashing(truncate: Bool) {
+    guard hashing else { return }
+    let start = truncate ? SHA256() : try? Downloader.sha256(of: partial)
+    lock.withLock { hasher = start }
   }
 
   /// `bytes <start>-<end>/<total>` or `bytes */<total>`.

@@ -30,9 +30,7 @@ final class SophonRig: @unchecked Sendable {
   func read(_ path: String) -> Data? { try? Data(contentsOf: url(path)) }
 
   func write(_ path: String, _ data: Data) {
-    try! FileManager.default.createDirectory(
-      at: url(path).deletingLastPathComponent(), withIntermediateDirectories: true)
-    try! data.write(to: url(path))
+    try! writeFile(data, to: url(path))
   }
 
   func exists(_ path: String) -> Bool { FileManager.default.fileExists(atPath: url(path).path) }

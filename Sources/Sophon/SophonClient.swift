@@ -1,4 +1,5 @@
 import Foundation
+import Synchronization
 import os
 
 private let log = Logger(subsystem: "io.github.tanzby.genshin-launcher", category: "sophon")
@@ -14,6 +15,8 @@ package struct SophonClient: Sendable {
   private let downloader: SophonDownloader
   private let updater: SophonUpdater
   private let installation: SophonInstallation
+  /// The chunk manifest the repair's disk-space check just downloaded, for the repair that follows it.
+  private let repairManifest = ManifestHandOff()
 
   package init(
     game: SophonGame, session: URLSession = .shared, configuration: SophonDownloadConfiguration = .init()
@@ -84,7 +87,14 @@ package struct SophonClient: Sendable {
 
   private func repair(in directory: URL, progress: @escaping @Sendable (SophonProgress) -> Void) async throws {
     let installed = try installedVersion(in: directory)
-    let (main, ref, manifest) = try await mainReleaseWithManifest()
+    let (main, ref) = try await mainRelease()
+    // The release info is read again, the manifest only when it is not the one the disk-space check just fetched.
+    let manifest: SophonManifest
+    if let handedOver = repairManifest.take(matching: ref) {
+      manifest = handedOver
+    } else {
+      manifest = try await api.manifest(for: ref)
+    }
     guard installed == main.tag else { throw SophonError.outdated(installed: installed, latest: main.tag) }
     let damaged = try await downloader.findDamagedFiles(in: manifest.files, gameDirectory: directory, progress: progress)
     if !damaged.isEmpty {
@@ -153,7 +163,8 @@ package struct SophonClient: Sendable {
       return try Self.sizes(of: await mainRelease().ref.stats).uncompressedSize
     case .repair:
       _ = try installedVersion(in: directory)
-      let (_, _, manifest) = try await mainReleaseWithManifest()
+      let (_, ref, manifest) = try await mainReleaseWithManifest()
+      repairManifest.put(manifest, for: ref)
       return try SophonInstallation.bytesToFetch(for: manifest.files, in: directory)
     case .update:
       let installed = try installedVersion(in: directory)
@@ -210,5 +221,21 @@ package struct SophonClient: Sendable {
   private func diffManifest(for branch: SophonGameBranch) async throws -> (SophonManifestRef, SophonDiffManifest) {
     let ref = try await diffManifestRef(for: branch)
     return (ref, try await api.diffManifest(for: ref))
+  }
+}
+
+/// One manifest handed from a disk-space check to the job after it, taken at most once and only for the same ref.
+private final class ManifestHandOff: Sendable {
+  private let slot = Mutex<(ref: SophonManifestRef, manifest: SophonManifest)?>(nil)
+
+  func put(_ manifest: SophonManifest, for ref: SophonManifestRef) {
+    slot.withLock { $0 = (ref, manifest) }
+  }
+
+  func take(matching ref: SophonManifestRef) -> SophonManifest? {
+    slot.withLock { slot in
+      defer { slot = nil }
+      return slot?.ref == ref ? slot?.manifest : nil
+    }
   }
 }

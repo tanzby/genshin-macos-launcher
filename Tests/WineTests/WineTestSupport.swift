@@ -93,10 +93,7 @@ let wineFixtureCommit = "abc1234def5678abc1234def5678abc1234def56"
 
 func makeWineFixtures(in directory: URL, options: WineFixtureOptions = .init()) throws -> WineFixtures {
   let fm = FileManager.default
-  func write(_ data: Data, to url: URL) throws {
-    try fm.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
-    try data.write(to: url)
-  }
+  func write(_ data: Data, to url: URL) throws { try writeFile(data, to: url) }
 
   // Wine tree
   let wineStage = directory.appending(path: "wine-stage", directoryHint: .isDirectory)
@@ -351,9 +348,7 @@ struct WineHarness {
   func install() async throws { try await runtime.ensureInstalled() }
 
   func writeFile(_ relative: String, _ text: String = "sentinel") throws {
-    let url = root.appending(path: relative)
-    try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
-    try Data(text.utf8).write(to: url)
+    try TestSupport.writeFile(text, to: root.appending(path: relative))
   }
 }
 

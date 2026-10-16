@@ -211,10 +211,7 @@ private struct Sandbox {
   }
 
   func write(_ relativePath: String, _ data: Data) throws {
-    let url = game.appendingPathComponent(relativePath)
-    try FileManager.default.createDirectory(
-      at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
-    try data.write(to: url)
+    try writeFile(data, to: game.appendingPathComponent(relativePath))
   }
 
   /// Relative paths (and sizes) of every regular file below `directory`.
@@ -543,6 +540,30 @@ private final class Rig: @unchecked Sendable {
     #expect(rig.sandbox.read(first.file.path) == first.plain)
     #expect(rig.sandbox.read(second.file.path) == second.plain)
     #expect(Sandbox.regularFiles(in: rig.sandbox.temp).isEmpty)
+  }
+
+  @Test func INS_008_chunksListedOutOfOffsetOrderStillAssembleAndVerify() async throws {
+    let rig = try Rig()
+    let clean = SyntheticFile("Data/shuffled.bin", sizes: [300, 500, 200])
+    rig.cdn.serve(clean)
+    // The whole-file MD5 can then not be fed while writing: the assembled file is read back instead.
+    let file = clean.file.replacing(chunks: clean.file.chunks.reversed())
+
+    try await rig.install([file])
+
+    #expect(rig.sandbox.read(file.path) == clean.plain)
+  }
+
+  @Test func INS_008_aWrongWholeFileMD5IsCaughtWhenTheChunksAreInOrder() async throws {
+    let rig = try Rig()
+    let clean = SyntheticFile("Data/ordered.bin", sizes: [300, 500])
+    rig.cdn.serve(clean)
+    let file = clean.file.replacing(md5: String(repeating: "0", count: 32))
+
+    await #expect(throws: SophonError.checksumMismatch(path: file.path)) {
+      try await rig.install([file], downloader: rig.downloader(maxAttempts: 1))
+    }
+    #expect(!rig.sandbox.exists(file.path))
   }
 
   // MARK: invalid manifests
@@ -988,13 +1009,13 @@ private final class Rig: @unchecked Sendable {
   func INS_011_resolveRejectsUnsafePath(path: String) throws {
     let sandbox = try Sandbox()
     #expect(throws: SophonError.unsafePath(path)) {
-      _ = try SophonPathPolicy.resolve(path, in: sandbox.game)
+      _ = try SophonPathPolicy(root: sandbox.game).resolve(path)
     }
   }
 
   @Test func INS_011_resolveAcceptsARelativePathInsideTheRoot() throws {
     let sandbox = try Sandbox()
-    let url = try SophonPathPolicy.resolve("GenshinImpact_Data/Persistent/a.bin", in: sandbox.game)
+    let url = try SophonPathPolicy(root: sandbox.game).resolve("GenshinImpact_Data/Persistent/a.bin")
     #expect(
       url.standardizedFileURL.path
         == sandbox.game.appendingPathComponent("GenshinImpact_Data/Persistent/a.bin").path)
@@ -1008,7 +1029,7 @@ private final class Rig: @unchecked Sendable {
       at: sandbox.game.appendingPathComponent("link"), withDestinationURL: outside)
 
     #expect(throws: SophonError.unsafePath("link/x.bin")) {
-      _ = try SophonPathPolicy.resolve("link/x.bin", in: sandbox.game)
+      _ = try SophonPathPolicy(root: sandbox.game).resolve("link/x.bin")
     }
   }
 

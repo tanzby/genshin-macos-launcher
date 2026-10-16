@@ -13,6 +13,9 @@ package struct MainSnapshot: Sendable, Equatable {
   /// Why the launcher would refuse each action right now (`LauncherModel.refusal(for:)`); nil = allowed.
   /// The presentation only renders these; it decides nothing itself.
   package var launchRefusal: LauncherError?
+  package var installRefusal: LauncherError?
+  package var updateRefusal: LauncherError?
+  package var resumeRefusal: LauncherError?
   package var repairRefusal: LauncherError?
   package var preDownloadRefusal: LauncherError?
   /// The first status query has finished (successfully or not). Before that "offline" is not yet known.
@@ -23,7 +26,8 @@ package struct MainSnapshot: Sendable, Equatable {
   public init(
     phase: LauncherPhase, isPreDownloading: Bool, isPausing: Bool, progress: JobProgress?,
     pendingJob: PendingJob?, lastError: LauncherError?, status: GameStatus?, isOnline: Bool,
-    launchRefusal: LauncherError? = nil, repairRefusal: LauncherError? = nil,
+    launchRefusal: LauncherError? = nil, installRefusal: LauncherError? = nil, updateRefusal: LauncherError? = nil,
+    resumeRefusal: LauncherError? = nil, repairRefusal: LauncherError? = nil,
     preDownloadRefusal: LauncherError? = nil, hasLoaded: Bool = true, wineNotReady: Bool = false
   ) {
     self.phase = phase
@@ -35,6 +39,9 @@ package struct MainSnapshot: Sendable, Equatable {
     self.status = status
     self.isOnline = isOnline
     self.launchRefusal = launchRefusal
+    self.installRefusal = installRefusal
+    self.updateRefusal = updateRefusal
+    self.resumeRefusal = resumeRefusal
     self.repairRefusal = repairRefusal
     self.preDownloadRefusal = preDownloadRefusal
     self.hasLoaded = hasLoaded
@@ -115,10 +122,10 @@ public struct MainPresentation: Sendable, Equatable {
     }
 
     if let pending = s.pendingJob, pending.blocksLaunch {
-      // Continuing needs the network, like every other download.
-      if let error = s.lastError { return make(.retry, s.isOnline, .error(error)) }
-      if offline { return make(.resume, false, .offline) }
-      return make(.resume, s.isOnline, .job(pending.kind, nil, paused: true))
+      let enabled = s.resumeRefusal == nil
+      if let error = s.lastError { return make(.retry, enabled, .error(error)) }
+      if offline { return make(.resume, enabled, .offline) }
+      return make(.resume, enabled, .job(pending.kind, nil, paused: true))
     }
 
     let base = PrimaryAction.derive(s.status)
@@ -128,7 +135,13 @@ public struct MainPresentation: Sendable, Equatable {
       case .update: .update
       default: .launch
       }
-    let enabled = base == .launch ? s.launchRefusal == nil : s.isOnline
+    let enabled =
+      switch button {
+      // No folder yet is answered by the picker the button opens (`MainController.needsGameDirectory`).
+      case .install: s.installRefusal == nil || s.installRefusal == .noGameDirectory
+      case .update: s.updateRefusal == nil
+      default: s.launchRefusal == nil
+      }
 
     let status: StatusLine
     if let error = s.lastError {

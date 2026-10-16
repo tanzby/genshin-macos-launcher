@@ -24,7 +24,9 @@ public final class MainController {
         phase: launcher.phase, isPreDownloading: launcher.isPreDownloading, isPausing: launcher.isPausing,
         progress: launcher.progress, pendingJob: launcher.pendingJob, lastError: launcher.lastError,
         status: launcher.status, isOnline: launcher.isOnline,
-        launchRefusal: launcher.refusal(for: .launch), repairRefusal: launcher.refusal(for: .start(.repair)),
+        launchRefusal: launcher.refusal(for: .launch), installRefusal: launcher.refusal(for: .start(.install)),
+        updateRefusal: launcher.refusal(for: .start(.update)), resumeRefusal: launcher.refusal(for: .resume),
+        repairRefusal: launcher.refusal(for: .start(.repair)),
         preDownloadRefusal: launcher.refusal(for: .start(.preDownload)), hasLoaded: hasLoaded,
         wineNotReady: launcher.isWineNotReady))
   }
@@ -87,6 +89,21 @@ public final class MainController {
 
   public func repair() async {
     await run { try await self.launcher.start(.repair) }
+  }
+
+  /// Hands job events and newly announced versions to `notifier` until the calling Task is cancelled.
+  public func deliverNotifications(to notifier: EventNotifier) async {
+    async let events: Void = forwardEvents(to: notifier)
+    await forwardStatus(to: notifier)
+    await events
+  }
+
+  private func forwardEvents(to notifier: EventNotifier) async {
+    for await event in launcher.events { await notifier.handle(event) }
+  }
+
+  private func forwardStatus(to notifier: EventNotifier) async {
+    for await status in Observations({ self.launcher.status }) { await notifier.observe(status: status) }
   }
 
   /// Asks for the administrator password, then has the launcher look at `/etc/hosts` again.

@@ -21,11 +21,13 @@ public final class LauncherModel {
   package private(set) var isRosettaMissing = false
   package private(set) var isOnline = false
   public private(set) var isPausing = false
-  public private(set) var progress: JobProgress?
+  public private(set) var progress: JobProgress? {
+    didSet { meter.update(progress) }
+  }
+  /// Speed and time remaining of `progress`, for the capsule.
+  public let meter = ProgressMeter()
   package private(set) var pendingJob: PendingJob?
   public private(set) var lastError: LauncherError?
-  /// What the hosts blocklist looked like at the last read; nil = unread or unreadable.
-  package private(set) var hostsStatus: HostsBlocklist.Status?
   /// Read on every use, never copied: the app passes a closure over `SettingsModel`, so a folder picked a moment
   /// ago is the one the next operation sees. Tests with a fixed folder pass `gameDirectory:` instead.
   private var directorySource: @MainActor () -> URL?
@@ -47,7 +49,7 @@ public final class LauncherModel {
 
   /// The hosts blocklist is in place (or there is no hosts seam to ask). Without it the game must not start.
   package var hostsAllowLaunch: Bool {
-    hosts == nil || hostsStatus?.allowsLaunch == true
+    hosts?.allowsLaunch ?? true
   }
 
   /// Wine is known to need preparation.
@@ -70,7 +72,7 @@ public final class LauncherModel {
 
   private let client: any GameClient
   private let wine: (any WinePreparing)?
-  private let hosts: (any HostsBlocking)?
+  private let hosts: HostsModel?
   private let startup: StartupSteps?
   private let diskSpace: DiskSpaceCheck
 
@@ -86,11 +88,14 @@ public final class LauncherModel {
   /// `GameSession.recover()` has run in this process; it must not run again while a game may be running.
   private var hasRecovered = false
   private var recovery: Task<Void, Never>?
+  /// The running `bootstrap()`; overlapping callers (window shown, window activated) wait for it instead of starting
+  /// a second one.
+  private var bootstrapping: Task<Bool, Never>?
 
   public init(
     client: any GameClient,
     wine: (any WinePreparing)? = nil,
-    hosts: (any HostsBlocking)? = nil,
+    hosts: HostsModel? = nil,
     startup: StartupSteps? = nil,
     gameDirectory: URL? = nil,
     gameDirectorySource: (@MainActor () -> URL?)? = nil,
@@ -118,23 +123,35 @@ public final class LauncherModel {
   /// A missing Wine is prepared here, so recovery and the game status only come once Wine is ready; if the
   /// preparation is paused or fails, `bootstrap()` returns without them (`lastError` and `events` say why).
   public func bootstrap() async {
-    guard jobs.exclusive == .idle, !isPausing, !isShuttingDown else { return }
-    guard await rosettaIsAvailable() else { return }
+    let run = bootstrapping ?? Task { await runBootstrap() }
+    let owns = bootstrapping == nil
+    bootstrapping = run
+    // The caller that started the run owns it: cancelling that caller cancels the run, as if it ran in its own Task.
+    let preparing = await withTaskCancellationHandler { await run.value } onCancel: { if owns { run.cancel() } }
+    if owns { bootstrapping = nil }
+    // Outside the shared run: a caller arriving now finds the slot taken and returns, like one that found Wine busy.
+    if preparing {
+      await jobs.waitForExclusive()  // the preparation reads the game status itself once Wine is ready
+    }
+  }
+
+  /// True when it leaves a Wine preparation running in the exclusive slot, which the callers then wait for.
+  private func runBootstrap() async -> Bool {
+    guard jobs.exclusive == .idle, !isPausing, !isShuttingDown else { return false }
+    guard await rosettaIsAvailable() else { return false }
     hasBootstrapped = true
     await refreshWine()
     guard isWineMissing else {
       await recoverOnce()
       await refresh()
-      return
+      return false
     }
     do {
       try await startWinePreparation()
     } catch {
-      // Someone else (the user pressing "prepare Wine") got the slot while the status was being read.
-      guard jobs.exclusive == .preparingWine else { return }
+      // Someone else (the user pressing "prepare Wine") got the slot while the status was being read: wait for theirs.
     }
-    guard jobs.exclusive == .preparingWine else { return }
-    await jobs.waitForExclusive()  // the preparation reads the game status itself once Wine is ready
+    return jobs.exclusive == .preparingWine
   }
 
   /// Re-reads the Wine state from the disk. Without a `WinePreparing` the launcher assumes Wine is fine.
@@ -187,7 +204,7 @@ public final class LauncherModel {
       isOnline = false
       // Offline is a state of its own; anything else (a broken install) needs to be seen.
       let failure = LauncherError(error)
-      if failure != .client(.network), failure != .client(.cancelled) {
+      if !error.isCancellation, failure != .client(.network) {
         lastError = failure
         refreshFailure = failure
       }
@@ -195,11 +212,11 @@ public final class LauncherModel {
     if let store = store { pendingJob = store.load() }
   }
 
-  /// Re-reads `/etc/hosts` (no privileges needed). An unreadable file counts as "not in place". Call it after
-  /// the blocklist was applied elsewhere.
+  /// Re-reads `/etc/hosts` (no privileges needed) and drops a `hostsRequired` error the read resolved. An unreadable
+  /// file counts as "not in place".
   package func refreshHosts() {
     guard let hosts else { return }
-    hostsStatus = try? hosts.status()
+    hosts.refresh()
     if hostsAllowLaunch, lastError == .hostsRequired { lastError = nil }
   }
 
@@ -242,13 +259,14 @@ public final class LauncherModel {
     case .repair:
       if let pending = pendingJob, pending.blocksLaunch, pending.kind != .repair { return .pendingJob(pending.kind) }
       if status?.canUpdate == true { return .updateRequired }
-      if !isOnline { return .offline }
     case .preDownload:
       if !isOnline { return .offline }
       if status?.canPreDownload != true { return .preDownloadUnavailable }
     case .install, .update:
       break
     }
+    // Every job downloads.
+    if !isOnline { return .offline }
     return store == nil ? .noGameDirectory : nil
   }
 
@@ -268,7 +286,7 @@ public final class LauncherModel {
     do {
       return try await work()
     } catch {
-      if !(error is CancellationError) { lastError = LauncherError(error) }
+      if !error.isCancellation { lastError = LauncherError(error) }
       throw error
     }
   }
@@ -316,22 +334,21 @@ public final class LauncherModel {
     lastError = nil
     let (ready, readySink) = AsyncThrowingStream<Void, Error>.makeStream()
     let body: @MainActor () async -> Void = {
-      let stream: AsyncThrowingStream<JobProgress, Error>
       do {
         try await preflight()
-        stream = try self.begin(job, store: store)
+        try self.begin(job, store: store)
       } catch {
         readySink.finish(throwing: error)
         return
       }
       readySink.finish()
-      await self.drive(job, stream: stream, store: store)
+      await self.drive(job, store: store)
     }
     if job == .preDownload { jobs.startPreDownload(body: body) } else { jobs.startExclusive(job.exclusivePhase, body: body) }
     do { for try await _ in ready {} } catch is CancellationError { return }  // paused before the job began
   }
 
-  private func begin(_ job: GameJob, store: PendingJobStore) throws -> AsyncThrowingStream<JobProgress, Error> {
+  private func begin(_ job: GameJob, store: PendingJobStore) throws {
     let pending = PendingJob(kind: job, targetVersion: job == .preDownload ? status?.preDownloadTarget : status?.remoteVersion)
     // A pre-download must not replace the marker of an unfinished install/update/repair: that one blocks launch.
     if !Self.leavesMarkerAlone(job, store: store) {
@@ -340,22 +357,19 @@ public final class LauncherModel {
       pendingJob = pending
     }
     progress = .preparing
-    return client.run(job, in: store.gameDirectory)
   }
 
-  private func drive(
-    _ job: GameJob, stream: AsyncThrowingStream<JobProgress, Error>, store: PendingJobStore
-  ) async {
+  /// Runs the job in this (the slot's) Task, so cancelling the slot cancels the work and awaiting the slot waits for it.
+  private func drive(_ job: GameJob, store: PendingJobStore) async {
     let activity = ProcessInfo.processInfo.beginActivity(
       options: [.userInitiated, .idleSystemSleepDisabled], reason: "Genshin Launcher game job")
-    var failure: Error?
-    do {
-      for try await update in stream { progress = update }
-    } catch {
-      failure = error
-    }
-    // An AsyncThrowingStream iteration may end normally on cancellation, so classify by cancellation state.
-    let paused = Task.isCancelled || failure is CancellationError || (failure as? GameClientError) == .cancelled
+    // Progress arrives on worker threads. One ordered stream brings it to the main actor, and it ends when the job
+    // returns, so no late update can land after the final state below.
+    let (updates, sink) = AsyncStream<JobProgress>.makeStream(bufferingPolicy: .bufferingNewest(1))
+    async let outcome = Self.run(job, client: client, in: store.gameDirectory, progress: sink)
+    for await update in updates { progress = update }
+    let failure = await outcome
+    let paused = Task.isCancelled || failure?.isCancellation == true
     if paused {
       // Keep job.json: the job is resumable.
     } else if let failure {
@@ -381,20 +395,26 @@ public final class LauncherModel {
     progress = nil
   }
 
+  /// The job's error, `nil` when it finished. Ends `progress` either way.
+  private nonisolated static func run(
+    _ job: GameJob, client: any GameClient, in directory: URL, progress: AsyncStream<JobProgress>.Continuation
+  ) async -> (any Error)? {
+    defer { progress.finish() }
+    do {
+      try await client.run(job, in: directory) { progress.yield($0) }
+      return nil
+    } catch {
+      return error
+    }
+  }
+
   /// A pre-download running beside an unfinished install/update/repair neither writes nor clears its marker.
   private static func leavesMarkerAlone(_ job: GameJob, store: PendingJobStore) -> Bool {
     job == .preDownload && store.load()?.blocksLaunch == true
   }
 
-  /// Cancels the chosen slots' Tasks, returns once all of them have stopped and the client is quiet.
-  private func cancelAndWait(exclusive: Bool, preDownload: Bool) async {
-    await jobs.cancelAndWait(exclusive: exclusive, preDownload: preDownload)
-    // The streams are over, but the work behind them may still be finishing a file.
-    await client.quiesce()
-  }
-
   private func stopPreDownload() async {
-    await cancelAndWait(exclusive: false, preDownload: true)
+    await jobs.cancelAndWait(exclusive: false, preDownload: true)
   }
 
   private func checkDiskSpace(for job: GameJob, in directory: URL) async throws {
@@ -402,7 +422,7 @@ public final class LauncherModel {
     do {
       bytes = try await client.requiredDiskSpace(for: job, in: directory)
     } catch {
-      if Task.isCancelled || error is CancellationError { throw CancellationError() }
+      if Task.isCancelled || error.isCancellation { throw CancellationError() }
       throw LauncherError(error)
     }
     try diskSpace.verify(required: bytes, in: directory)
@@ -415,7 +435,7 @@ public final class LauncherModel {
     let exclusivePause = pausable.contains(jobs.exclusive)
     guard jobs.isHolding(exclusive: exclusivePause) else { return }
     isPausing = true
-    await cancelAndWait(exclusive: exclusivePause, preDownload: !exclusivePause)
+    await jobs.cancelAndWait(exclusive: exclusivePause, preDownload: !exclusivePause)
     isPausing = false
   }
 
@@ -451,7 +471,7 @@ public final class LauncherModel {
     isShuttingDown = true  // before the first suspension, so nothing new can start while we wait
     launchWork?.cancel()
     statusRead?.cancel()
-    await cancelAndWait(exclusive: true, preDownload: true)
+    await jobs.cancelAndWait(exclusive: true, preDownload: true)
     // The recovery is cleanup (kills the prefix, replays the journal): never cancel it, but do not quit mid-way.
     await recovery?.value
   }
@@ -498,7 +518,7 @@ public final class LauncherModel {
       failure = await group.next() ?? nil
     }
     let error = failure.map(LauncherError.init)
-    let paused = Task.isCancelled || failure is CancellationError || error == .client(.cancelled)
+    let paused = Task.isCancelled || failure?.isCancellation == true
     await refreshWine()  // after a pause or failure still not ready: the next attempt starts from the stamp and the `.part` files
     if !paused {
       let failed = error ?? (isWineMissing ? .unexpected("Wine is still not ready after installation") : nil)
@@ -569,8 +589,7 @@ public final class LauncherModel {
     case .success(.startupTimedOut): failure = .launchTimeout
     case .success(.failedToLaunch): failure = .failedToLaunch
     case .failure(let error):
-      let mapped = LauncherError(error)
-      failure = mapped == .client(.cancelled) ? nil : mapped
+      failure = error.isCancellation ? nil : LauncherError(error)
     }
     if let failure {
       lastError = failure

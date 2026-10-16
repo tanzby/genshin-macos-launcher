@@ -4,12 +4,19 @@ import TestSupport
 
 @testable import Launcher
 
-/// Scriptable `GameClient`. Every `run(job)` hands the test a stream it can drive; every interesting
+/// Scriptable `GameClient`. Every `run(job)` suspends until the test drives it; every interesting
 /// moment is appended to an ordered event log ("run:update", "terminated:preDownload", "launch", ...).
 final class FakeGameClient: GameClient, Sendable {
+  private enum RunCommand: Sendable {
+    case progress(JobProgress)
+    case finish
+    case fail(any Error)
+  }
+
   private struct RunRecord {
     var job: GameJob
-    var continuation: AsyncThrowingStream<JobProgress, Error>.Continuation
+    var commands: AsyncStream<RunCommand>.Continuation
+    /// `run` has returned (finished, failed or cancelled).
     var terminated = false
   }
 
@@ -24,7 +31,6 @@ final class FakeGameClient: GameClient, Sendable {
     var statusDirectories: [URL?] = []
     var diskCheckDirectories: [URL] = []
     var runDirectories: [URL] = []
-    var quiesces = 0
     var prompts: [LaunchOptions] = []
     var launchContinuation: CheckedContinuation<LaunchOutcome, Error>?
     var launchCancelled = false
@@ -59,7 +65,6 @@ final class FakeGameClient: GameClient, Sendable {
   var statusDirectories: [URL?] { state.withLock { $0.statusDirectories } }
   var diskCheckDirectories: [URL] { state.withLock { $0.diskCheckDirectories } }
   var runDirectories: [URL] { state.withLock { $0.runDirectories } }
-  var quiesces: Int { state.withLock { $0.quiesces } }
   var commandPrompts: [LaunchOptions] { state.withLock { $0.prompts } }
 
   func openWineCommandPrompt(_ options: LaunchOptions) async { state.withLock { $0.prompts.append(options) } }
@@ -71,19 +76,13 @@ final class FakeGameClient: GameClient, Sendable {
 
   // MARK: Driving runs
 
-  func yield(_ progress: JobProgress, run index: Int) {
-    let continuation = state.withLock { $0.runs[index].continuation }
-    continuation.yield(progress)
-  }
+  func yield(_ progress: JobProgress, run index: Int) { send(.progress(progress), run: index) }
+  func finish(run index: Int) { send(.finish, run: index) }
+  func finish(run index: Int, throwing error: any Error) { send(.fail(error), run: index) }
 
-  func finish(run index: Int) {
-    let continuation = state.withLock { $0.runs[index].continuation }
-    continuation.finish()
-  }
-
-  func finish(run index: Int, throwing error: any Error) {
-    let continuation = state.withLock { $0.runs[index].continuation }
-    continuation.finish(throwing: error)
+  private func send(_ command: RunCommand, run index: Int) {
+    let commands = state.withLock { $0.runs[index].commands }
+    commands.yield(command)
   }
 
   // MARK: Driving launch
@@ -154,22 +153,31 @@ final class FakeGameClient: GameClient, Sendable {
     }
   }
 
-  func run(_ job: GameJob, in directory: URL) -> AsyncThrowingStream<JobProgress, Error> {
-    let (stream, continuation) = AsyncThrowingStream<JobProgress, Error>.makeStream()
+  /// Suspends until the test finishes or fails the run, or the caller is cancelled (then throws `CancellationError`).
+  func run(_ job: GameJob, in directory: URL, progress: @escaping @Sendable (JobProgress) -> Void) async throws {
+    let (commands, sink) = AsyncStream<RunCommand>.makeStream()
     let index = state.withLock { s -> Int in
-      s.runs.append(RunRecord(job: job, continuation: continuation))
+      s.runs.append(RunRecord(job: job, commands: sink))
       s.runDirectories.append(directory)
       s.events.append("run:\(job.rawValue)")
       return s.runs.count - 1
     }
-    continuation.onTermination = { [self] _ in
+    defer {
       state.withLock { s in
         s.runs[index].terminated = true
         s.events.append("terminated:\(job.rawValue)")
       }
     }
     startedRuns.push(index)
-    return stream
+    // The iteration ends when the caller is cancelled.
+    for await command in commands {
+      switch command {
+      case .progress(let update): progress(update)
+      case .finish: return
+      case .fail(let error): throw error
+      }
+    }
+    throw CancellationError()
   }
 
   func launch(
@@ -214,6 +222,4 @@ final class FakeGameClient: GameClient, Sendable {
   }
 
   func backgroundImage() async -> BackgroundImage { .bundledDefault }
-
-  func quiesce() async { state.withLock { $0.quiesces += 1 } }
 }

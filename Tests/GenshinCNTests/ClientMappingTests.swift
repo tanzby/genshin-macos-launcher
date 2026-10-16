@@ -65,7 +65,7 @@ import Testing
     rig.install("5.5.0")
 
     var failure: (any Error)?
-    do { for try await _ in rig.client.run(.install, in: rig.game) {} } catch { failure = error }
+    do { try await rig.client.run(.install, in: rig.game) { _ in } } catch { failure = error }
     #expect(failure as? GameClientError == .installDirectoryNotEmpty)
     await #expect(throws: GameClientError.installDirectoryNotEmpty) {
       _ = try await rig.client.requiredDiskSpace(for: .install, in: rig.game)
@@ -75,29 +75,28 @@ import Testing
   @Test func UPG_005_updateOfAnEmptyDirectoryIsNotInstalled() async throws {
     let rig = ClientRig()
     var failure: (any Error)?
-    do { for try await _ in rig.client.run(.update, in: rig.game) {} } catch { failure = error }
+    do { try await rig.client.run(.update, in: rig.game) { _ in } } catch { failure = error }
     #expect(failure as? SophonError == .notInstalled)
   }
 
-  @Test func PRG_001_aJobThatFailedBeforeAnyoneListenedStillDeliversItsError() async throws {
+  @Test func PRG_001_aJobThatFailsBeforeAnyProgressStillDeliversItsError() async throws {
     let rig = ClientRig()
-    let stream = rig.client.run(.update, in: rig.game)  // nothing is installed, so there is nothing to update
-    await rig.client.quiesce()
-
-    await #expect(throws: SophonError.notInstalled) {
-      for try await _ in stream {}
+    await #expect(throws: SophonError.notInstalled) {  // nothing is installed, so there is nothing to update
+      try await rig.client.run(.update, in: rig.game) { _ in }
     }
   }
 
-  @Test func ADR0002_queuedJobsEachWorkOnTheFolderTheyWereStartedWith() async throws {
+  @Test func ADR0002_eachJobWorksOnTheFolderItWasGiven() async throws {
     let rig = ClientRig()
     rig.install("5.5.0")
     let empty = rig.root.appending(path: "empty", directoryHint: .isDirectory)
-    let first = rig.client.run(.install, in: rig.game)  // refused: another install is there
-    let second = rig.client.run(.update, in: empty)  // refused: nothing to update
 
-    await #expect(throws: GameClientError.installDirectoryNotEmpty) { for try await _ in first {} }
-    await #expect(throws: SophonError.notInstalled) { for try await _ in second {} }
+    await #expect(throws: GameClientError.installDirectoryNotEmpty) {  // another install is there
+      try await rig.client.run(.install, in: rig.game) { _ in }
+    }
+    await #expect(throws: SophonError.notInstalled) {  // nothing to update
+      try await rig.client.run(.update, in: empty) { _ in }
+    }
   }
 
   @Test func LCH_014_repairAndUpdateRecoverTheSessionBeforeTheyTouchTheGame() async throws {
@@ -105,9 +104,9 @@ import Testing
     rig.install("5.6.0")
 
     // Whatever the job then does with the network, the recovery came first.
-    _ = try? await { for try await _ in rig.client.run(.repair, in: rig.game) {} }()
+    try? await rig.client.run(.repair, in: rig.game) { _ in }
     #expect(rig.launcher.recoveries.withLock { $0 } == 1)
-    _ = try? await { for try await _ in rig.client.run(.update, in: rig.game) {} }()
+    try? await rig.client.run(.update, in: rig.game) { _ in }
     #expect(rig.launcher.recoveries.withLock { $0 } == 2)
   }
 
@@ -116,8 +115,8 @@ import Testing
     let rig = ClientRig(branches: ClientRig.branches(main: "5.6.0", pre: "5.7.0", preFrom: ["5.6.0"]))
     rig.install("5.6.0")
 
-    _ = try? await { for try await _ in rig.client.run(.preDownload, in: rig.game) {} }()
-    _ = try? await { for try await _ in rig.client.run(.install, in: rig.game) {} }()
+    try? await rig.client.run(.preDownload, in: rig.game) { _ in }
+    try? await rig.client.run(.install, in: rig.game) { _ in }
 
     #expect(rig.launcher.recoveries.withLock { $0 } == 0)
   }

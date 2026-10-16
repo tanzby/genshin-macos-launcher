@@ -6,6 +6,9 @@ import TestSupport
 
 @testable import Launcher
 
+/// Nothing installed, the remote answered (so online).
+private let notInstalled = GameStatus(remoteVersion: "5.0.0")
+
 @MainActor
 private func makeController(
   status: GameStatus = GameStatus(localVersion: "5.0.0", remoteVersion: "5.0.0"),
@@ -14,11 +17,11 @@ private func makeController(
   let settings = SettingsModel(defaults: makeTemporaryDefaults("controller").defaults)
   settings.gameDirectory = gameDirectory
   let client = FakeGameClient(status: status)
-  let fakeHosts = FakeHosts(hosts)
+  let hostsModel = HostsModel(FakeHosts(hosts))
   let launcher = LauncherModel(
-    client: client, hosts: fakeHosts, startup: startup, gameDirectorySource: { settings.gameDirectory },
+    client: client, hosts: hostsModel, startup: startup, gameDirectorySource: { settings.gameDirectory },
     availableDiskSpace: { _ in Int64.max })
-  let onboarding = OnboardingModel(hosts: fakeHosts, settings: settings)
+  let onboarding = OnboardingModel(hosts: hostsModel, settings: settings, gameDirectoryRules: .test)
   return (MainController(launcher: launcher, settings: settings, onboarding: onboarding), client, settings)
 }
 
@@ -59,7 +62,7 @@ private func makeController(
   }
 
   @Test func APP_010_reactivationLeavesARunningJobAlone() async throws {
-    let (controller, client, _) = makeController(status: GameStatus())
+    let (controller, client, _) = makeController(status: notInstalled)
     await controller.refresh()
     await controller.perform(.install)
     _ = try await client.nextRun()
@@ -79,7 +82,7 @@ private func makeController(
   }
 
   @Test func APP_017_installRightAfterPickingAFolderDoesNotWaitForARefresh() async throws {
-    let (controller, client, settings) = makeController(status: GameStatus(), gameDirectory: nil)
+    let (controller, client, settings) = makeController(status: notInstalled, gameDirectory: nil)
     await controller.refresh()
     settings.gameDirectory = temporaryURL("genshin-launcher-mc")
     await controller.perform(.install)
@@ -89,7 +92,7 @@ private func makeController(
   }
 
   @Test func APP_017_installWithoutADirectoryAsksForOneInsteadOfFailing() async {
-    let (controller, client, _) = makeController(status: GameStatus(), gameDirectory: nil)
+    let (controller, client, _) = makeController(status: notInstalled, gameDirectory: nil)
     await controller.refresh()
     #expect(controller.needsGameDirectory(for: .install))
     await controller.perform(.install)
@@ -113,7 +116,7 @@ private func makeController(
   }
 
   @Test func APP_013_aStartThatWorksClearsTheEarlierRefusal() async throws {
-    let (controller, client, settings) = makeController(status: GameStatus(), gameDirectory: nil)
+    let (controller, client, settings) = makeController(status: notInstalled, gameDirectory: nil)
     await controller.refresh()
     await controller.perform(.install)
     #expect(controller.launcher.lastError == .noGameDirectory)
@@ -125,7 +128,7 @@ private func makeController(
   }
 
   @Test func APP_017_pauseAndResumeGoThroughTheLauncher() async throws {
-    let (controller, client, _) = makeController(status: GameStatus())
+    let (controller, client, _) = makeController(status: notInstalled)
     await controller.refresh()
     await controller.perform(.install)
     let run = try await client.nextRun()
@@ -156,5 +159,29 @@ private func makeController(
     await controller.applyHosts()
     #expect(controller.presentation.buttonEnabled)
     #expect(controller.presentation.status == .none)
+  }
+
+  @Test func WIN_011_onboardingAndTheLauncherReadOneHostsState() async {
+    let (controller, _, _) = makeController(hosts: .missing)
+    await controller.refresh()
+    #expect(controller.launcher.refusal(for: .launch) == .hostsRequired)
+    await controller.onboarding.applyHosts()  // not through the controller: nothing re-reads for the launcher
+    #expect(controller.onboarding.allowsLaunch)
+    #expect(controller.launcher.refusal(for: .launch) == nil)
+  }
+
+  @Test func PRG_003_theControllerHandsEventsAndNewVersionsToTheNotifier() async throws {
+    let (controller, client, _) = makeController(
+      status: GameStatus(localVersion: "5.0.0", remoteVersion: "5.1.0", canUpdate: true))
+    let delivery = FakeDelivery(granted: true)
+    let notifier = EventNotifier(delivery: delivery, defaults: makeTemporaryDefaults("mc-notify").defaults)
+    let forwarding = Task { await controller.deliverNotifications(to: notifier) }
+    defer { forwarding.cancel() }
+    await controller.refresh()
+    #expect(await pollUntil { delivery.delivered.contains(.updateAvailable(version: "5.1.0")) })
+    await controller.perform(.update)
+    let run = try await client.nextRun()
+    client.finish(run: run)
+    #expect(await pollUntil { delivery.delivered.contains(.jobFinished(.update)) })
   }
 }

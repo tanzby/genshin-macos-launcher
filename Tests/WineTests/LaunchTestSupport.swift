@@ -41,11 +41,6 @@ extension LaunchResult {
   }
 }
 
-func launchWrite(_ text: String, to url: URL) throws {
-  try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
-  try Data(text.utf8).write(to: url)
-}
-
 func launchRead(_ url: URL) -> String? {
   (try? Data(contentsOf: url)).map { String(decoding: $0, as: UTF8.self) }
 }
@@ -519,16 +514,16 @@ func withLaunchFixture<T>(
   try await withWineTempDirectory { dir in
     let root = dir.appending(path: options.rootName, directoryHint: .isDirectory)
     let layout = WineLayout(root: root)
-    try launchWrite("LOADER", to: layout.runtimeDirectory.appending(path: "bin/wine"))
-    try launchWrite("SERVER", to: layout.wineserver)
+    try writeFile("LOADER", to: layout.runtimeDirectory.appending(path: "bin/wine"))
+    try writeFile("SERVER", to: layout.wineserver)
     switch options.hostState {
     case .normal:
-      try launchWrite(LaunchBytes.wine, to: layout.unixWine)
-      try launchWrite(LaunchBytes.host, to: layout.unixWineHost)
+      try writeFile(LaunchBytes.wine, to: layout.unixWine)
+      try writeFile(LaunchBytes.host, to: layout.unixWineHost)
     case .freshNoHost:
-      try launchWrite(LaunchBytes.wine, to: layout.unixWine)
+      try writeFile(LaunchBytes.wine, to: layout.unixWine)
     case .shimInstalledNoHost:
-      try launchWrite(LaunchBytes.shim, to: layout.unixWine)
+      try writeFile(LaunchBytes.shim, to: layout.unixWine)
     }
     try FileManager.default.createDirectory(at: layout.prefixSystem32, withIntermediateDirectories: true)
 
@@ -536,8 +531,8 @@ func withLaunchFixture<T>(
     if options.helpers {
       let shim = dir.appending(path: "helpers/genshin-launcher-wine-shim")
       let dylib = dir.appending(path: "helpers/genshin-launcher-gamehost.dylib")
-      try launchWrite(LaunchBytes.shim, to: shim)
-      try launchWrite(LaunchBytes.dylib, to: dylib)
+      try writeFile(LaunchBytes.shim, to: shim)
+      try writeFile(LaunchBytes.dylib, to: dylib)
       helpers = GameHostHelpers(shim: shim, dylib: dylib)
     }
 

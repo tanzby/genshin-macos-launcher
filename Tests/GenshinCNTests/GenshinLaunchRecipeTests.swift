@@ -19,11 +19,20 @@ private let defaultGameDirectory = URL(filePath: "/Games/GI", directoryHint: .is
 private let dataDirectory = URL(filePath: "/Users/test/Library/Application Support/Genshin Launcher", directoryHint: .isDirectory)
 private let protonExtras = URL(filePath: "/Users/test/Library/Application Support/Genshin Launcher/sidecar/protonextras", directoryHint: .isDirectory)
 
-private func make(
-  _ settings: GenshinLaunchSettings = .init(), gameDirectory: URL = defaultGameDirectory
-) -> LaunchRecipe {
-  GenshinLaunchRecipe.make(
-    settings: settings, gameDirectory: gameDirectory, dataDirectory: dataDirectory, protonExtras: protonExtras)
+/// Launch options in `defaultGameDirectory`.
+private func settings(
+  retina: Bool = false, leftCommandIsControl: Bool = false, metalHUD: Bool = false, hdr: Bool = false,
+  metalFX: Bool = false, customResolution: LaunchOptions.Resolution? = nil, proxyHost: String? = nil
+) -> LaunchOptions {
+  LaunchOptions(
+    gameDirectory: defaultGameDirectory, retina: retina, leftCommandIsControl: leftCommandIsControl,
+    metalHUD: metalHUD, hdr: hdr, metalFX: metalFX, customResolution: customResolution, proxyHost: proxyHost)
+}
+
+private func make(_ options: LaunchOptions = settings(), gameDirectory: URL = defaultGameDirectory) -> LaunchRecipe {
+  var options = options
+  options.gameDirectory = gameDirectory
+  return GenshinLaunchRecipe.make(options: options, dataDirectory: dataDirectory, protonExtras: protonExtras)
 }
 
 private func edits(_ recipe: LaunchRecipe, key: String) -> [RegistryEdit] {
@@ -46,7 +55,7 @@ private func edits(_ recipe: LaunchRecipe, key: String) -> [RegistryEdit] {
   }
 
   @Test func LCH_032_timeoutFixIsAlwaysEnabledWhateverTheSettingsAre() {
-    let all = GenshinLaunchSettings(
+    let all = settings(
       retina: true, leftCommandIsControl: true, metalHUD: true, hdr: true, metalFX: true,
       customResolution: .init(width: 1920, height: 1080), proxyHost: "127.0.0.1:7890")
 
@@ -56,8 +65,8 @@ private func edits(_ recipe: LaunchRecipe, key: String) -> [RegistryEdit] {
   }
 
   @Test func LCH_032_metalHudIsSetToOneOnlyWhenEnabled() {
-    let on = make(GenshinLaunchSettings(metalHUD: true))
-    let off = make(GenshinLaunchSettings(metalHUD: false))
+    let on = make(settings(metalHUD: true))
+    let off = make(settings(metalHUD: false))
 
     #expect(on.environment["MTL_HUD_ENABLED"] == "1")
     #expect(off.environment["MTL_HUD_ENABLED"] == nil)
@@ -65,23 +74,23 @@ private func edits(_ recipe: LaunchRecipe, key: String) -> [RegistryEdit] {
   }
 
   @Test func LCH_034_proxyHostIsPassedRawToBothProxyVariables() {
-    let recipe = make(GenshinLaunchSettings(proxyHost: "127.0.0.1:7890"))
+    let recipe = make(settings(proxyHost: "127.0.0.1:7890"))
 
     #expect(recipe.environment["HTTP_PROXY"] == "127.0.0.1:7890")
     #expect(recipe.environment["HTTPS_PROXY"] == "127.0.0.1:7890")
   }
 
   @Test func LCH_034_proxyHostKeepsAnExplicitSchemeUnchangedAndAddsNone() {
-    let withScheme = make(GenshinLaunchSettings(proxyHost: "http://proxy.local:8080"))
-    let bare = make(GenshinLaunchSettings(proxyHost: "proxy.local:8080"))
+    let withScheme = make(settings(proxyHost: "http://proxy.local:8080"))
+    let bare = make(settings(proxyHost: "proxy.local:8080"))
 
     #expect(withScheme.environment["HTTP_PROXY"] == "http://proxy.local:8080")
     #expect(bare.environment["HTTPS_PROXY"] == "proxy.local:8080")
   }
 
   @Test func LCH_034_noProxyVariablesForNilOrEmptyHost() {
-    let nilHost = make(GenshinLaunchSettings(proxyHost: nil))
-    let emptyHost = make(GenshinLaunchSettings(proxyHost: ""))
+    let nilHost = make(settings(proxyHost: nil))
+    let emptyHost = make(settings(proxyHost: ""))
 
     #expect(nilHost.environment["WINEESYNC"] == "1")  // positive: environment built
     #expect(nilHost.environment["HTTP_PROXY"] == nil)
@@ -92,9 +101,9 @@ private func edits(_ recipe: LaunchRecipe, key: String) -> [RegistryEdit] {
   }
 
   @Test func LCH_004_metalFxSpatialSwapchainIsSetOnlyWhenMetalFxIsOnAndNoCustomResolution() {
-    let effective = make(GenshinLaunchSettings(metalFX: true))
-    let off = make(GenshinLaunchSettings(metalFX: false))
-    let withResolution = make(GenshinLaunchSettings(metalFX: true, customResolution: .init(width: 2560, height: 1600)))
+    let effective = make(settings(metalFX: true))
+    let off = make(settings(metalFX: false))
+    let withResolution = make(settings(metalFX: true, customResolution: .init(width: 2560, height: 1600)))
 
     #expect(effective.environment["DXMT_METALFX_SPATIAL_SWAPCHAIN"] == "1")
     #expect(off.environment["WINEESYNC"] == "1")
@@ -124,7 +133,7 @@ private func edits(_ recipe: LaunchRecipe, key: String) -> [RegistryEdit] {
   }
 
   @Test func LCH_005_retinaAndLeftCommandMapToYAndNAsPersistentStrings() {
-    let recipe = make(GenshinLaunchSettings(retina: true, leftCommandIsControl: true))
+    let recipe = make(settings(retina: true, leftCommandIsControl: true))
 
     let mac = edits(recipe, key: macDriverKey)
     #expect(
@@ -136,17 +145,17 @@ private func edits(_ recipe: LaunchRecipe, key: String) -> [RegistryEdit] {
   }
 
   @Test func LCH_005_retinaOnlyAndLeftCommandOnlyAreIndependent() {
-    let retinaOnly = edits(make(GenshinLaunchSettings(retina: true)), key: macDriverKey)
-    let leftOnly = edits(make(GenshinLaunchSettings(leftCommandIsControl: true)), key: macDriverKey)
+    let retinaOnly = edits(make(settings(retina: true)), key: macDriverKey)
+    let leftOnly = edits(make(settings(leftCommandIsControl: true)), key: macDriverKey)
 
     #expect(retinaOnly.map(\.action) == [.set(.string("y")), .set(.string("n"))])
     #expect(leftOnly.map(\.action) == [.set(.string("n")), .set(.string("y"))])
   }
 
   @Test func LCH_004_retinaIsForcedOffWhenMetalFxIsEffective() {
-    let forced = edits(make(GenshinLaunchSettings(retina: true, metalFX: true)), key: macDriverKey)
+    let forced = edits(make(settings(retina: true, metalFX: true)), key: macDriverKey)
     let notEffective = edits(
-      make(GenshinLaunchSettings(retina: true, metalFX: true, customResolution: .init(width: 1920, height: 1080))),
+      make(settings(retina: true, metalFX: true, customResolution: .init(width: 1920, height: 1080))),
       key: macDriverKey)
 
     #expect(forced.first?.name == "RetinaMode")
@@ -155,7 +164,7 @@ private func edits(_ recipe: LaunchRecipe, key: String) -> [RegistryEdit] {
   }
 
   @Test func LCH_006_hdrOnSetsTheHdrDwordToOneAndRestoresItOnExit() {
-    let recipe = make(GenshinLaunchSettings(hdr: true))
+    let recipe = make(settings(hdr: true))
 
     #expect(
       edits(recipe, key: miHoYoKey) == [
@@ -164,7 +173,7 @@ private func edits(_ recipe: LaunchRecipe, key: String) -> [RegistryEdit] {
   }
 
   @Test func LCH_006_hdrOffDeletesTheHdrValueAndDoesNotRestoreIt() {
-    let recipe = make(GenshinLaunchSettings(hdr: false))
+    let recipe = make(settings(hdr: false))
 
     #expect(
       edits(recipe, key: miHoYoKey) == [
@@ -173,7 +182,7 @@ private func edits(_ recipe: LaunchRecipe, key: String) -> [RegistryEdit] {
   }
 
   @Test func LCH_007_customResolutionForcesWindowedModeWithWidthAndHeightAndRestoresOnExit() {
-    let recipe = make(GenshinLaunchSettings(customResolution: .init(width: 2560, height: 1600)))
+    let recipe = make(settings(customResolution: .init(width: 2560, height: 1600)))
 
     #expect(
       edits(recipe, key: miHoYoKey) == [
@@ -185,7 +194,7 @@ private func edits(_ recipe: LaunchRecipe, key: String) -> [RegistryEdit] {
   }
 
   @Test func LCH_007_noCustomResolutionMeansNoResolutionEditsAtAll() {
-    let recipe = make(GenshinLaunchSettings(hdr: true))
+    let recipe = make(settings(hdr: true))
 
     #expect(recipe.registry.contains { $0.name == hdrName })  // positive: registry was built
     for name in [fullscreenName, widthName, heightName] {
@@ -195,7 +204,7 @@ private func edits(_ recipe: LaunchRecipe, key: String) -> [RegistryEdit] {
 
   @Test func LCH_007_everythingOnGivesTheFullRegistryInMacDriverHdrResolutionOrder() {
     let recipe = make(
-      GenshinLaunchSettings(
+      settings(
         retina: true, leftCommandIsControl: true, hdr: true, customResolution: .init(width: 1920, height: 1080)))
 
     #expect(
@@ -262,7 +271,7 @@ private func edits(_ recipe: LaunchRecipe, key: String) -> [RegistryEdit] {
   @Test func LCH_008_outOfRangeResolutionIsSkippedWithoutTrapping() {
     for bad in [(-1, 1080), (1920, 0), (Int.max, 1080)] {
       let recipe = make(
-        .init(metalFX: true, customResolution: .init(width: bad.0, height: bad.1)))
+        settings(metalFX: true, customResolution: .init(width: bad.0, height: bad.1)))
       #expect(edits(recipe, key: miHoYoKey).filter { $0.name != hdrName }.isEmpty)
       #expect(recipe.environment["DXMT_METALFX_SPATIAL_SWAPCHAIN"] == "1")
     }
@@ -286,12 +295,11 @@ private func edits(_ recipe: LaunchRecipe, key: String) -> [RegistryEdit] {
     let expected = [
       "retina", "leftCommandIsControl", "metalHUD", "hdr", "metalFX", "customResolution", "proxyHost",
     ]
-    #expect(labels(GenshinLaunchSettings()) == expected)
     #expect(labels(LaunchOptions(gameDirectory: defaultGameDirectory)) == ["gameDirectory"] + expected)
   }
 
   @Test func CFG_024_theSteamPatchIsOnWhateverTheSettingsAre() {
-    for settings in [GenshinLaunchSettings(), GenshinLaunchSettings(hdr: true, metalFX: true)] {
+    for settings in [settings(), settings(hdr: true, metalFX: true)] {
       let recipe = make(settings)
       #expect(recipe.command.first == #"C:\windows\system32\steam.exe"#)
       #expect(recipe.prefixCopies.map(\.destination).contains("system32/steam.exe"))
@@ -301,11 +309,11 @@ private func edits(_ recipe: LaunchRecipe, key: String) -> [RegistryEdit] {
 
   @Test func CFG_027_theTimeoutFixIsOnWhateverTheSettingsAre() {
     #expect(make().environment["WINE_ENABLE_TIMEOUT_FIX"] == "1")
-    #expect(make(GenshinLaunchSettings(retina: true, metalHUD: true)).environment["WINE_ENABLE_TIMEOUT_FIX"] == "1")
+    #expect(make(settings(retina: true, metalHUD: true)).environment["WINE_ENABLE_TIMEOUT_FIX"] == "1")
   }
 
   @Test func CFG_019_theFrameRateCapIsFixedAt60WhateverTheSettingsAre() {
-    for settings in [GenshinLaunchSettings(), GenshinLaunchSettings(metalHUD: true, hdr: true, metalFX: true)] {
+    for settings in [settings(), settings(metalHUD: true, hdr: true, metalFX: true)] {
       #expect(make(settings).environment["DXMT_CONFIG"] == "d3d11.preferredMaxFrameRate=60;")
     }
   }

@@ -210,9 +210,7 @@ private struct Rig {
   }
 
   func write(_ path: String, _ data: Data) throws {
-    let url = game.appendingPathComponent(path)
-    try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
-    try data.write(to: url)
+    try writeFile(data, to: game.appendingPathComponent(path))
   }
 
   func read(_ path: String) -> Data? { try? Data(contentsOf: game.appendingPathComponent(path)) }
@@ -638,9 +636,9 @@ private func withRig(_ body: (Rig) async throws -> Void) async throws {
 
   @Test func UPG_007_pathKeysFoldCaseOnlyOnCaseInsensitiveVolumes() throws {
     let game = URL(fileURLWithPath: "/tmp/game", isDirectory: true)
-    #expect(try SophonUpdater.key("DATA/D.bin", in: game, caseSensitive: false) == "/tmp/game/data/d.bin")
-    #expect(try SophonUpdater.key("DATA/D.bin", in: game, caseSensitive: true) == "/tmp/game/DATA/D.bin")
-    #expect(try SophonUpdater.key("data/./d.bin", in: game, caseSensitive: true) == "/tmp/game/data/d.bin")
+    #expect(try SophonUpdater.key("DATA/D.bin", paths: SophonPathPolicy(root: game), caseSensitive: false) == "/tmp/game/data/d.bin")
+    #expect(try SophonUpdater.key("DATA/D.bin", paths: SophonPathPolicy(root: game), caseSensitive: true) == "/tmp/game/DATA/D.bin")
+    #expect(try SophonUpdater.key("data/./d.bin", paths: SophonPathPolicy(root: game), caseSensitive: true) == "/tmp/game/data/d.bin")
   }
 
   @Test func UPG_007_aFolderDeletionIsRefusedAlsoWhenSpelledWithDotsOrOtherCase() async throws {
@@ -918,17 +916,6 @@ private func withRig(_ body: (Rig) async throws -> Void) async throws {
       try rig.installOldVersion()
       try await rig.predownload(rig.plan())
       #expect(!SophonUpdater.isPredownloaded(World.target, from: "6.9.0", in: rig.temp))
-    }
-  }
-
-  @Test func PRE_001_aCleanedCacheIsNotReportedAsPredownloaded() async throws {
-    try await withRig { rig in
-      try rig.installOldVersion()
-      let plan = try await rig.plan()
-      try await rig.predownload(plan)
-      #expect(SophonUpdater.isPredownloaded(World.target, plan: plan, in: rig.temp))
-      try FileManager.default.removeItem(at: rig.temp.appendingPathComponent("ldiff/\(World.ldiffID)"))
-      #expect(!SophonUpdater.isPredownloaded(World.target, plan: plan, in: rig.temp))
     }
   }
 

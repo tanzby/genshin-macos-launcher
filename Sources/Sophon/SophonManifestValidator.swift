@@ -7,10 +7,11 @@ enum SophonManifestValidator {
     -> (chunkBase: String, targets: [(file: SophonFile, destination: URL)])
   {
     let chunkBase = try chunkBase(of: ref)
+    let paths = SophonPathPolicy(root: gameDirectory)
     var targets: [(file: SophonFile, destination: URL)] = []
     var seen: [String: String] = [:]  // standardised destination -> file MD5
     for file in files {
-      let destination = try SophonPathPolicy.resolve(file.path, in: gameDirectory)
+      let destination = try paths.resolve(file.path)
       if file.isDirectory { continue }
       // Every entry is checked, also a repeated path: only the first one is downloaded.
       for chunk in file.chunks {

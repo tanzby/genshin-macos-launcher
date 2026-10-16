@@ -57,7 +57,7 @@ extension LauncherError {
     case .client(.network): "Network error."
     case .client(.insufficientDiskSpace): "Not enough disk space."
     case .client(.verificationFailed): "File verification failed."
-    case .client(.cancelled): "Cancelled."
+    case .cancelled: "Cancelled."
     case .client(.brokenInstallation): "The game folder is damaged or is not the China release."
     case .client(.installDirectoryNotEmpty): "The folder is not empty. Choose an empty folder to install into."
     case .unexpected(let detail): "Unexpected error: \(detail)"

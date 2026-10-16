@@ -5,47 +5,16 @@ import TestSupport
 
 @testable import GenshinCN
 
-/// Answers every request of a session from a closure keyed by URL; counts requests per session.
-final class BackgroundStub: URLProtocol, @unchecked Sendable {
-  typealias Handler = @Sendable (URL) -> (status: Int, body: Data)?
-  private static let idHeader = "X-Stub-ID"
-  private static let lock = NSLock()
-  nonisolated(unsafe) private static var handlers: [String: Handler] = [:]
-  nonisolated(unsafe) private static var seenURLs: [String: [URL]] = [:]
-
-  static func session(_ handler: @escaping Handler) -> (URLSession, String) {
-    let id = UUID().uuidString
-    lock.withLock { handlers[id] = handler }
-    let configuration = URLSessionConfiguration.ephemeral
-    configuration.protocolClasses = [BackgroundStub.self]
-    configuration.httpAdditionalHeaders = [idHeader: id]
-    return (URLSession(configuration: configuration), id)
+/// `StubURLProtocol` keyed by URL; a `nil` reply fails the request as if offline.
+enum BackgroundStub {
+  static func session(_ handler: @escaping @Sendable (URL) -> (status: Int, body: Data)?) -> (URLSession, String) {
+    StubURLProtocol.session { request in
+      guard let reply = handler(request.url!) else { throw URLError(.notConnectedToInternet) }
+      return reply
+    }
   }
 
-  static func seen(_ id: String) -> [URL] { lock.withLock { seenURLs[id] ?? [] } }
-
-  override class func canInit(with request: URLRequest) -> Bool { true }
-  override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
-
-  override func startLoading() {
-    let id = request.value(forHTTPHeaderField: Self.idHeader) ?? ""
-    let url = request.url!
-    let handler = Self.lock.withLock { () -> Handler? in
-      Self.seenURLs[id, default: []].append(url)
-      return Self.handlers[id]
-    }
-    guard let reply = handler?(url) else {
-      client?.urlProtocol(self, didFailWithError: URLError(.notConnectedToInternet))
-      return
-    }
-    let response = HTTPURLResponse(
-      url: url, statusCode: reply.status, httpVersion: "HTTP/1.1", headerFields: nil)!
-    client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
-    client?.urlProtocol(self, didLoad: reply.body)
-    client?.urlProtocolDidFinishLoading(self)
-  }
-
-  override func stopLoading() {}
+  static func seen(_ id: String) -> [URL] { StubURLProtocol.seen(id).compactMap(\.url) }
 }
 
 @Suite struct BackgroundImageProviderTests {

@@ -165,23 +165,6 @@ final class Counter: @unchecked Sendable {
   var value: Int { lock.withLock { count } }
 }
 
-@Suite struct LaunchSettingsMappingTests {
-  @Test func LCH_004_launchOptionsMapOneToOneOntoTheRecipeSettings() {
-    let options = LaunchOptions(
-      gameDirectory: URL(filePath: "/Games/GI"), retina: true, leftCommandIsControl: true, metalHUD: true, hdr: true,
-      metalFX: true, customResolution: .init(width: 2560, height: 1440), proxyHost: "localhost:8080")
-
-    let settings = GenshinLaunchSettings(options)
-
-    #expect(
-      settings
-        == GenshinLaunchSettings(
-          retina: true, leftCommandIsControl: true, metalHUD: true, hdr: true, metalFX: true,
-          customResolution: .init(width: 2560, height: 1440), proxyHost: "localhost:8080"))
-    #expect(GenshinLaunchSettings(LaunchOptions(gameDirectory: URL(filePath: "/g"))) == GenshinLaunchSettings())
-  }
-}
-
 @Suite struct ClientErrorMappingTests {
   @Test func INS_005_theTemporaryFolderOfTheSophonGameIsTheOneTheLauncherRecordsItsJobIn() {
     #expect(GenshinCN.sophonGame.tempDirectoryName == ".genshin-launcher-tmp")
@@ -214,50 +197,6 @@ final class Counter: @unchecked Sendable {
     #expect(GenshinCNClient.map(SophonError.installDirectoryNotEmpty) as? GameClientError == .installDirectoryNotEmpty)
     #expect(GenshinCNClient.map(SophonError.noUpdate) as? SophonError == .noUpdate)
   }
-}
-
-@Suite struct JobSerializerTests {
-  @Test func ADR0002_aNewJobStartsOnlyAfterTheCancelledOneHasReallyStopped() async throws {
-    let serializer = JobSerializer()
-    let log = Log()
-    let first = serializer.enqueue {
-      await log.add("first:start")
-      // Stops late, like a download worker finishing its file.
-      while !Task.isCancelled { try? await Task.sleep(for: .milliseconds(2)) }
-      try? await Task.sleep(for: .milliseconds(60))
-      await log.add("first:stopped")
-    }
-    try await Task.sleep(for: .milliseconds(20))
-    first.cancel()
-    let second = serializer.enqueue { await log.add("second:start") }
-
-    await second.value
-
-    #expect(await log.entries == ["first:start", "first:stopped", "second:start"])
-  }
-
-  @Test func ADR0002_waitUntilIdleReturnsOnlyAfterQueuedWorkHasFinished() async {
-    let serializer = JobSerializer()
-    let log = Log()
-    serializer.enqueue {
-      try? await Task.sleep(for: .milliseconds(80))
-      await log.add("work:done")
-    }
-
-    await serializer.waitUntilIdle()
-    await log.add("idle")
-
-    #expect(await log.entries == ["work:done", "idle"])
-  }
-
-  @Test func ADR0002_waitUntilIdleWithNothingQueuedReturnsAtOnce() async {
-    await JobSerializer().waitUntilIdle()
-  }
-}
-
-actor Log {
-  private(set) var entries: [String] = []
-  func add(_ entry: String) { entries.append(entry) }
 }
 
 @Suite struct BundledHelpersTests {

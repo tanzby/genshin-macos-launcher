@@ -39,7 +39,7 @@ x86_64 helper（XcodeGen target，放进 Contents/Helpers/）: GenshinLauncherWi
 protocol GameClient: Sendable {
   func status(in directory: URL?) async throws -> GameStatus     // 本地版本、远端版本、可更新、可预下载；离线时 remoteVersion 为 nil
   func requiredDiskSpace(for job: GameJob, in directory: URL) async throws -> Int64 // 解压后要写入的字节数；Launcher 加余量后与剩余空间比较
-  func run(_ job: GameJob, in directory: URL) -> AsyncThrowingStream<JobProgress, Error>   // install / update / preDownload / repair
+  func run(_ job: GameJob, in directory: URL, progress: @escaping @Sendable (JobProgress) -> Void) async throws   // install / update / preDownload / repair
   func launch(_ options: LaunchOptions, onStarted: @escaping @Sendable () -> Void) async throws -> LaunchOutcome
   func backgroundImage() async -> BackgroundImage                // 失败不致命，返回内置默认图
 }
@@ -48,7 +48,8 @@ protocol GameClient: Sendable {
 - **修订（票 #13，实现 `LauncherModel` 时发现原协议不够）：** ① `requiredDiskSpace(for:)`：磁盘空间检查（#28 A4）需要只有客户端知道的大小（安装：解压后总大小；更新和预下载：下载量加新文件），`Launcher` 负责加 chunk 临时空间余量、与剩余空间比较，并在 `LauncherError.insufficientDiskSpace(required:available:)` 里带上差额。② `launch` 增加 `onStarted` 回调：120 秒启动超时（#28 15）要知道「游戏进程是否已出现」，只返回最终结果的 `async -> LaunchOutcome` 表达不了。超时时 `Launcher` 取消 launch 的 Task 并等它返回，客户端在取消路径上必须还原 Launch Mutations 并杀 prefix（清理按上文放在不受取消影响的上下文里）。
 - **修订（架构评审 #4，2026-10-14）：** 启动超时只在 `GameSession` 里（120 秒，超时即取消、关 prefix、还原 Launch Mutations）。票 #13 为 `Launcher` 一侧的超时加了 `onStarted`，但 `GameSession` 已经有同样的看门狗和更完整的清理，两个 120 秒计时器会互相竞争，还把原因在 `GenshinCNClient` 里丢掉。现在 `LaunchOutcome` 多一个 `startupTimedOut`，`LauncherModel` 把它映射成 `launchTimeout`；`LauncherModel` 的计时器、`sleep`/`launchTimeout` 注入和 `LaunchGate` 删除。`onStarted` 保留，但只用于 launching → running 的相位切换，不再参与超时判定。
 - **修订（架构评审 2026-10-14）：** 客户端不持有游戏目录。读目录的操作（`status`、`requiredDiskSpace`、`run`）都把它当参数传入（`launch` 本来就经 `LaunchOptions.gameDirectory`），去掉了 `setGameDirectory` 及其「每次调用前必须先设置」的时序约定。`LauncherModel` 的目录由注入的只读闭包提供（生产环境读 `SettingsModel`），不再被推送副本。
-- 错误分类：`GameClientError` 分为网络、磁盘空间不足、校验失败、已取消、需要重装 Wine。`Launcher` 据此决定重试、提示或引导。
+- 错误分类：`GameClientError` 分为网络、磁盘空间不足、校验失败、需要重装 Wine。`Launcher` 据此决定重试、提示或引导。取消不是错误分类：客户端抛 `CancellationError`，`Launcher` 用 `Error.isCancellation`（也认 `URLError.cancelled`）把它算作暂停，不显示错误。Sophon 不依赖 Platform，它的重试与错误映射各自识别这两种取消。
+- 修复的磁盘预检要先下载清单才能算大小。`SophonClient` 把这份清单交给紧接着的 `run(.repair)`（按清单 ref 匹配、取一次即清空），不再下载第二次；没有匹配的交接时 `repair` 照常自己下载，所以顺序只影响速度，不影响结果。
 - `LaunchOutcome`：正常退出、非零退出（带退出码和日志路径）、启动失败、启动超时。
 
 保留这个协议是维护者的有意预留（现在只有原神 CN 一个实现）。第二个游戏出现时，以此为起点。
@@ -56,20 +57,20 @@ protocol GameClient: Sendable {
 ## 状态与并发
 
 - 领域库（`Sophon`、`Wine`、`Platform`、`GenshinCN`）不 import Observation / SwiftUI。共享可变状态放 actor，对外只给 async 函数和 `AsyncStream`。
-- `Launcher` 里一个 `@MainActor @Observable LauncherModel` 是主窗口的唯一事实来源，进程内只有一份，在组合根创建并通过 `.environment` 注入。主按钮状态是纯函数 `PrimaryAction.derive(snapshot)`，单独测试。
+- `Launcher` 里一个 `@MainActor @Observable LauncherModel` 是主窗口的唯一事实来源，进程内只有一份，在组合根创建并通过 `.environment` 注入。`/etc/hosts` 的状态由一个 `HostsModel` 持有，`OnboardingModel` 与 `LauncherModel` 共用同一个实例，不再各存一份。主按钮状态是纯函数 `PrimaryAction.derive(snapshot)`，单独测试。
 - 设置是另一个 `@MainActor @Observable SettingsModel`，类型化属性、`didSet` 写入。领域库不读 `UserDefaults`：`Launcher` 启动游戏时把设置快照成值类型 `LaunchOptions` 传入。
 - **作业并发（`JobCoordinator`）**：独占作业同时只有一个（Wine 准备、install、update、repair、launch）。预下载可以与启动、运行中重叠（#21 已定：预下载中主按钮仍是「开始游戏」；预下载只写临时目录，不碰游戏文件）。预下载与 install、update、repair 共用同一个游戏目录里的临时目录，所以它们互斥：开始其中任何一个，都先取消预下载并等它停稳（update 会复用已缓存的内容）。退出 App 时有进行中的作业，取消并保存「未完成作业」。游戏运行中退出启动器，先确认，确认后走 shutdown。
 
 ## 暂停、继续与进度
 
 - **暂停 = 取消 Task，继续 = 用同样参数重跑同一个操作。** 每个 Sophon 操作幂等。断点就是磁盘上已有的东西：完整 chunk 缓存、已校验的文件、已下完的 ldiff。不维护 chunk 级进度日志，继续时开头有一次磁盘扫描，是接受的代价。唯一持久化的是「有一个未完成作业（种类 + 目标版本）」，存在 `<game>/.genshin-launcher-tmp/job.json`，重启后主按钮据此显示「继续」。
-- **取消必须等停稳。** `JobCoordinator` 持有作业的 Task：暂停是 cancel 之后 `await task.value`，作业真正停下后才允许重跑，等待期间 UI 显示「正在暂停…」。`AsyncThrowingStream` 用 `onTermination` 取消内部 Task。zstd 解压、MD5、HDiffPatch 是阻塞的 C 调用，不占协作线程池，放在专用队列执行；在文件边界和 HPatch 输入流的读回调处检查取消（读回调能否作为中断点，由 Sophon 实现票验证）。
+- **取消必须等停稳。** `JobCoordinator` 持有作业的 Task：暂停是 cancel 之后 `await task.value`，作业真正停下后才允许重跑，等待期间 UI 显示「正在暂停…」。作业在槽位的 Task 里直接 `await client.run(...)`（修订，跨模块整理 2026-10-15：此前 `run` 返回流，靠 `onTermination`、`quiesce()` 与 `JobSerializer` 补偿「流结束了但工作还在跑」；现在取消是结构化的，`run` 返回即工作已停）。zstd 解压、MD5、HDiffPatch 是阻塞的 C 调用，不占协作线程池，放在专用队列执行；在文件边界和 HPatch 输入流的读回调处检查取消（读回调能否作为中断点，由 Sophon 实现票验证）。
 - **「已完成」的判据**：续传时，目标文件大小一致即跳过（与 TS 一致）；整文件 MD5 只在 `repair(reliable)` 做。`config.ini` 的版本号在下完并校验之后才写。
 - **安装的前置条件**：目录为空，或只含 `.genshin-launcher-tmp`（带 `job.json`）和中断安装留下的半成品。TS 的「必须为空」与幂等重跑冲突，因此放宽。
 - **Wine 准备不是持久化的 Pending Job。** 它发生在游戏目录存在之前，状态由 `<data>/wine/` 的版本戳推导：版本戳缺失或与固定版本不一致，就重新准备（下载走 `Downloader` 的 Range 续传，半成品留在 `<destination>.part`）。只有游戏作业（install、update、preDownload、repair）写 `job.json`。`LauncherModel` 通过 `WinePreparing` 缝（生产实现 `WineRuntime`，测试用 Fake）把它接进状态机：`LauncherPhase.preparingWine` 占用独占槽，暂停 = 取消并等停稳，出错回空闲、`primaryAction == .prepareWine`、可重试；Wine 未就绪时 install、update、repair、预下载和启动都返回 `wineNotReady`。`bootstrap()` 按启动顺序先准备 Wine，就绪后才读取游戏状态。
 - **长作业与睡眠**：下载、更新、修复期间持有 `ProcessInfo.beginActivity`，避免 App Nap 和空闲睡眠打断。
-- **进度**：`Sophon` 对外只暴露收窄枚举 `SophonProgress`（`preparing`、`downloading(done,total)`、`verifying(done,total)`、`patching(done,total)`、`finalizing`）。操作形状是 `SophonClient.run(_:in:progress:) async throws`（修订，架构评审 2026-10-14：不返回流，进度走闭包；排队与流在 `GenshinCNClient` 里，它把闭包接到 `AsyncThrowingStream<JobProgress, Error>`，并串行化作业），取消语义见下。生产端限流，每秒最多 4 条。速度和剩余时间由 `Launcher` 用滑动窗口计算，`Sophon` 不算。`Platform` 的下载（Wine 与 DXMT）有自己的进度类型，`Launcher` 把它们和 `SophonProgress` 一起映射成统一的 `JobProgress`。
-- **Sophon 接口**（修订，架构评审 2026-10-14）：`SophonClient` 是 Sophon 的唯一入口，端到端持有 Job。`status(in:) -> SophonStatus`（已装版本、最新版本、可更新、预下载版本、可预下载；分支为 null 的预下载是 `nil`，不是异常；离线时远端为空）、`requiredDiskSpace(for:in:)`、`run(_:in:progress:)`。install / update / repair / preDownload 的顺序（INS-006 等）、ldiff 与整体同步的分支、「已预下载」的判定都只在这里写一次；一个 `SophonDownloader` 由 `SophonUpdater` 共用。游戏相关的事实由调用方以值类型 `SophonGame` 传入（端点与 game_id、数据目录名、可执行文件名、外服构建标记如 `PCGameSDK.dll`、临时目录名，以及启动移走文件的自愈钩子），Sophon 里没有任何 `YuanShen` 字样；`GenshinCN` 从自己的常量构造它。原先的 `SophonClient` 协议、`onlineInfo()` 与 `SophonOnlineInfo` 删除（只有测试用到）。已装版本检测（`globalgamemanagers` 正则与 `config.ini` 取较小值）也在 `Sophon`，因为 `config.ini` 由它写。
+- **进度**：`Sophon` 对外只暴露收窄枚举 `SophonProgress`（`preparing`、`downloading(done,total)`、`verifying(done,total)`、`patching(done,total)`、`finalizing`）。操作形状是 `SophonClient.run(_:in:progress:) async throws`（修订，架构评审 2026-10-14：不返回流，进度走闭包；`GameClient.run` 同样形状，`GenshinCNClient` 只把 `SophonProgress` 映射成 `JobProgress`，作业的先后由 `JobCoordinator` 的槽位决定），取消语义见下。生产端限流，每秒最多 4 条。速度和剩余时间由 `Launcher` 用滑动窗口计算，`Sophon` 不算。`Platform` 的下载（Wine 与 DXMT）有自己的进度类型，`Launcher` 把它们和 `SophonProgress` 一起映射成统一的 `JobProgress`。
+- **Sophon 接口**（修订，架构评审 2026-10-14）：`SophonClient` 是 Sophon 的唯一入口，端到端持有 Job。`status(in:) -> SophonStatus`（已装版本、最新版本、可更新、预下载版本、可预下载；分支为 null 的预下载是 `nil`，不是异常；离线时远端为空）、`requiredDiskSpace(for:in:)`、`run(_:in:progress:)`。install / update / repair / preDownload 的顺序（INS-006 等）、ldiff 与整体同步的分支、「已预下载」的判定都只在这里写一次；一个 `SophonDownloader` 由 `SophonUpdater` 共用。游戏相关的事实由调用方以值类型 `SophonGame` 传入（端点与 game_id、数据目录名、可执行文件名、外服构建标记如 `PCGameSDK.dll`、临时目录名），Sophon 里没有任何 `YuanShen` 字样；`GenshinCN` 从自己的常量构造它。原先的 `SophonClient` 协议、`onlineInfo()` 与 `SophonOnlineInfo` 删除（只有测试用到）。已装版本检测（`globalgamemanagers` 正则与 `config.ini` 取较小值）也在 `Sophon`，因为 `config.ini` 由它写。
 - **临时目录**：`<game>/.genshin-launcher-tmp`（名字只在 `Launcher` 的 `PendingJobStore.directoryName` 定义一处，`GenshinCN` 把它放进 `SophonGame`；`Sophon` 不依赖 `Launcher`。内容：chunk 缓存、ldiff、组装中文件、`job.json`）。放在游戏目录内，是因为游戏目录可能在外置盘，只有同卷才能原子 rename 移入。TS 的位置也是游戏目录内（`.tmp`、`ldiff`），这里换新名字，并在 Sophon 首次运行时删掉遗留的 `<game>/.tmp` 和 `<game>/ldiff`，但只在该目录里存在 `config.ini` 或 `YuanShen.exe`（即确认是游戏目录）时才删。文件名用完整相对路径，修掉 TS 里按 basename 命名导致撞名的问题。
 
 ## 存储、清场与提权
@@ -88,7 +89,7 @@ protocol GameClient: Sendable {
 ## Wine 与启动会话
 
 - `Wine` 对外两个东西。`WineRuntime`（actor）：确保已安装固定版本（Wine 与 DXMT 在同一次安装里一起装好）、重装、prefix 初始化、shutdown。`GameSession`：`launch(recipe:game:)` 一次调用里执行 `LaunchRecipe`：写注册表、Launch Mutations、启动、等待退出、清理。**清理不放 `defer`**：它是异步的（`wineserver -w`、15 秒竞速、`reg delete`），已取消的 Task 里子 await 会立即抛错，所以清理跑在不受取消影响、不抛错的独立上下文里，错误只记日志。
-- **崩溃恢复**：改动前先写 mutations journal（数据目录里的小文件，记录要还原的文件改名和注册表原值），正常还原后删除。`Launcher` 启动时调用 `GameSession.recover()`（见启动顺序）重放 journal，取代 TS 的 `patched` 标记。重放按磁盘的实际状态逐项幂等；`.bak` 与原文件并存时，原文件优先（修复可能重新下载了原版）：改名前删除过期的 `.bak`，还原时丢弃 `.bak`（架构评审 #6 修订：此前写作「拒绝覆盖」，与代码不符）；journal 是唯一的还原机制，没有按固定文件名扫描 `.bak` 的第二套逻辑；修复/更新前由 `GenshinCNClient` 先调用 `recover()`；DXMT 不在其中：它在安装 Wine 时一次装好，运行时不注入、不还原，所以没有「崩溃丢原版 DLL」；注册表项记录原值，或「原本不存在」。这样「异常退出时是否撤销 HDR / 分辨率注册表」只是 #28 可以直接选的策略，不再是架构问题。
+- **崩溃恢复**：改动前先写 mutations journal（数据目录里的小文件，记录要还原的文件改名和注册表原值），正常还原后删除。`Launcher` 启动时调用 `GameSession.recover()`（见启动顺序）重放 journal，取代 TS 的 `patched` 标记。重放按磁盘的实际状态逐项幂等；`.bak` 与原文件并存时，原文件优先（修复可能重新下载了原版）：改名前删除过期的 `.bak`，还原时丢弃 `.bak`（架构评审 #6 修订：此前写作「拒绝覆盖」，与代码不符）；journal 是唯一的还原机制，没有按固定文件名扫描 `.bak` 的第二套逻辑。`recover()` 只有一个实现，有三个调用点，各守一个前提（跨模块整理 2026-10-15 核对，均保留）：① `Launcher` 启动时，处理上次崩溃，并在读游戏状态前清掉孤儿进程；② 修复/更新前由 `GenshinCNClient` 调用：`restore()` 部分失败时 journal 会留下，同一进程里之后的修复/更新仍须先把原文件放回（LCH-014）；③ `GameSession` 每次启动前：清场（LCH-003，例如 Wine 命令提示符留下的进程），并在读注册表原值前重放残留 journal（LCH-038）。pre-download 不调用，它可能与运行中的游戏并行；DXMT 不在其中：它在安装 Wine 时一次装好，运行时不注入、不还原，所以没有「崩溃丢原版 DLL」；注册表项记录原值，或「原本不存在」。这样「异常退出时是否撤销 HDR / 分辨率注册表」只是 #28 可以直接选的策略，不再是架构问题。
 - Game Mode、全屏、刘海区域全在注入 Wine 的 x86_64 shim 与 dylib 里，Swift 不重写；`Wine` 只负责准备 `GenshinLauncherGame.app`、`codesign`、`LSRegisterURL` 和传四个 `GENSHIN_LAUNCHER_GAME_HOST*` 环境变量。
 
 ## 测试缝

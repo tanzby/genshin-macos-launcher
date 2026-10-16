@@ -15,15 +15,14 @@ extension GameSession: GameLaunching {}
 
 /// Composes Sophon, Wine and Platform into the `GameClient` for Genshin Impact, China server.
 ///
-/// The client holds no game folder: each operation gets it as a parameter. `run(_:in:)` jobs are serialized: a job starts only after the
-/// previous one, paused or not, has really returned.
+/// The client holds no game folder: each operation gets it as a parameter. It does not order jobs: the launcher's job
+/// slots do (`JobCoordinator`), and `run` returns only after its work has stopped.
 public final class GenshinCNClient: GameClient {
   let dataDirectory: URL
   let protonExtras: URL
   let launcher: any GameLaunching
   let sophon: SophonClient
   let background: BackgroundImageProvider?
-  let serializer = JobSerializer()
 
   package init(
     dataDirectory: URL,
@@ -74,8 +73,6 @@ public final class GenshinCNClient: GameClient {
   /// `GameSession.recover()` for the launcher's startup sequence (`StartupSteps.recoverSession`).
   public func recover() async { await launcher.recover() }
 
-  public func quiesce() async { await serializer.waitUntilIdle() }
-
   // MARK: - Status
 
   public func status(in directory: URL?) async throws -> GameStatus {
@@ -117,8 +114,7 @@ public final class GenshinCNClient: GameClient {
 
   private func recipe(for options: LaunchOptions) -> LaunchRecipe {
     GenshinLaunchRecipe.make(
-      settings: GenshinLaunchSettings(options), gameDirectory: options.gameDirectory, dataDirectory: dataDirectory,
-      protonExtras: protonExtras)
+      options: options, dataDirectory: dataDirectory, protonExtras: protonExtras)
   }
 
   /// The official launcher picture (APP-021); without a provider (tests) the bundled one.
@@ -131,9 +127,7 @@ public final class GenshinCNClient: GameClient {
   /// Translates module errors into the ones the launcher knows (`GameClientError`).
   static func map(_ error: any Error) -> any Error {
     switch error {
-    case is CancellationError:
-      return error
-    case let error as URLError where error.code == .cancelled:
+    case _ where error.isCancellation:
       return CancellationError()
     case _ where SophonError.isOffline(error):
       return GameClientError.network

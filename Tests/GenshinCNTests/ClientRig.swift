@@ -103,9 +103,7 @@ final class ClientRig: @unchecked Sendable {
   func url(_ path: String) -> URL { game.appending(path: path) }
 
   func write(_ path: String, _ data: Data) {
-    try! FileManager.default.createDirectory(
-      at: url(path).deletingLastPathComponent(), withIntermediateDirectories: true)
-    try! data.write(to: url(path))
+    try! writeFile(data, to: url(path))
   }
 
   func exists(_ path: String) -> Bool { FileManager.default.fileExists(atPath: url(path).path) }

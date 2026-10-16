@@ -13,9 +13,9 @@ name: DXMT
 on:
   push:
     branches: [main]
-    paths: [third_party/dxmt, scripts/build-dxmt, .github/workflows/dxmt.yaml]
+    paths: [third_party/dxmt, scripts/build-dxmt, scripts/dxmt-files, .github/workflows/dxmt.yaml]
   pull_request:
-    paths: [third_party/dxmt, scripts/build-dxmt, .github/workflows/dxmt.yaml]
+    paths: [third_party/dxmt, scripts/build-dxmt, scripts/dxmt-files, .github/workflows/dxmt.yaml]
   schedule:
     - cron: "17 3 * * 1"
   workflow_call:
@@ -47,7 +47,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: build/dxmt
-          key: dxmt-output-${{ steps.pin.outputs.commit }}-${{ hashFiles('scripts/build-dxmt') }}-xcode16.1
+          key: dxmt-output-${{ steps.pin.outputs.commit }}-${{ hashFiles('scripts/build-dxmt', 'scripts/dxmt-files') }}-xcode16.1
 
       # The weekly run restores it too, so it is not evicted while a cached build keeps the other one in use.
       - name: Cache LLVM 15 (x86_64)
@@ -71,8 +71,7 @@ jobs:
         run: |
           set -eu
           out=build/dxmt
-          for f in x86_64-windows/d3d10core.dll x86_64-windows/d3d11.dll x86_64-windows/dxgi.dll \
-                   x86_64-windows/winemetal.dll x86_64-unix/winemetal.so VERSION COPYING.LIB LICENSE.LLVM; do
+          for f in $(grep -v '^#' scripts/dxmt-files); do
             test -s "$out/$f" || { echo "::error::missing $out/$f"; exit 1; }
           done
           test "$(lipo -archs "$out/x86_64-unix/winemetal.so")" = x86_64

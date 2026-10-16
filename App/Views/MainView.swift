@@ -1,5 +1,4 @@
 import AppKit
-import GenshinCN
 import Launcher
 import SwiftUI
 
@@ -24,30 +23,21 @@ struct MainView: View {
     }
     .task { if !drivenByAutoLaunch { await controller.refresh() } }
     .task { background = await backgroundProvider() }
-    .task {
-      for await event in controller.launcher.events { await notifier.handle(event) }
-    }
-    .modifier(LauncherObservers(notifier: notifier, drivenByAutoLaunch: drivenByAutoLaunch))
+    .task { await controller.deliverNotifications(to: notifier) }
+    .modifier(LauncherObservers(drivenByAutoLaunch: drivenByAutoLaunch))
     .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
       if !drivenByAutoLaunch { Task { await controller.refreshWhenIdle() } }
     }
   }
 }
 
-/// The `onChange` handlers that follow the launcher. They live in their own modifier so that the progress
-/// ticks (several a second) invalidate this body only, not `MainView.body` with its background, capsule and sheet.
+/// The `onChange` handlers that follow the settings, in their own modifier so they invalidate this body only.
 private struct LauncherObservers: ViewModifier {
   @Environment(MainController.self) private var controller
-  @Environment(ProgressMeter.self) private var meter
-  let notifier: EventNotifier
   let drivenByAutoLaunch: Bool
 
   func body(content: Content) -> some View {
     content
-      .onChange(of: controller.launcher.status) { _, status in
-        Task { await notifier.observe(status: status) }
-      }
-      .onChange(of: controller.launcher.progress) { _, progress in meter.update(progress) }
       .onChange(of: controller.settings.gameDirectory) { _, _ in
         if !drivenByAutoLaunch { Task { await controller.refresh() } }
       }
@@ -67,9 +57,7 @@ enum GameFolderPicker {
     panel.message = String(localized: "Choose an empty folder to install the game into, or the folder of an existing installation.")
     while panel.runModal() == .OK, let url = panel.url {
       do {
-        _ = try GameDirectoryValidator.validate(
-          url, gameExecutable: GenshinCN.executableName, isSupportedPath: GenshinLaunchRecipe.isSupported)
-        controller.onboarding.useGameDirectory(url)
+        try controller.onboarding.chooseGameDirectory(url)
         return true
       } catch let problem as GameDirectoryProblem {
         let alert = NSAlert()

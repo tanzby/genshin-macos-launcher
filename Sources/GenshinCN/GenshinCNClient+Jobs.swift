@@ -5,24 +5,17 @@ import Sophon
 extension GenshinCNClient {
   // MARK: - Running jobs
 
-  public func run(_ job: GameJob, in directory: URL) -> AsyncThrowingStream<JobProgress, Error> {
-    let (stream, continuation) = AsyncThrowingStream<JobProgress, Error>.makeStream()
-    let task = serializer.enqueue { [self] in
+  public func run(
+    _ job: GameJob, in directory: URL, progress: @escaping @Sendable (JobProgress) -> Void
+  ) async throws {
+    do {
       // Paused before it began: do not touch the disk at all.
-      if Task.isCancelled {
-        continuation.finish(throwing: CancellationError())
-        return
-      }
-      do {
-        try await recoverIfGameFilesAreTouched(by: job)
-        try await sophon.run(Self.sophonJob(job), in: directory) { continuation.yield(Self.jobProgress($0)) }
-        continuation.finish()
-      } catch {
-        continuation.finish(throwing: Self.map(error))
-      }
+      try Task.checkCancellation()
+      try await recoverIfGameFilesAreTouched(by: job)
+      try await sophon.run(Self.sophonJob(job), in: directory) { progress(Self.jobProgress($0)) }
+    } catch {
+      throw Self.map(error)
     }
-    continuation.onTermination = { _ in task.cancel() }
-    return stream
   }
 
   /// Repair and update verify or patch the game's files, so files a crashed launch left aside must be back first. The

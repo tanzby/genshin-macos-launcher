@@ -25,10 +25,14 @@ struct AppRuntime {
     let client = GenshinCNClient.bundled(wine: wine, dataDirectory: data, bundle: .main)
     let settings = SettingsModel()
     let hosts = GenshinCN.hostsBlocklist()
-    let onboarding = OnboardingModel(hosts: hosts, settings: settings)
+    let hostsModel = HostsModel(hosts)
+    let onboarding = OnboardingModel(
+      hosts: hostsModel, settings: settings,
+      gameDirectoryRules: GameDirectoryRules(
+        gameExecutable: GenshinCN.executableName, isSupportedPath: GenshinLaunchRecipe.isSupported))
     // A diagnostic run names its own game folder; it must not touch the one saved in the real preferences.
     let launcher = LauncherModel(
-      client: client, wine: wine, hosts: hosts,
+      client: client, wine: wine, hosts: hostsModel,
       startup: StartupSteps(
         rosettaInstalled: { StartupSteps.isRosettaInstalled() }, recoverSession: { await client.recover() }),
       gameDirectorySource: { autoLaunch.gameDirectory(saved: settings.gameDirectory) })
@@ -44,7 +48,6 @@ struct AppRuntime {
 @main
 struct GenshinLauncherApp: App {
   @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
-  @State private var meter = ProgressMeter()
   private let runtime: AppRuntime?
   private let startupFailure: DataDirectoryFailure?
   private let autoLaunch = AutoLaunchOptions.current
@@ -107,7 +110,7 @@ struct GenshinLauncherApp: App {
           notifier: runtime.notifier, drivenByAutoLaunch: autoLaunch.enabled,
           backgroundProvider: { await runtime.client.backgroundImage() })
           .environment(runtime.controller)
-          .environment(meter)
+          .environment(runtime.controller.launcher.meter)
           .task { await runAutoLaunch(runtime) }
       } else if let startupFailure {
         DataDirectoryFailureView(failure: startupFailure)

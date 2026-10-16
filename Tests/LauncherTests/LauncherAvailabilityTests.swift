@@ -14,7 +14,7 @@ private func makeModel(
   hosts: FakeHosts = FakeHosts(.current), gameDirectory: URL? = temporaryURL("LauncherAvailability")
 ) async -> (LauncherModel, FakeGameClient, FakeHosts) {
   let fake = FakeGameClient(status: status)
-  let model = LauncherModel(client: fake, hosts: hosts, gameDirectory: gameDirectory, chunkTempMargin: 0)
+  let model = LauncherModel(client: fake, hosts: HostsModel(hosts), gameDirectory: gameDirectory, chunkTempMargin: 0)
   await model.refresh()
   return (model, fake, hosts)
 }
@@ -83,6 +83,15 @@ private func makeModel(
     #expect(model.refusal(for: .start(.preDownload)) == .offline)
     await #expect(throws: LauncherError.offline) { try await model.start(.preDownload) }
     #expect(fake.runs.isEmpty)
+  }
+
+  @Test func APP_010_installUpdateAndResumeAreRefusedOffline() async {
+    let (empty, fake, _) = await makeModel(status: GameStatus(remoteVersion: nil))
+    #expect(empty.refusal(for: .start(.install)) == .offline)
+    await #expect(throws: LauncherError.offline) { try await empty.start(.install) }
+    #expect(fake.runs.isEmpty)
+    let (outdated, _, _) = await makeModel(status: GameStatus(localVersion: "4.9.0", remoteVersion: nil))
+    #expect(outdated.refusal(for: .start(.update)) == .offline)
   }
 
   @Test func APP_010_launchIsRefusedOffline() async {

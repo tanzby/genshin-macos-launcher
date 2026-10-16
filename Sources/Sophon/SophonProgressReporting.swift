@@ -16,8 +16,17 @@ final class ChunkProgress: @unchecked Sendable {
   }
 }
 
-/// Counts compressed bytes and forwards `.downloading` at most once per interval.
+/// Counts bytes from many workers and forwards them at most once per interval: compressed bytes as `.downloading`,
+/// checked bytes as `.verifying`.
 final class ProgressReporter: @unchecked Sendable {
+  enum Kind: Sendable {
+    /// The first bytes are reported at once.
+    case downloading
+    /// The caller has just reported `.verifying(done: 0, …)` itself, so the first report waits an interval.
+    case verifying
+  }
+
+  private let kind: Kind
   private let total: Int64
   private let interval: Duration
   private let report: @Sendable (SophonProgress) -> Void
@@ -25,12 +34,15 @@ final class ProgressReporter: @unchecked Sendable {
   private var done: Int64 = 0
   private var last: ContinuousClock.Instant?
 
-  init(total: Int64, interval: Duration, report: @escaping @Sendable (SophonProgress) -> Void) {
+  init(_ kind: Kind, total: Int64, interval: Duration, report: @escaping @Sendable (SophonProgress) -> Void) {
+    self.kind = kind
     self.total = total
     self.interval = interval
     self.report = report
+    if kind == .verifying { last = .now }
   }
 
+  /// `bytes` may be negative (a chunk thrown away); the count stays within 0...total.
   func add(_ bytes: Int64) {
     // The callback runs under the lock so reports reach the caller in the order they were made.
     lock.withLock {
@@ -38,7 +50,10 @@ final class ProgressReporter: @unchecked Sendable {
       let now = ContinuousClock.now
       if let last, now - last < interval { return }
       last = now
-      report(.downloading(done: done, total: total))
+      switch kind {
+      case .downloading: report(.downloading(done: done, total: total))
+      case .verifying: report(.verifying(done: done, total: total))
+      }
     }
   }
 
@@ -46,30 +61,4 @@ final class ProgressReporter: @unchecked Sendable {
   func finish(_ event: SophonProgress) { lock.withLock { report(event) } }
 
   func chunkProgress() -> ChunkProgress { ChunkProgress(reporter: self) }
-}
-
-/// Thread-safe, throttled `.verifying` reporter.
-final class VerifyCounter: @unchecked Sendable {
-  private let total: Int64
-  private let interval: Duration
-  private let report: @Sendable (SophonProgress) -> Void
-  private let lock = NSLock()
-  private var done: Int64 = 0
-  private var last = ContinuousClock.now
-
-  init(total: Int64, interval: Duration, report: @escaping @Sendable (SophonProgress) -> Void) {
-    self.total = total
-    self.interval = interval
-    self.report = report
-  }
-
-  func add(_ bytes: Int64) {
-    lock.withLock {
-      done += bytes
-      let now = ContinuousClock.now
-      guard now - last >= interval else { return }
-      last = now
-      report(.verifying(done: done, total: total))
-    }
-  }
 }

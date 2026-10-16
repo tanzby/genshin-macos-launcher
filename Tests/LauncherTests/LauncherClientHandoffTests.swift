@@ -128,17 +128,17 @@ private func waitForLaunch(_ fake: FakeGameClient) async {
   }
 
   @MainActor
-  @Test func PRG_006_pauseWaitsForTheClientToQuiesceAfterTheJobStream() async throws {
+  @Test func PRG_006_pauseReturnsOnlyAfterTheClientsRunHasReturned() async throws {
     let fake = FakeGameClient(status: GameStatus(localVersion: "4.9.0", remoteVersion: "5.0.0", canUpdate: true))
     let directory = makeTemporaryDirectory("handoff")
     let model = LauncherModel(client: fake, gameDirectory: directory)
     await model.refresh()
     try await model.start(.update)
-    _ = try await fake.nextRun()
+    let run = try await fake.nextRun()
 
     await model.pause()
 
-    #expect(fake.quiesces >= 1)
+    #expect(fake.isTerminated(run: run))
   }
 
   @MainActor
