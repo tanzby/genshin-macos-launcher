@@ -21,7 +21,7 @@ import TestSupport
     }
     let rig = ClientRig()
     let client = GenshinCNClient(
-      dataDirectory: rig.data, protonExtras: rig.protonExtras, launcher: rig.launcher,
+      dataDirectory: rig.data, protonExtras: rig.protonExtras, launcher: { [launcher = rig.launcher] _ in launcher },
       background: BackgroundImageProvider(cacheDirectory: cache, session: session))
 
     guard case .remote(let file) = await client.backgroundImage() else {
@@ -32,7 +32,7 @@ import TestSupport
 
     let (offline, _) = BackgroundStub.session { _ in nil }
     let fallback = GenshinCNClient(
-      dataDirectory: rig.data, protonExtras: rig.protonExtras, launcher: rig.launcher,
+      dataDirectory: rig.data, protonExtras: rig.protonExtras, launcher: { [launcher = rig.launcher] _ in launcher },
       background: BackgroundImageProvider(
         cacheDirectory: cache.appending(path: "empty", directoryHint: .isDirectory), session: offline))
     #expect(await fallback.backgroundImage() == .bundledDefault)

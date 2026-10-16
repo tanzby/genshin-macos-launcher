@@ -1,6 +1,6 @@
 #!/bin/sh
 # Asserts what a built Genshin Launcher.app must contain: x86_64 helpers in Contents/Helpers/ and the
-# protonextras Windows files in Contents/Resources/protonextras/, DXMT in Contents/Resources/dxmt/ (if built), plus the required Info.plist keys. Usage: check-bundle [Genshin Launcher.app]
+# protonextras Windows files, optional DXMT/GPTK4 payloads, and required Info.plist keys. Usage: check-bundle [Genshin Launcher.app]
 set -eu
 cd "$(dirname "$0")/../.."
 app="${1:-build/DerivedData/Build/Products/Debug/Genshin Launcher.app}"
@@ -20,6 +20,16 @@ if [ -d "$dxmt" ] || [ "${REQUIRE_DXMT:-0}" = 1 ]; then
   for f in $(grep -v '^#' scripts/dxmt-files); do
     [ -s "$dxmt/$f" ] || { echo "missing: dxmt/$f"; fail=1; }
   done
+fi
+# GPTK4 is copied from build/gptk4 by project.yml when present. Release builds set REQUIRE_GPTK4=1.
+gptk4="$app/Contents/Resources/gptk4"
+if [ -d "$gptk4" ] || [ "${REQUIRE_GPTK4:-0}" = 1 ]; then
+  if [ -d "$gptk4" ]; then
+    scripts/dev/check-gptk4 "$gptk4" || fail=1
+  else
+    echo "missing required GPTK4 payload: $gptk4 (stage the official DMG with scripts/prepare-gptk4)"
+    fail=1
+  fi
 fi
 # Sparkle reaches the app through the Updates package product (#87); Xcode must still embed the framework.
 sparkle="$app/Contents/Frameworks/Sparkle.framework"

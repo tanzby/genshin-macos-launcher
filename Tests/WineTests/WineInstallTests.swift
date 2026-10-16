@@ -25,16 +25,16 @@ private let thumbprint = "F09065E2D57F005BBD975DDCF9EB63F570764F17"
     }
   }
 
-  @Test("WIN-007 downloads go below the data directory and are removed afterwards")
-  func archivesCleanedUp() async throws {
+  @Test("WIN-007 the verified archive stays available for the other backend")
+  func verifiedArchiveIsKeptForTheOtherBackend() async throws {
     try await withWineTempDirectory { dir in
       let h = try await makeInstalledWineHarness(in: dir)
       for request in h.downloader.requests {
         #expect(request.destination.resolvingSymlinksInPath().path.hasPrefix(h.root.path + "/"))
-        #expect(!wineExists(request.destination))
+        #expect(wineExists(request.destination))
       }
       let top = try FileManager.default.contentsOfDirectory(atPath: h.root.path).sorted()
-      #expect(top == ["wine", "wineboot.log", "wineprefix", "winecfg.log"].sorted())
+      #expect(top == ["downloads", "wine", "wineboot.log", "wineprefix", "winecfg.log"].sorted())
     }
   }
 
@@ -54,29 +54,30 @@ private let thumbprint = "F09065E2D57F005BBD975DDCF9EB63F570764F17"
     }
   }
 
-  @Test("WIN-006 reinstall removes old wine and wineprefix entirely and installs fresh")
-  func reinstallReplaces() async throws {
+  @Test("WIN-006 reinstall replaces only the selected runtime and keeps the shared prefix")
+  func reinstallKeepsPrefix() async throws {
     try await withWineTempDirectory { dir in
       let h = try await makeInstalledWineHarness(in: dir)
       try h.writeFile("wine/old-sentinel.txt")
-      try h.writeFile("wineprefix/old-sentinel.txt")
+      try h.writeFile("wineprefix/login-sentinel.txt")
       try await h.runtime.reinstall()
       #expect(!wineExists(h.root.appending(path: "wine/old-sentinel.txt")))
-      #expect(!wineExists(h.root.appending(path: "wineprefix/old-sentinel.txt")))
+      #expect(wineExists(h.root.appending(path: "wineprefix/login-sentinel.txt")))
       #expect(await h.runtime.status() == .ready)
-      #expect(h.downloader.requests.count == 2)  // the Wine archive, once per install
+      #expect(h.downloader.requests.count == 1)  // the verified archive is reused
     }
   }
 
-  @Test("WIN-006 ensureInstalled from a non-ready state removes stale wine and wineprefix")
-  func ensureInstalledReplacesStale() async throws {
+  @Test("WIN-006 ensureInstalled repairs a runtime without replacing the shared prefix")
+  func ensureInstalledKeepsPrefix() async throws {
     try await withWineTempDirectory { dir in
-      let h = try makeWineHarness(in: dir)
+      let h = try await makeInstalledWineHarness(in: dir)
       try h.writeFile("wine/stale.txt")
-      try h.writeFile("wineprefix/stale.txt")
+      try h.writeFile("wineprefix/login-sentinel.txt")
+      try FileManager.default.removeItem(at: h.layout.stampFile)
       try await h.install()
       #expect(!wineExists(h.root.appending(path: "wine/stale.txt")))
-      #expect(!wineExists(h.root.appending(path: "wineprefix/stale.txt")))
+      #expect(wineExists(h.root.appending(path: "wineprefix/login-sentinel.txt")))
       #expect(await h.runtime.status() == .ready)
     }
   }
@@ -88,6 +89,12 @@ private let thumbprint = "F09065E2D57F005BBD975DDCF9EB63F570764F17"
       options.failingURLs = { [$0.distribution.url] }
       let h = try makeWineHarness(in: dir, options: options)
       try h.writeFile("wine/sentinel.txt")
+      try h.writeFile("wineprefix/system.reg", "system")
+      try h.writeFile("wineprefix/user.reg", "user")
+      try FileManager.default.createDirectory(
+        at: h.root.appending(path: "wineprefix/drive_c/windows/system32", directoryHint: .isDirectory),
+        withIntermediateDirectories: true)
+      try h.writeFile("wineprefix/login-sentinel.txt")
       try h.writeFile("wineprefix/sentinel.txt")
       await #expect(throws: WineStubDownloadFailure()) { try await h.install() }
       #expect(wineExists(h.root.appending(path: "wine/sentinel.txt")))
@@ -466,7 +473,7 @@ private let thumbprint = "F09065E2D57F005BBD975DDCF9EB63F570764F17"
     try await withWineTempDirectory { dir in
       let h = try await makeInstalledWineHarness(in: dir)
       let top = try FileManager.default.contentsOfDirectory(atPath: h.root.path)
-      #expect(Set(top) == ["wine", "wineprefix", "wineboot.log", "winecfg.log"])
+      #expect(Set(top) == ["downloads", "wine", "wineprefix", "wineboot.log", "winecfg.log"])
       #expect(!top.contains(".storage"))
     }
   }

@@ -42,6 +42,15 @@ package struct WineDistribution: Sendable, Equatable {
   )
 }
 
+/// The graphics runtime installed into the selected Wine tree.
+public enum GraphicsBackend: String, CaseIterable, Codable, Equatable, Hashable, Identifiable, Sendable {
+  case gptk4
+  case dxmt
+
+  public var id: Self { self }
+  public var title: String { self == .gptk4 ? "GPTK 4 (D3DMetal)" : "DXMT" }
+}
+
 /// The DXMT build that ships inside the app (`Contents/Resources/dxmt`, built by `scripts/build-dxmt` from the
 /// pinned `third_party/dxmt` submodule, docs/adr/0003). The composition root finds it; `Wine` never reads
 /// `Bundle.main`.
@@ -71,6 +80,43 @@ public struct DXMTBundle: Sendable, Equatable {
   var unixDirectory: URL { directory.appending(path: "x86_64-unix", directoryHint: .isDirectory) }
 }
 
+/// The complete `redist/lib` payload from Apple's GPTK evaluation DMG.
+public struct GPTK4Bundle: Sendable, Equatable {
+  public var directory: URL
+  public var version: String
+
+  public init(directory: URL, version: String) {
+    self.directory = directory
+    self.version = version
+  }
+
+  public static let expectedVersion = "4.0b3"
+
+  public static func load(from directory: URL) -> GPTK4Bundle? {
+    let framework = directory.appending(path: "external/D3DMetal.framework", directoryHint: .isDirectory)
+    let plist = framework.appending(path: "Versions/A/Resources/Info.plist", directoryHint: .notDirectory)
+    guard let data = try? Data(contentsOf: plist),
+      let values = try? PropertyListSerialization.propertyList(from: data, format: nil) as? [String: Any],
+      let version = values["CFBundleShortVersionString"] as? String,
+      version == expectedVersion, isComplete(directory)
+    else { return nil }
+    return GPTK4Bundle(directory: directory, version: version)
+  }
+
+  /// The files a GPTK library directory must hold, relative to it (the bundled payload and an installed runtime's
+  /// `lib/` alike). `scripts/gptk4-files` is the full manifest the build checks.
+  static let requiredFiles: [String] =
+    ["external/D3DMetal.framework/Versions/A/D3DMetal", "external/D3DMetal.framework/Versions/A/Resources/Info.plist",
+     "external/libd3dshared.dylib"]
+    + ["d3d10", "d3d11", "d3d12", "d3d12core", "dxgi", "nvapi64", "nvngx-on-metalfx"].flatMap {
+      ["wine/x86_64-windows/\($0).dll", "wine/x86_64-unix/\($0).so"]
+    }
+
+  static func isComplete(_ directory: URL) -> Bool {
+    requiredFiles.allSatisfy { FileManager.default.fileExists(atPath: directory.appending(path: $0).path) }
+  }
+}
+
 /// Written last when an install completes, inside `wine/`, so it disappears with the runtime.
 struct WineStamp: Codable, Sendable, Equatable {
   static let currentSchemaVersion = 1
@@ -78,27 +124,47 @@ struct WineStamp: Codable, Sendable, Equatable {
   var schemaVersion: Int
   var wineVersion: String
   var dxmtVersion: String
+  var graphicsBackend: GraphicsBackend
+  var gptkVersion: String
 
-  init(schemaVersion: Int = Self.currentSchemaVersion, wineVersion: String, dxmtVersion: String) {
+  init(
+    schemaVersion: Int = Self.currentSchemaVersion, wineVersion: String, dxmtVersion: String,
+    graphicsBackend: GraphicsBackend = .dxmt, gptkVersion: String = ""
+  ) {
     self.schemaVersion = schemaVersion
     self.wineVersion = wineVersion
     self.dxmtVersion = dxmtVersion
+    self.graphicsBackend = graphicsBackend
+    self.gptkVersion = gptkVersion
+  }
+
+  /// Stamps from before the GPTK backend have neither key: they describe a DXMT runtime.
+  init(from decoder: any Decoder) throws {
+    let values = try decoder.container(keyedBy: CodingKeys.self)
+    schemaVersion = try values.decode(Int.self, forKey: .schemaVersion)
+    wineVersion = try values.decode(String.self, forKey: .wineVersion)
+    dxmtVersion = try values.decode(String.self, forKey: .dxmtVersion)
+    graphicsBackend = try values.decodeIfPresent(GraphicsBackend.self, forKey: .graphicsBackend) ?? .dxmt
+    gptkVersion = try values.decodeIfPresent(String.self, forKey: .gptkVersion) ?? ""
   }
 }
 
 /// Where everything lives under the data directory.
 public struct WineLayout: Sendable, Equatable {
   public let root: URL
+  public let backend: GraphicsBackend
 
-  public init(root: URL) {
+  public init(root: URL, backend: GraphicsBackend = .dxmt) {
     self.root = root
+    self.backend = backend
   }
 
   /// The data-directory entries are named once, in `DataDirectory`.
   private var dataDirectory: DataDirectory { DataDirectory(root: root) }
-  public var runtimeDirectory: URL { dataDirectory.wine }
+  public var runtimeDirectory: URL { backend == .dxmt ? dataDirectory.wine : dataDirectory.wineGPTK4 }
   public var prefixDirectory: URL { dataDirectory.winePrefix }
   package var stampFile: URL { runtimeDirectory.appending(path: ".genshin-launcher-wine-stamp.json", directoryHint: .notDirectory) }
+  package var prefixInitializationMarker: URL { root.appending(path: ".genshin-launcher-prefix-initializing", directoryHint: .notDirectory) }
   public var wineserver: URL { runtimeDirectory.appending(path: "bin/wineserver", directoryHint: .notDirectory) }
   package var windowsLibraryDirectory: URL {
     runtimeDirectory.appending(path: "lib/wine/x86_64-windows", directoryHint: .isDirectory)
@@ -153,6 +219,10 @@ public enum WineReinstallReason: Sendable, Equatable {
   case dxmtOutdated
   /// The stamp matches but a required file is gone (loader, DXMT files, prefix).
   case corrupt(missing: String)
+  /// The selected backend's payload is not included in this app build.
+  case backendUnavailable
+  /// The shared prefix exists but is not a recognizable initialized Wine prefix; it is preserved for recovery.
+  case prefixUnrecognized
 }
 
 public enum WineStatus: Sendable, Equatable {
@@ -166,6 +236,7 @@ public enum WineInstallProgress: Sendable, Equatable {
   case configuring
   case initializingPrefix
   case installingDXMT
+  case installingGPTK4
   case finalizing
 }
 
@@ -176,6 +247,10 @@ public enum WineInstallError: Error, Equatable {
   case insufficientDiskSpace(required: Int64, available: Int64)
   /// The app has no DXMT, or it lacks a file the launcher installs. Raised before anything is deleted.
   case dxmtBundleInvalid
+  /// The app has no complete GPTK 4.0b3 payload.
+  case gptk4BundleInvalid
+  /// An existing shared prefix is non-empty but does not look initialized; it was not modified.
+  case prefixUnrecognized(URL)
   /// `wineboot` or `winecfg` failed; the log is at `logURL`.
   case prefixInitializationFailed(logURL: URL)
   case certificateSectionNotFound

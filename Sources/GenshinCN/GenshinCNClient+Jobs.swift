@@ -1,17 +1,19 @@
 import Foundation
 import Launcher
 import Sophon
+import Wine
 
 extension GenshinCNClient {
   // MARK: - Running jobs
 
   public func run(
-    _ job: GameJob, in directory: URL, progress: @escaping @Sendable (JobProgress) -> Void
+    _ job: GameJob, in directory: URL, backend: GraphicsBackend,
+    progress: @escaping @Sendable (JobProgress) -> Void
   ) async throws {
     do {
       // Paused before it began: do not touch the disk at all.
       try Task.checkCancellation()
-      try await recoverIfGameFilesAreTouched(by: job)
+      try await recoverIfGameFilesAreTouched(by: job, backend: backend)
       try await sophon.run(Self.sophonJob(job), in: directory) { progress(Self.jobProgress($0)) }
     } catch {
       throw Self.map(error)
@@ -21,11 +23,11 @@ extension GenshinCNClient {
   /// Repair and update verify or patch the game's files, so files a crashed launch left aside must be back first. The
   /// launcher holds the exclusive slot, so no game is running. Install has nothing to restore and pre-download may
   /// run next to a running game: `recover()` would shut its prefix down.
-  private func recoverIfGameFilesAreTouched(by job: GameJob) async throws {
+  private func recoverIfGameFilesAreTouched(by job: GameJob, backend: GraphicsBackend) async throws {
     switch job {
     case .repair, .update:
       // Uncancellable, like the recovery before a launch: a half-done restore would still delete the journal.
-      await Task { await launcher.recover() }.value
+      await Task { await gameLauncher(for: backend).recover() }.value
       try Task.checkCancellation()
     case .install, .preDownload:
       break

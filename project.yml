@@ -40,6 +40,14 @@ targets:
           if [ -d "$SRCROOT/build/dxmt" ]; then
             ditto "$SRCROOT/build/dxmt" "$dest"
           fi
+      - name: Bundle GPTK4
+        basedOnDependencyAnalysis: false
+        script: |
+          dest="$TARGET_BUILD_DIR/$UNLOCALIZED_RESOURCES_FOLDER_PATH/gptk4"
+          rm -rf "$dest"
+          if [ -d "$SRCROOT/build/gptk4" ]; then
+            ditto "$SRCROOT/build/gptk4" "$dest"
+          fi
     info:
       path: build/Info.plist
       properties:

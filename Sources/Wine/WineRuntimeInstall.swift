@@ -2,8 +2,15 @@ import Foundation
 import Platform
 
 extension WineRuntime {
-  /// Whether the pinned Wine and the app's DXMT are installed and intact. Looks at the disk, not just the stamp.
+  /// Whether the pinned Wine and DXMT are installed and intact. Kept for existing callers and tests.
   public func status() -> WineStatus {
+    status(for: .dxmt)
+  }
+
+  public func status(for backend: GraphicsBackend) -> WineStatus {
+    let layout = layout(for: backend)
+    if backend == .gptk4, gptk4 == nil { return .needsInstall(.backendUnavailable) }
+    if prefixNeedsManualRecovery(layout) { return .needsInstall(.prefixUnrecognized) }
     let fileManager = FileManager.default
     var isDirectory: ObjCBool = false
     guard fileManager.fileExists(atPath: layout.runtimeDirectory.path, isDirectory: &isDirectory), isDirectory.boolValue
@@ -16,28 +23,40 @@ extension WineRuntime {
     guard let data = try? Data(contentsOf: layout.stampFile),
       let stamp = try? JSONDecoder().decode(WineStamp.self, from: data),
       stamp.schemaVersion == WineStamp.currentSchemaVersion,
-      stamp.wineVersion == distribution.id
+      stamp.wineVersion == distribution.id,
+      stamp.graphicsBackend == backend
     else {
       return .needsInstall(.versionMismatch)
+    }
+    guard prefixIsRecognized(layout.prefixDirectory) else {
+      return FileManager.default.fileExists(atPath: layout.prefixDirectory.path)
+        ? .needsInstall(.prefixUnrecognized)
+        : .needsInstall(.corrupt(missing: "prefix"))
     }
     // Only files this installer owns. `lib/wine/x86_64-unix/wine` and `wine-host` are deliberately not
     // listed: the Game Mode shim install renames them later.
     let required: [(String, URL)] = [
       ("bin/wine", layout.loader),
       ("bin/wineserver", layout.wineserver),
-      ("prefix", layout.prefixDirectory),
-      ("prefix/winemetal.dll", layout.prefixSystem32.appending(path: "winemetal.dll")),
-    ] + WineLayout.dxmtWindowsFiles.map { ("lib/\($0)", layout.windowsLibraryDirectory.appending(path: $0)) }
-      + [("lib/winemetal.so", layout.unixLibraryDirectory.appending(path: "winemetal.so"))]
+    ] + requiredBackendFiles(backend, layout: layout)
     for (name, url) in required where !fileManager.fileExists(atPath: url.path) {
       return .needsInstall(.corrupt(missing: name))
     }
-    // An app without DXMT (a development build) cannot judge it and keeps what is installed.
-    if let dxmt, stamp.dxmtVersion != dxmt.version { return .needsInstall(.dxmtOutdated) }
+    switch backend {
+    case .dxmt:
+      // A build without DXMT cannot judge the installed version and keeps what is installed.
+      if let dxmt, stamp.dxmtVersion != dxmt.version { return .needsInstall(.dxmtOutdated) }
+    case .gptk4:
+      guard let gptk4 else { return .needsInstall(.backendUnavailable) }
+      if stamp.gptkVersion != gptk4.version { return .needsInstall(.versionMismatch) }
+    }
     return .ready
   }
 
-  func performInstall(progress: @escaping @Sendable (WineInstallProgress) -> Void) async throws {
+  func performInstall(
+    for backend: GraphicsBackend, progress: @escaping @Sendable (WineInstallProgress) -> Void
+  ) async throws {
+    let layout = layout(for: backend)
     let fileManager = FileManager.default
     // Scratch directories that older builds created and could leave behind when killed mid-way.
     if let stale = try? fileManager.contentsOfDirectory(atPath: layout.root.path) {
@@ -53,16 +72,17 @@ extension WineRuntime {
     let wineArchive = layout.downloadsDirectory.appending(
       path: "wine-\(distribution.sha256.prefix(16)).archive", directoryHint: .notDirectory)
 
-    // 0. DXMT comes with the app. Without it nothing is downloaded or deleted.
-    let dxmtBundle = try validatedDXMT()
+    // 0. Validate all app resources before touching the installed runtime.
+    let dxmtBundle = backend == .dxmt ? try validatedDXMT() : nil
+    let gptk4Bundle = backend == .gptk4 ? try validatedGPTK4() : nil
 
     // 1. Free space, before anything is downloaded or deleted (WIN-006). An unreadable volume does not block.
     //    On the data volume at the same time: the archive, the unpacked runtime and the new prefix `wineboot`
     //    fills. Bytes of an archive that is already there (finished or partial) are on the volume and no
     //    longer needed.
-    let required =
-      max(0, distribution.archiveSize - Self.bytesOnDisk(of: wineArchive))
-      + distribution.installedSize + distribution.prefixSize
+    let prefixAlreadyExists = prefixIsRecognized(layout.prefixDirectory)
+    let required = max(0, distribution.archiveSize - Self.bytesOnDisk(of: wineArchive))
+      + distribution.installedSize + (prefixAlreadyExists ? 0 : distribution.prefixSize)
     if let available = availableSpace(layout.root), available < required {
       throw WineInstallError.insufficientDiskSpace(required: required, available: available)
     }
@@ -80,22 +100,19 @@ extension WineRuntime {
       throw error
     }
 
-    // 3. Replace the runtime and prefix (WIN-006). The stamp is gone with `wine/`, so an interruption
-    //    from here on reads as `.interrupted`.
+    // 3. Replace only this backend's runtime. The other runtime and the shared prefix stay in place.
     progress(.extracting)
-    // An orphaned wineserver on the old prefix must not outlive the prefix it serves.
     if fileManager.fileExists(atPath: layout.wineserver.path) {
       _ = try? await WinePrefixCommands(layout: layout, runner: runner).wineserver("-k")
     }
     try removeIfPresent(layout.runtimeDirectory)
-    try removeIfPresent(layout.prefixDirectory)
     try fileManager.createDirectory(at: layout.runtimeDirectory, withIntermediateDirectories: true)
     var arguments = ["-xf", wineArchive.path, "-C", layout.runtimeDirectory.path]
     if let winePath = distribution.winePath {
       let depth = winePath.split(separator: "/").count
       arguments += ["--strip-components=\(depth)", winePath]
     }
-    try await runTool("/usr/bin/tar", arguments)
+    try await runTool("/usr/bin/tar", arguments, layout: layout)
 
     // 4. Root certificate, before wineboot (WIN-009).
     progress(.configuring)
@@ -103,23 +120,34 @@ extension WineRuntime {
     let original = try String(contentsOf: wineInf, encoding: .utf8)
     try WineInf.injectingCertificate(into: original).write(to: wineInf, atomically: true, encoding: .utf8)
 
-    // 5. Prefix (WIN-012) with the stock DLLs, as the TS launcher did.
+    // Initialize only an absent/empty prefix or retry a prefix creation interrupted by this installer.
     progress(.initializingPrefix)
-    try await initializePrefix()
+    try await initializePrefixIfNeeded(layout)
 
-    // 6. DXMT, once, after the prefix exists (WIN-020). No .bak: nothing is restored at launch.
-    progress(.installingDXMT)
-    try installDXMT(from: dxmtBundle)
+    switch backend {
+    case .dxmt:
+      progress(.installingDXMT)
+      try installDXMTRuntime(from: dxmtBundle!, layout: layout)
+      try installDXMTPrefix(from: dxmtBundle!, layout: layout)
+    case .gptk4:
+      progress(.installingGPTK4)
+      try await installGPTK4(from: gptk4Bundle!, layout: layout)
+    }
 
-    // 7. Stamp last.
+    // Stamp last; a missing/mismatched stamp never authorizes deleting the shared prefix.
     progress(.finalizing)
-    try writeStamp()
+    try writeStamp(backend: backend, layout: layout)
 
-    // Done: the verified archive is no longer needed. After a failure it stays, so a retry does not download again.
-    try? fileManager.removeItem(at: layout.downloadsDirectory)
+    // The verified archive serves the other backend's install too. Once every backend the app carries is
+    // installed it is no longer needed; after a failure it stays, so a retry does not download again.
+    let carried = GraphicsBackend.allCases.filter { $0 == .dxmt ? dxmt != nil : gptk4 != nil }
+    let stamps = carried.map { self.layout(for: $0).stampFile.path }
+    if stamps.allSatisfy(fileManager.fileExists(atPath:)) {
+      try? fileManager.removeItem(at: layout.downloadsDirectory)
+    }
   }
 
-  private func runTool(_ path: String, _ arguments: [String]) async throws {
+  private func runTool(_ path: String, _ arguments: [String], layout: WineLayout) async throws {
     let result = try await runner.run(
       URL(filePath: path), arguments: arguments, environment: [:], workingDirectory: layout.root)
     guard result.exitCode == 0 else {
@@ -142,24 +170,80 @@ extension WineRuntime {
     return dxmt
   }
 
+  private func validatedGPTK4() throws -> GPTK4Bundle {
+    guard let gptk4, gptk4.version == GPTK4Bundle.expectedVersion, GPTK4Bundle.isComplete(gptk4.directory)
+    else { throw WineInstallError.gptk4BundleInvalid }
+    return gptk4
+  }
+
+  private func requiredBackendFiles(_ backend: GraphicsBackend, layout: WineLayout) -> [(String, URL)] {
+    switch backend {
+    case .dxmt:
+      return [
+        ("prefix/winemetal.dll", layout.prefixSystem32.appending(path: "winemetal.dll")),
+      ] + WineLayout.dxmtWindowsFiles.map { ("lib/\($0)", layout.windowsLibraryDirectory.appending(path: $0)) }
+        + [("lib/winemetal.so", layout.unixLibraryDirectory.appending(path: "winemetal.so"))]
+    case .gptk4:
+      let targetRoot = layout.runtimeDirectory.appending(path: "lib", directoryHint: .isDirectory)
+      return GPTK4Bundle.requiredFiles.map { ("lib/\($0)", targetRoot.appending(path: $0)) }
+    }
+  }
+
+  private func installGPTK4(from bundle: GPTK4Bundle, layout: WineLayout) async throws {
+    let targetLib = layout.runtimeDirectory.appending(path: "lib", directoryHint: .isDirectory)
+    let external = targetLib.appending(path: "external", directoryHint: .isDirectory)
+    try removeIfPresent(external)
+    try await runTool(
+      "/usr/bin/ditto", [bundle.directory.appending(path: "external").path, external.path], layout: layout)
+
+    // The DMG's `wine/` tree contains only GPTK bridge libraries. Overlay its two architecture directories so
+    // Wine's other builtin DLLs, loader shims and symlinks remain in place.
+    for architecture in ["x86_64-unix", "x86_64-windows"] {
+      let source = bundle.directory.appending(path: "wine/\(architecture)", directoryHint: .isDirectory)
+      let destination = targetLib.appending(path: "wine/\(architecture)", directoryHint: .isDirectory)
+      try await runTool("/usr/bin/ditto", [source.path, destination.path], layout: layout)
+    }
+  }
+
   /// A newer DXMT arrived with an app update: replace its files and the stamp, keep Wine and the prefix.
   func refreshDXMT(progress: @escaping @Sendable (WineInstallProgress) -> Void) async throws {
     let bundle = try validatedDXMT()
     // A running game holds the old winemetal.so; the launcher only refreshes while nothing runs.
     progress(.installingDXMT)
-    try installDXMT(from: bundle)
+    try installDXMTRuntime(from: bundle, layout: layout)
+    try installDXMTPrefix(from: bundle, layout: layout)
     progress(.finalizing)
-    try writeStamp()
+    try writeStamp(backend: .dxmt, layout: layout)
   }
 
-  private func writeStamp() throws {
-    let stamp = WineStamp(wineVersion: distribution.id, dxmtVersion: dxmt?.version ?? "")
+  private func writeStamp(backend: GraphicsBackend, layout: WineLayout) throws {
+    let stamp = WineStamp(
+      wineVersion: distribution.id, dxmtVersion: backend == .dxmt ? dxmt?.version ?? "" : "",
+      graphicsBackend: backend, gptkVersion: backend == .gptk4 ? gptk4?.version ?? "" : "")
     let encoder = JSONEncoder()
     encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
     try encoder.encode(stamp).write(to: layout.stampFile, options: .atomic)
   }
 
-  private func initializePrefix() async throws {
+  private func initializePrefixIfNeeded(_ layout: WineLayout) async throws {
+    let fileManager = FileManager.default
+    if prefixIsRecognized(layout.prefixDirectory) {
+      try? fileManager.removeItem(at: layout.prefixInitializationMarker)
+      return
+    }
+    var isDirectory: ObjCBool = false
+    if fileManager.fileExists(atPath: layout.prefixDirectory.path, isDirectory: &isDirectory) {
+      guard isDirectory.boolValue else { throw WineInstallError.prefixUnrecognized(layout.prefixDirectory) }
+      guard let entries = try? fileManager.contentsOfDirectory(atPath: layout.prefixDirectory.path) else {
+        throw WineInstallError.prefixUnrecognized(layout.prefixDirectory)
+      }
+      guard entries.isEmpty || fileManager.fileExists(atPath: layout.prefixInitializationMarker.path) else {
+        throw WineInstallError.prefixUnrecognized(layout.prefixDirectory)
+      }
+    } else {
+      try fileManager.createDirectory(at: layout.prefixDirectory, withIntermediateDirectories: true)
+    }
+    try Data("1\n".utf8).write(to: layout.prefixInitializationMarker, options: .atomic)
     let steps: [(arguments: [String], log: URL)] = [
       (["wineboot", "-u"], layout.wineBootLog),
       (["winecfg", "-v", "win10"], layout.wineCfgLog),
@@ -171,17 +255,53 @@ extension WineRuntime {
       // TS reported wineboot.log for either failure (WIN-012 edge case); each step reports its own log here.
       guard result.exitCode == 0 else { throw WineInstallError.prefixInitializationFailed(logURL: step.log) }
     }
+    guard prefixIsRecognized(layout.prefixDirectory) else {
+      throw WineInstallError.prefixInitializationFailed(logURL: layout.wineBootLog)
+    }
+    try fileManager.removeItem(at: layout.prefixInitializationMarker)
   }
 
-  private func installDXMT(from bundle: DXMTBundle) throws {
+  private func prefixNeedsManualRecovery(_ layout: WineLayout) -> Bool {
+    let fm = FileManager.default
+    guard fm.fileExists(atPath: layout.prefixDirectory.path),
+      !prefixIsRecognized(layout.prefixDirectory),
+      !fm.fileExists(atPath: layout.prefixInitializationMarker.path)
+    else { return false }
+    guard let entries = try? fm.contentsOfDirectory(atPath: layout.prefixDirectory.path) else { return true }
+    return !entries.isEmpty
+  }
+
+  private func prefixIsRecognized(_ prefix: URL) -> Bool {
+    let fm = FileManager.default
+    var isDirectory: ObjCBool = false
+    guard fm.fileExists(atPath: prefix.path, isDirectory: &isDirectory), isDirectory.boolValue else { return false }
+    func isNonEmptyRegularFile(_ url: URL) -> Bool {
+      guard let attributes = try? fm.attributesOfItem(atPath: url.path),
+        attributes[.type] as? FileAttributeType == .typeRegular,
+        let size = attributes[.size] as? NSNumber
+      else { return false }
+      return size.int64Value > 0
+    }
+    let system32 = prefix.appending(path: "drive_c/windows/system32", directoryHint: .isDirectory)
+    var system32IsDirectory: ObjCBool = false
+    return isNonEmptyRegularFile(prefix.appending(path: "system.reg"))
+      && isNonEmptyRegularFile(prefix.appending(path: "user.reg"))
+      && fm.fileExists(atPath: system32.path, isDirectory: &system32IsDirectory)
+      && system32IsDirectory.boolValue
+  }
+
+  private func installDXMTRuntime(from bundle: DXMTBundle, layout: WineLayout) throws {
     let fileManager = FileManager.default
     try fileManager.createDirectory(at: layout.windowsLibraryDirectory, withIntermediateDirectories: true)
     try fileManager.createDirectory(at: layout.unixLibraryDirectory, withIntermediateDirectories: true)
-    try fileManager.createDirectory(at: layout.prefixSystem32, withIntermediateDirectories: true)
     for name in WineLayout.dxmtWindowsFiles {
       try replace(bundle.windowsDirectory.appending(path: name), with: layout.windowsLibraryDirectory.appending(path: name))
     }
     try replace(bundle.unixDirectory.appending(path: "winemetal.so"), with: layout.unixLibraryDirectory.appending(path: "winemetal.so"))
+  }
+
+  private func installDXMTPrefix(from bundle: DXMTBundle, layout: WineLayout) throws {
+    try FileManager.default.createDirectory(at: layout.prefixSystem32, withIntermediateDirectories: true)
     try replace(
       bundle.windowsDirectory.appending(path: "winemetal.dll"), with: layout.prefixSystem32.appending(path: "winemetal.dll"))
   }

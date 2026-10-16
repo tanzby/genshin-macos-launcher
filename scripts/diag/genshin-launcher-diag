@@ -158,7 +158,7 @@ def is_game(p):
     return exe_name(p) in GAME_EXES
 
 
-def window_probe(pids):
+def window_info_exe():
     exe = CACHE / "window-info"
     src = HERE / "window-info.swift"
     if not exe.exists() or exe.stat().st_mtime < src.stat().st_mtime:
@@ -166,13 +166,25 @@ def window_probe(pids):
         r = run(["swiftc", "-O", "-o", str(exe), str(src)])
         if r.returncode:
             sys.exit(f"swiftc failed: {r.stderr}")
-    return run([str(exe), *map(str, pids)]).stdout.splitlines()
+    return exe
+
+
+def window_probe(pids, all_spaces=False):
+    if not pids:
+        return []
+    args = [str(window_info_exe())]
+    if all_spaces:
+        args.append("--all")
+    return run([*args, *map(str, pids)]).stdout.splitlines()
 
 
 def snapshot(data):
     procs = [p for p in wine_procs(data.prefix) if p["prefix"] == str(data.prefix)]
-    lines = window_probe([p["pid"] for p in procs]) if procs else []
-    wins = [l for l in lines if l.startswith("window")]
+    lines = window_probe([p["pid"] for p in procs], all_spaces=True) if procs else []
+    summary = kv(next((l for l in lines if l.startswith("windows ")), ""))
+    wins = [l for l in lines if l.startswith("window ")]
+    windows_total = int(summary.get("count", len(wins)))
+    onscreen_count = int(summary.get("onscreen", sum("onscreen=1" in l for l in wins)))
     front = next((l[6:] for l in lines if l.startswith("front ")), "-")
     front_wine = any(f"pid={p['pid']} " in front + " " for p in procs)
     spaces = [re.search(r"type=(\S+)", l).group(1) for l in lines if l.startswith("space")]
@@ -180,7 +192,9 @@ def snapshot(data):
     return {
         "procs": procs,
         "game": game[0] if game else None,
-        "windows": len(wins),
+        "windows": windows_total,
+        "onscreen_count": onscreen_count,
+        "window_state": "onscreen" if onscreen_count else "offscreen" if windows_total else "absent",
         "fullscreen_space": "4" in spaces and front_wine,
     }
 
@@ -355,6 +369,7 @@ def cmd_run(a):
     closed_at = exited_at = wine_gone_at = forced_at = None
     turning = False
     window_at = None
+    reported_window_state = None
     deadline = T0 + a.timeout
     mid = {}  # facts sampled while the game runs
     verdict_line = None
@@ -384,6 +399,9 @@ def cmd_run(a):
                 m.setdefault("launching", now)
             if s["game"]:
                 m.setdefault("game_process", now)
+                if s["window_state"] != reported_window_state:
+                    say(f"game window state={s['window_state']} windows={s['windows']} onscreen={s['onscreen_count']}")
+                    reported_window_state = s["window_state"]
             if s["windows"]:
                 m.setdefault("window", now)
                 window_at = window_at or time.monotonic()
@@ -410,7 +428,8 @@ def cmd_run(a):
             if window_at and a.hold is None and not a.screen_check and "main_interface" not in m and time.monotonic() - window_at > a.login_grace \
                     and "login" not in waiting:
                 waiting.add("login")
-                print("WAITING maintainer: game-login (log in to the miHoYo account in the game window)", flush=True)
+                where = "current screen" if s["onscreen_count"] else "another Space or hidden"
+                print(f"WAITING maintainer: game-login (game window is {where}; log in to the miHoYo account)", flush=True)
             # Close once the main interface was reached, or (--hold) once the game window has been up that long:
             # without a logged-in account the login screen is as far as an unattended run gets.
             reached = m.get("main_interface") or m.get("screen_done")
@@ -641,6 +660,31 @@ def cmd_ps(a):
         print(f"{p['pid']:>6} ppid={p['ppid']:<6} prefix={p['prefix']} {p['cmd'][:80]}")
 
 
+def positive_pid(value):
+    try:
+        pid = int(value)
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError("PID must be a positive integer") from exc
+    if pid <= 0:
+        raise argparse.ArgumentTypeError("PID must be a positive integer")
+    return pid
+
+
+def cmd_windows(a):
+    r = run([str(window_info_exe()), "--all", *map(str, a.pids)])
+    sys.stdout.write(r.stdout)
+    sys.stderr.write(r.stderr)
+    sys.exit(r.returncode)
+
+
+def cmd_activate(a):
+    r = run([str(window_info_exe()), "--activate", str(a.pid), "--timeout", str(a.timeout)],
+            timeout=a.timeout + 5)
+    sys.stdout.write(r.stdout)
+    sys.stderr.write(r.stderr)
+    sys.exit(r.returncode)
+
+
 def cmd_kill(a):
     data = Data(a.data_dir)
     print(f"remaining={kill_prefix(data)}")
@@ -669,6 +713,13 @@ def main():
     pr = sub.add_parser("probe", help="LCH-031 only: resolve this Mac's host name through the game host dylib")
     pr.add_argument("--app", required=True, help="path to the built Genshin Launcher.app")
     pr.set_defaults(fn=cmd_probe)
+    w = sub.add_parser("windows", help="list current and offscreen windows for process IDs; offscreen may mean another Space or hidden")
+    w.add_argument("pids", nargs="+", type=positive_pid)
+    w.set_defaults(fn=cmd_windows)
+    ac = sub.add_parser("activate", help="activate one existing process and poll until its window is onscreen")
+    ac.add_argument("pid", type=positive_pid)
+    ac.add_argument("--timeout", type=float, default=5, help="onscreen polling timeout in seconds (0...30)")
+    ac.set_defaults(fn=cmd_activate)
     for name, fn in (("ps", cmd_ps), ("kill", cmd_kill)):
         p = sub.add_parser(name)
         p.add_argument("--data-dir", default=str(DEFAULT_DATA))
@@ -676,6 +727,8 @@ def main():
     a = ap.parse_args()
     if getattr(a, "screen_check", False) and getattr(a, "autoplay", False):
         ap.error("--screen-check and --autoplay cannot be combined")
+    if getattr(a, "cmd", None) == "activate" and not 0 <= a.timeout <= 30:
+        ap.error("activate --timeout must be between 0 and 30 seconds")
     a.fn(a)
 
 

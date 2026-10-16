@@ -28,6 +28,8 @@ public struct DataDirectory: Sendable, Equatable {
   package var nativeMarker: URL { entry(Self.nativeMarkerName) }
   /// Wine and DXMT are installed together; its version stamp lives inside.
   public var wine: URL { entry("wine", directory: true) }
+  /// The GPTK 4 runtime has its own Wine tree; both backends share `wineprefix`.
+  public var wineGPTK4: URL { entry("wine-gptk4-native", directory: true) }
   package var winePrefix: URL { entry("wineprefix", directory: true) }
   public var logs: URL { entry("logs", directory: true) }
   /// The official launcher background (one file), see `BackgroundImageProvider`.

@@ -511,6 +511,23 @@
         }
       }
     },
+    "GPTK": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "GPTK"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "GPTK"
+          }
+        }
+      }
+    },
     "Game": {
       "extractionState": "manual",
       "localizations": {
@@ -626,6 +643,23 @@
           "stringUnit": {
             "state": "translated",
             "value": "画面"
+          }
+        }
+      }
+    },
+    "Graphics backend": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Graphics backend"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "图形后端"
           }
         }
       }
@@ -762,6 +796,23 @@
           "stringUnit": {
             "state": "translated",
             "value": "正在安装 DXMT"
+          }
+        }
+      }
+    },
+    "Installing GPTK 4": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Installing GPTK 4"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "正在安装 GPTK 4"
           }
         }
       }
@@ -1599,6 +1650,23 @@
         }
       }
     },
+    "The Wine prefix does not look complete. It was left untouched; restore or remove it, then try again.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The Wine prefix does not look complete. It was left untouched; restore or remove it, then try again."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Wine 前缀看起来不完整，已原样保留。请恢复或移除后重试。"
+          }
+        }
+      }
+    },
     "The data folder could not be prepared: %@": {
       "extractionState": "manual",
       "localizations": {
@@ -1901,6 +1969,23 @@
           "stringUnit": {
             "state": "translated",
             "value": "目前没有可预下载的内容。"
+          }
+        }
+      }
+    },
+    "This build has no GPTK 4. Choose DXMT under Settings → Wine.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This build has no GPTK 4. Choose DXMT under Settings → Wine."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "此版本不含 GPTK 4，请在「设置 → Wine」中选择 DXMT。"
           }
         }
       }

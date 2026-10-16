@@ -1,0 +1,73 @@
+#!/bin/sh
+# Stages the official GPTK 4.0b3 redist from an already mounted Apple evaluation DMG.
+set -eu
+cd "$(dirname "$0")/.."
+repo_root=$PWD
+source_root="${1:-/Volumes/Evaluation environment for Windows games 4.0 beta 3}"
+if [ "$#" -gt 1 ]; then
+  echo "usage: scripts/prepare-gptk4 [mounted GPTK4 volume]" >&2
+  exit 2
+fi
+if [ ! -d "$source_root/redist/lib" ]; then
+  echo "GPTK4 source must be a mounted evaluation volume containing redist/lib: $source_root" >&2
+  echo "Mount the official DMG yourself; this script does not mount or unmount disks." >&2
+  exit 1
+fi
+source_root=$(cd "$source_root" && pwd)
+source_lib="$source_root/redist/lib"
+source_plist="$source_lib/external/D3DMetal.framework/Versions/A/Resources/Info.plist"
+version=
+if [ -f "$source_plist" ]; then
+  version=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$source_plist" 2>/dev/null || true)
+fi
+if [ "$version" != 4.0b3 ]; then
+  echo "expected GPTK 4.0b3 at $source_plist (found ${version:-missing})" >&2
+  exit 1
+fi
+for file in License.rtf "Read Me.rtf" Acknowledgements.rtf; do
+  if [ ! -s "$source_root/$file" ]; then
+    echo "missing legal document: $source_root/$file" >&2
+    exit 1
+  fi
+done
+
+mkdir -p "$repo_root/build"
+stage="$repo_root/build/.gptk4-stage.$$"
+backup="$repo_root/build/.gptk4-backup.$$"
+output="$repo_root/build/gptk4"
+if [ -e "$stage" ] || [ -e "$backup" ]; then
+  echo "staging path already exists; remove the stale build/gptk4 staging path before retrying" >&2
+  exit 1
+fi
+cleanup() {
+  rm -rf "$stage"
+  if [ -e "$backup" ] && [ ! -e "$output" ]; then mv "$backup" "$output"; fi
+}
+trap 'exit 1' HUP INT TERM
+trap cleanup EXIT
+mkdir -p "$stage"
+ditto "$source_lib" "$stage/lib"
+for file in License.rtf "Read Me.rtf" Acknowledgements.rtf; do
+  ditto "$source_root/$file" "$stage/$file"
+done
+{
+  printf 'source_volume=%s\n' "$(basename "$source_root")"
+  printf 'version=%s\n' "$version"
+  printf 'note=review the included License.rtf before distribution\n'
+} > "$stage/SOURCE.txt"
+
+: > "$stage/SHA256SUMS"
+while IFS= read -r file; do
+  case "$file" in ''|'#'*) continue ;; esac
+  if [ -L "$stage/$file" ] && [ -d "$stage/$file" ]; then continue; fi
+  (cd "$stage" && shasum -a 256 "$file") >> "$stage/SHA256SUMS"
+done < "$repo_root/scripts/gptk4-files"
+
+scripts/dev/check-gptk4 "$stage"
+if [ -e "$output" ]; then mv "$output" "$backup"; fi
+if ! mv "$stage" "$output"; then
+  echo "could not install staged GPTK4 payload at $output" >&2
+  exit 1
+fi
+rm -rf "$backup"
+echo "GPTK 4.0b3 staged at $output"

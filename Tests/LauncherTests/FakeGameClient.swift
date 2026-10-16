@@ -1,6 +1,7 @@
 import Foundation
 import Synchronization
 import TestSupport
+import Wine
 
 @testable import Launcher
 
@@ -154,7 +155,9 @@ final class FakeGameClient: GameClient, Sendable {
   }
 
   /// Suspends until the test finishes or fails the run, or the caller is cancelled (then throws `CancellationError`).
-  func run(_ job: GameJob, in directory: URL, progress: @escaping @Sendable (JobProgress) -> Void) async throws {
+  func run(
+    _ job: GameJob, in directory: URL, backend: GraphicsBackend, progress: @escaping @Sendable (JobProgress) -> Void
+  ) async throws {
     let (commands, sink) = AsyncStream<RunCommand>.makeStream()
     let index = state.withLock { s -> Int in
       s.runs.append(RunRecord(job: job, commands: sink))

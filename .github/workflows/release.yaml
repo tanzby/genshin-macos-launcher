@@ -40,6 +40,22 @@ jobs:
         with:
           fetch-depth: 0
 
+      # Apple's GPTK 4.0b3 redist cannot be downloaded on a runner. A maintainer packs the payload staged by
+      # scripts/prepare-gptk4 (`tar -C build -cJf gptk4-4.0b3.tar.xz gptk4`) into the prerelease below; the pinned
+      # hash keeps the release on exactly that payload.
+      - name: Download GPTK4
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GPTK4_RELEASE: gptk4-payload-4.0b3
+          GPTK4_SHA256: f595b4e3876be84b76100790add403224b1e6f4668f263dbc2c8038f1b4673fc
+        run: |
+          set -eu
+          gh release download "$GPTK4_RELEASE" --pattern gptk4-4.0b3.tar.xz --dir "$RUNNER_TEMP"
+          echo "$GPTK4_SHA256  $RUNNER_TEMP/gptk4-4.0b3.tar.xz" | shasum -a 256 -c -
+          mkdir -p build
+          tar -C build -xJf "$RUNNER_TEMP/gptk4-4.0b3.tar.xz"
+          scripts/dev/check-gptk4 build/gptk4
+
       # Built by dxmt.yaml; project.yml puts build/dxmt into Contents/Resources/dxmt.
       - name: Download DXMT
         uses: actions/download-artifact@v4
@@ -104,7 +120,7 @@ jobs:
             MARKETING_VERSION="$VERSION" CURRENT_PROJECT_VERSION="$BUILD" build
           app="build/DerivedData/Build/Products/Release/Genshin Launcher.app"
           codesign --verify --deep --strict --verbose=2 "$app"
-          REQUIRE_DXMT=1 scripts/dev/check-bundle "$app"
+          REQUIRE_DXMT=1 REQUIRE_GPTK4=1 scripts/dev/check-bundle "$app"
           plist="$app/Contents/Info.plist"
           test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$plist")" = "$VERSION"
           test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$plist")" = "$BUILD"

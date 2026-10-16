@@ -1,0 +1,33 @@
+# Required files under build/gptk4 (and Contents/Resources/gptk4).
+SOURCE.txt
+License.rtf
+Read Me.rtf
+Acknowledgements.rtf
+lib/external/D3DMetal.framework/D3DMetal
+lib/external/D3DMetal.framework/Resources
+lib/external/D3DMetal.framework/Versions/Current
+lib/external/D3DMetal.framework/Versions/A/D3DMetal
+lib/external/D3DMetal.framework/Versions/A/Resources/Info.plist
+lib/external/D3DMetal.framework/Versions/A/Resources/LICENSE
+lib/external/D3DMetal.framework/Versions/A/Resources/default.metallib
+lib/external/D3DMetal.framework/Versions/A/Resources/libdxccontainer.dylib
+lib/external/D3DMetal.framework/Versions/A/Resources/libdxcompiler.dylib
+lib/external/D3DMetal.framework/Versions/A/Resources/libdxilconv.dylib
+lib/external/D3DMetal.framework/Versions/A/Resources/libmetalirconverter.dylib
+lib/external/D3DMetal.framework/Versions/A/Resources/version.plist
+lib/external/D3DMetal.framework/Versions/A/_CodeSignature/CodeResources
+lib/external/libd3dshared.dylib
+lib/wine/x86_64-unix/d3d10.so
+lib/wine/x86_64-unix/d3d11.so
+lib/wine/x86_64-unix/d3d12.so
+lib/wine/x86_64-unix/d3d12core.so
+lib/wine/x86_64-unix/dxgi.so
+lib/wine/x86_64-unix/nvapi64.so
+lib/wine/x86_64-unix/nvngx-on-metalfx.so
+lib/wine/x86_64-windows/d3d10.dll
+lib/wine/x86_64-windows/d3d11.dll
+lib/wine/x86_64-windows/d3d12.dll
+lib/wine/x86_64-windows/d3d12core.dll
+lib/wine/x86_64-windows/dxgi.dll
+lib/wine/x86_64-windows/nvapi64.dll
+lib/wine/x86_64-windows/nvngx-on-metalfx.dll

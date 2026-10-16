@@ -20,20 +20,20 @@ extension GameSession: GameLaunching {}
 public final class GenshinCNClient: GameClient {
   let dataDirectory: URL
   let protonExtras: URL
-  let launcher: any GameLaunching
+  let launchers: [GraphicsBackend: any GameLaunching]
   let sophon: SophonClient
   let background: BackgroundImageProvider?
 
   package init(
     dataDirectory: URL,
     protonExtras: URL,
-    launcher: any GameLaunching,
+    launcher: (GraphicsBackend) -> any GameLaunching,
     sophon: SophonClient = SophonClient(game: GenshinCN.sophonGame),
     background: BackgroundImageProvider? = nil
   ) {
     self.dataDirectory = dataDirectory
     self.protonExtras = protonExtras
-    self.launcher = launcher
+    launchers = Dictionary(uniqueKeysWithValues: GraphicsBackend.allCases.map { ($0, launcher($0)) })
     self.sophon = sophon
     self.background = background
   }
@@ -42,11 +42,13 @@ public final class GenshinCNClient: GameClient {
   static func live(
     wine: WineRuntime, dataDirectory: DataDirectory, helpers: GameHostHelpers?, protonExtras: URL
   ) -> GenshinCNClient {
-    let session = GameSession(
-      layout: wine.layout, runner: SystemProcessRunner(allowedRoots: [wine.runtimeDirectory]),
-      launchServices: SystemLaunchServices(), helpers: helpers)
+    let runner = SystemProcessRunner(allowedRoots: GraphicsBackend.allCases.map { wine.layout(for: $0).runtimeDirectory })
     return GenshinCNClient(
-      dataDirectory: dataDirectory.root, protonExtras: protonExtras, launcher: session,
+      dataDirectory: dataDirectory.root, protonExtras: protonExtras,
+      launcher: { backend in
+        GameSession(
+          layout: wine.layout(for: backend), runner: runner, launchServices: SystemLaunchServices(), helpers: helpers)
+      },
       background: BackgroundImageProvider(cacheDirectory: dataDirectory.background))
   }
 
@@ -71,7 +73,11 @@ public final class GenshinCNClient: GameClient {
   }
 
   /// `GameSession.recover()` for the launcher's startup sequence (`StartupSteps.recoverSession`).
-  public func recover() async { await launcher.recover() }
+  public func recover(backend: GraphicsBackend) async { await gameLauncher(for: backend).recover() }
+
+  package func gameLauncher(for backend: GraphicsBackend) -> any GameLaunching {
+    launchers[backend]!  // filled for every case by init
+  }
 
   // MARK: - Status
 
@@ -99,7 +105,7 @@ public final class GenshinCNClient: GameClient {
 
     let recipe = recipe(for: options)
     // The session restores everything itself, also when this Task is cancelled, and returns only afterwards.
-    switch await launcher.launch(recipe, onStarted: onStarted) {
+    switch await gameLauncher(for: options.graphicsBackend).launch(recipe, onStarted: onStarted) {
     case .exited: return .exited
     case .failedExit(let code, let log): return .failedExit(code: code, logPath: log)
     case .startupTimedOut: return .startupTimedOut
@@ -109,7 +115,8 @@ public final class GenshinCNClient: GameClient {
   }
 
   public func openWineCommandPrompt(_ options: LaunchOptions) async {
-    _ = await launcher.openCommandPrompt(recipe(for: options), gameDirectory: options.gameDirectory)
+    _ = await gameLauncher(for: options.graphicsBackend).openCommandPrompt(
+      recipe(for: options), gameDirectory: options.gameDirectory)
   }
 
   private func recipe(for options: LaunchOptions) -> LaunchRecipe {

@@ -340,6 +340,7 @@ private func jobJSON(kind: String, target: String? = nil, extra: String = "") ->
 
     try await h.model.start(scenario.job)
     // The new run only begins after the fake observed the old stream terminate.
+    #expect(await pollUntil { h.fake.events.last == "run:\(scenario.job.rawValue)" })
     #expect(
       h.fake.events == [
         "run:preDownload", "terminated:preDownload", "run:\(scenario.job.rawValue)",

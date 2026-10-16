@@ -66,6 +66,7 @@ enum WineFixtureContent {
   static func dxmt(_ name: String) -> Data { Data("DXMT-x86_64-\(name)".utf8) }
   static let wrongArch = Data("WRONG-ARCH-MUST-BE-IGNORED".utf8)
   static let dxmtWindowsFiles = ["d3d10core.dll", "d3d11.dll", "dxgi.dll", "winemetal.dll", "nvngx.dll"]
+  static let gptkFiles = ["d3d10", "d3d11", "d3d12", "d3d12core", "dxgi", "nvapi64", "nvngx-on-metalfx"]
 }
 
 struct WineFixtureOptions {
@@ -75,6 +76,7 @@ struct WineFixtureOptions {
   var corruptWine = false
   /// `false` builds a DXMT bundle without `x86_64-windows`.
   var dxmtHasX64 = true
+  var gptk4Included = true
 }
 
 struct WineFixtures {
@@ -82,6 +84,7 @@ struct WineFixtures {
   var distribution: WineDistribution
   /// The DXMT shipped in the (fake) app.
   var dxmt: DXMTBundle
+  var gptk4: GPTK4Bundle?
 }
 
 /// Declared sizes of the fixture archive (the real files are a few KB). Required space = wine archive + installed + prefix.
@@ -92,7 +95,6 @@ let wineFixturePrefixSize: Int64 = 600_000_000
 let wineFixtureCommit = "abc1234def5678abc1234def5678abc1234def56"
 
 func makeWineFixtures(in directory: URL, options: WineFixtureOptions = .init()) throws -> WineFixtures {
-  let fm = FileManager.default
   func write(_ data: Data, to url: URL) throws { try writeFile(data, to: url) }
 
   // Wine tree
@@ -104,6 +106,7 @@ func makeWineFixtures(in directory: URL, options: WineFixtureOptions = .init()) 
   for name in ["d3d10core.dll", "d3d11.dll", "dxgi.dll", "kernel32.dll"] {
     try write(WineFixtureContent.stock(name), to: tree.appending(path: "lib/wine/x86_64-windows/\(name)"))
   }
+  try write(Data("Wine base external library".utf8), to: tree.appending(path: "lib/external/wine-base.dylib"))
   try write(Data("unix-wine".utf8), to: tree.appending(path: "lib/wine/x86_64-unix/wine"))
   try write(Data("unix-wine-host".utf8), to: tree.appending(path: "lib/wine/x86_64-unix/wine-host"))
   try write(Data(WineFixtureContent.stockWineInf.utf8), to: tree.appending(path: "share/wine/wine.inf"))
@@ -138,13 +141,32 @@ func makeWineFixtures(in directory: URL, options: WineFixtureOptions = .init()) 
   try write(WineFixtureContent.wrongArch, to: bundle.appending(path: "aarch64-unix/winemetal.so"))
   try write(Data("\(wineFixtureCommit)\n".utf8), to: bundle.appending(path: "VERSION"))
 
+  var gptk4: GPTK4Bundle?
+  if options.gptk4Included {
+    let payload = directory.appending(path: "gptk4/lib", directoryHint: .isDirectory)
+    let framework = payload.appending(path: "external/D3DMetal.framework/Versions/A", directoryHint: .isDirectory)
+    let info = try PropertyListSerialization.data(
+      fromPropertyList: ["CFBundleShortVersionString": GPTK4Bundle.expectedVersion], format: .xml, options: 0)
+    try write(Data("D3DMetal".utf8), to: framework.appending(path: "D3DMetal"))
+    try write(info, to: framework.appending(path: "Resources/Info.plist"))
+    try write(Data("libd3dshared".utf8), to: payload.appending(path: "external/libd3dshared.dylib"))
+    for file in WineFixtureContent.gptkFiles {
+      try write(Data("GPTK-windows-\(file)".utf8), to: payload.appending(path: "wine/x86_64-windows/\(file).dll"))
+      let unix = payload.appending(path: "wine/x86_64-unix/\(file).so")
+      try FileManager.default.createDirectory(at: unix.deletingLastPathComponent(), withIntermediateDirectories: true)
+      try FileManager.default.createSymbolicLink(
+        atPath: unix.path, withDestinationPath: "../../external/libd3dshared.dylib")
+    }
+    gptk4 = GPTK4Bundle(directory: payload, version: GPTK4Bundle.expectedVersion)
+  }
+
   return WineFixtures(
     wineArchive: wineArchive,
     distribution: WineDistribution(
       id: "test-wine-1", url: URL(string: "https://fixtures.invalid/wine.tar.xz")!, sha256: wineSHA,
       winePath: options.winePath, archiveSize: wineFixtureArchiveSize, installedSize: wineFixtureInstalledSize,
       prefixSize: wineFixturePrefixSize),
-    dxmt: DXMTBundle(directory: bundle, version: wineFixtureCommit))
+    dxmt: DXMTBundle(directory: bundle, version: wineFixtureCommit), gptk4: gptk4)
 }
 
 // MARK: - Stub downloader
@@ -186,6 +208,11 @@ final class WineStubDownloader: Downloading, @unchecked Sendable {
     from url: URL, to destination: URL, sha256: String?,
     progress: @escaping @Sendable (DownloadProgress) -> Void
   ) async throws {
+    if let sha256, wineExists(destination), try wineSHA256(ofFile: destination) == sha256 {
+      let size = Downloader.fileSize(destination)
+      progress(DownloadProgress(completed: size, total: size))
+      return
+    }
     lock.withLock {
       _requests.append(Request(url: url, destination: destination, sha256: sha256))
       _active += 1
@@ -227,8 +254,9 @@ final class WineRecordingRunner: ProcessRunning, @unchecked Sendable {
   private var _infAtBoot: String?
   private var _d3d11AtBoot: Data?
   private var _dxmtDllAtBoot: Bool?
+  private var _dittoExitCode: Int32?
   private let root: URL
-  private let bootExitCode: Int32
+  private var bootExitCode: Int32
   private let winecfgExitCode: Int32
   private let tarExitCode: Int32?
   private let tarOutput: String
@@ -251,6 +279,8 @@ final class WineRecordingRunner: ProcessRunning, @unchecked Sendable {
   var d3d11AtBoot: Data? { lock.withLock { _d3d11AtBoot } }
   var systemDxmtDllAtBoot: Bool? { lock.withLock { _dxmtDllAtBoot } }
   var wineCalls: [WineRecordedCall] { calls.filter { Self.isLoader($0.executable) } }
+  func setBootExitCode(_ exitCode: Int32) { lock.withLock { bootExitCode = exitCode } }
+  func setDittoExitCode(_ exitCode: Int32?) { lock.withLock { _dittoExitCode = exitCode } }
 
   static func isLoader(_ path: String) -> Bool {
     let url = URL(filePath: path)
@@ -273,21 +303,28 @@ final class WineRecordingRunner: ProcessRunning, @unchecked Sendable {
       return try await real.run(
         executable, arguments: arguments, environment: environment, workingDirectory: workingDirectory)
     case "/usr/bin/ditto":
+      if let exitCode = lock.withLock({ _dittoExitCode }) {
+        return ProcessResult(exitCode: exitCode, output: "ditto: stub failure")
+      }
       return try await real.run(
         executable, arguments: arguments, environment: environment, workingDirectory: workingDirectory)
     default:
       guard Self.isLoader(executable.path) else { return ProcessResult(exitCode: 0, output: "") }
       if arguments.first == "wineboot" {
-        let inf = try? String(
-          contentsOf: root.appending(path: "wine/share/wine/wine.inf"), encoding: .utf8)
-        let d3d11 = try? Data(contentsOf: root.appending(path: "wine/lib/wine/x86_64-windows/d3d11.dll"))
-        let system32 = root.appending(path: "wineprefix/drive_c/windows/system32", directoryHint: .isDirectory)
+        let runtime = executable.deletingLastPathComponent().deletingLastPathComponent()
+        let inf = try? String(contentsOf: runtime.appending(path: "share/wine/wine.inf"), encoding: .utf8)
+        let d3d11 = try? Data(contentsOf: runtime.appending(path: "lib/wine/x86_64-windows/d3d11.dll"))
+        let prefix = URL(filePath: environment["WINEPREFIX"] ?? root.appending(path: "wineprefix").path)
+        let system32 = prefix.appending(path: "drive_c/windows/system32", directoryHint: .isDirectory)
+        let bootExitCode = lock.withLock { self.bootExitCode }
         lock.withLock {
           _infAtBoot = inf
           _d3d11AtBoot = d3d11
         }
         if bootExitCode == 0 {
           try FileManager.default.createDirectory(at: system32, withIntermediateDirectories: true)
+          try Data("system".utf8).write(to: prefix.appending(path: "system.reg"))
+          try Data("user".utf8).write(to: prefix.appending(path: "user.reg"))
         }
         return ProcessResult(exitCode: bootExitCode, output: "wineboot-stub-output")
       }
@@ -317,6 +354,7 @@ final class WineProgressCollector: @unchecked Sendable {
     case .configuring: label = "configuring"
     case .initializingPrefix: label = "initializingPrefix"
     case .installingDXMT: label = "installingDXMT"
+    case .installingGPTK4: label = "installingGPTK4"
     case .finalizing: label = "finalizing"
     }
     lock.withLock { labels.append(label) }
@@ -376,6 +414,7 @@ func makeWineHarness(in directory: URL, options: WineHarnessOptions = .init()) t
     tarExitCode: options.tarExitCode, tarOutput: options.tarOutput)
   let runtime = WineRuntime(
     dataDirectory: DataDirectory(root: root), distribution: fixtures.distribution, dxmt: fixtures.dxmt,
+    gptk4: fixtures.gptk4,
     downloader: downloader, runner: runner, availableSpace: { [bytes = options.availableBytes] _ in bytes })
   return WineHarness(
     directory: directory, root: root, fixtures: fixtures, downloader: downloader, runner: runner,

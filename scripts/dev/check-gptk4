@@ -1,0 +1,88 @@
+#!/bin/sh
+# Verifies the staged GPTK 4.0b3 payload and its preserved Apple code signatures.
+set -u
+cd "$(dirname "$0")/../.."
+repo_root=$PWD
+payload="${1:-build/gptk4}"
+case "$payload" in
+  /*) ;;
+  *) payload="$repo_root/$payload" ;;
+esac
+
+fail=0
+manifest=scripts/gptk4-files
+while IFS= read -r file; do
+  case "$file" in ''|'#'*) continue ;; esac
+  if [ ! -e "$payload/$file" ]; then
+    echo "GPTK4 missing: $payload/$file"
+    fail=1
+  fi
+done < "$manifest"
+
+check_link() {
+  path=$1
+  expected=$2
+  actual=$(readlink "$payload/$path" 2>/dev/null || true)
+  if [ "$actual" != "$expected" ]; then
+    echo "GPTK4 symlink mismatch: $path -> ${actual:-missing} (expected $expected)"
+    fail=1
+  fi
+}
+
+check_link lib/external/D3DMetal.framework/D3DMetal Versions/Current/D3DMetal
+check_link lib/external/D3DMetal.framework/Resources Versions/Current/Resources
+check_link lib/external/D3DMetal.framework/Versions/Current A
+# Every Unix bridge in the manifest is a link to libd3dshared.
+for path in $(grep '^lib/wine/x86_64-unix/.*\.so$' "$(dirname "$0")/../gptk4-files"); do
+  check_link "$path" ../../external/libd3dshared.dylib
+done
+
+plist="$payload/lib/external/D3DMetal.framework/Versions/A/Resources/Info.plist"
+version=
+if [ -f "$plist" ]; then
+  version=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$plist" 2>/dev/null || true)
+fi
+if [ "$version" != 4.0b3 ]; then
+  echo "GPTK4 version must be 4.0b3 (found ${version:-missing})"
+  fail=1
+fi
+
+verify_apple_signature() {
+  path=$1
+  if [ ! -e "$payload/$path" ]; then return; fi
+  if ! codesign --verify --deep --strict "$payload/$path"; then
+    echo "GPTK4 signature verification failed: $path"
+    fail=1
+    return
+  fi
+  details=$(codesign -d --verbose=4 "$payload/$path" 2>&1 || true)
+  if ! printf '%s\n' "$details" | grep -Fq 'Authority=Apple Code Signing Certification Authority' \
+    || ! printf '%s\n' "$details" | grep -Fq 'Authority=Apple Root CA'; then
+    echo "GPTK4 signature is not Apple-signed: $path"
+    fail=1
+  fi
+}
+
+verify_apple_signature lib/external/D3DMetal.framework
+verify_apple_signature lib/external/libd3dshared.dylib
+
+sum_file="$payload/SHA256SUMS"
+if [ ! -s "$sum_file" ]; then
+  echo "GPTK4 missing hash record: $sum_file"
+  fail=1
+else
+  expected_count=0
+  while IFS= read -r file; do
+    case "$file" in ''|'#'*) continue ;; esac
+    if [ -L "$payload/$file" ] && [ -d "$payload/$file" ]; then continue; fi
+    expected_count=$((expected_count + 1))
+  done < "$manifest"
+  actual_count=$(grep -vc '^#' "$sum_file")
+  if [ "$actual_count" -ne "$expected_count" ]; then
+    echo "GPTK4 hash record has $actual_count entries; expected $expected_count"
+    fail=1
+  fi
+  (cd "$payload" && shasum -a 256 -c SHA256SUMS) || fail=1
+fi
+
+exit "$fail"

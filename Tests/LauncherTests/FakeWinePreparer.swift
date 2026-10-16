@@ -10,6 +10,7 @@ import Wine
 /// really stopped (not merely been asked to) by the time `pause()` returned.
 final class FakeWinePreparer: WinePreparing, Sendable {
   private struct Install {
+    var backend: GraphicsBackend
     var progress: @Sendable (WineInstallProgress) -> Void
     var continuation: CheckedContinuation<Void, Error>?
     var cancelled = false
@@ -17,8 +18,11 @@ final class FakeWinePreparer: WinePreparing, Sendable {
 
   private struct State {
     var status: WineStatus
+    var backendStatuses: [GraphicsBackend: WineStatus] = [:]
     var statusCalls = 0
+    var statusBackends: [GraphicsBackend] = []
     var installs: [Install] = []
+    var installBackends: [GraphicsBackend] = []
     var log: [String] = []
     var holdsCancellation = false
   }
@@ -36,6 +40,9 @@ final class FakeWinePreparer: WinePreparing, Sendable {
   // MARK: Stubbing
 
   func setStatus(_ status: WineStatus) { state.withLock { $0.status = status } }
+  func setStatus(_ status: WineStatus, for backend: GraphicsBackend) {
+    state.withLock { $0.backendStatuses[backend] = status }
+  }
 
   /// While set, a cancelled install keeps running until `releaseCancelled(install:)`.
   /// This models real work that needs a moment to stop.
@@ -44,7 +51,9 @@ final class FakeWinePreparer: WinePreparing, Sendable {
   // MARK: Observation
 
   var statusCalls: Int { state.withLock { $0.statusCalls } }
+  var statusBackends: [GraphicsBackend] { state.withLock { $0.statusBackends } }
   var installCount: Int { state.withLock { $0.installs.count } }
+  var installBackends: [GraphicsBackend] { state.withLock { $0.installBackends } }
   var log: [String] { state.withLock { $0.log } }
 
   func nextInstall() async throws -> Int { try await startedInstalls.pop("an ensureInstalled call") }
@@ -61,6 +70,7 @@ final class FakeWinePreparer: WinePreparing, Sendable {
   func finish(install index: Int) {
     let continuation = state.withLock { s -> CheckedContinuation<Void, Error>? in
       s.status = .ready
+      s.backendStatuses[s.installs[index].backend] = .ready
       s.log.append("stopped:\(index)")
       return s.installs[index].continuation.take()
     }
@@ -91,7 +101,12 @@ final class FakeWinePreparer: WinePreparing, Sendable {
   let statusQueries = AsyncQueue<Void>()
   let statusGate = AsyncQueue<Void>()
 
-  func status() async -> WineStatus {
+  func status(for backend: GraphicsBackend) async -> WineStatus {
+    state.withLock { $0.statusBackends.append(backend) }
+    return await readStatus(for: backend)
+  }
+
+  private func readStatus(for backend: GraphicsBackend) async -> WineStatus {
     if stallsStatus.withLock({ $0 }) {
       statusQueries.push(())
       _ = await statusGate.pop()
@@ -99,19 +114,22 @@ final class FakeWinePreparer: WinePreparing, Sendable {
     return state.withLock { s in
       s.statusCalls += 1
       s.log.append("status")
-      return s.status
+      return s.backendStatuses[backend] ?? s.status
     }
   }
 
-  func ensureInstalled(progress: @escaping @Sendable (WineInstallProgress) -> Void) async throws {
-    try await runInstall(progress: progress)
+  func ensureInstalled(
+    for backend: GraphicsBackend, progress: @escaping @Sendable (WineInstallProgress) -> Void
+  ) async throws {
+    state.withLock { $0.installBackends.append(backend) }
+    try await runInstall(progress: progress, backend: backend)
   }
 
   private func runInstall(
-    progress: @escaping @Sendable (WineInstallProgress) -> Void
+    progress: @escaping @Sendable (WineInstallProgress) -> Void, backend: GraphicsBackend
   ) async throws {
     let index = state.withLock { s -> Int in
-      s.installs.append(Install(progress: progress))
+      s.installs.append(Install(backend: backend, progress: progress))
       s.log.append("install:\(s.installs.count - 1)")
       return s.installs.count - 1
     }

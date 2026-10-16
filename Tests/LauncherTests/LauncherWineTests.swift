@@ -15,20 +15,32 @@ private let notInstalled = GameStatus(localVersion: nil, remoteVersion: "5.0.0")
 private let missing = WineStatus.needsInstall(.notInstalled)
 
 @MainActor
+private final class BackendSelection {
+  var value: GraphicsBackend
+
+  init(_ value: GraphicsBackend) { self.value = value }
+}
+
+@MainActor
 private final class Harness {
   let wine: FakeWinePreparer
   let fake: FakeGameClient
   let model: LauncherModel
   let log: EventLog
   let directory: URL
+  let backendSelection: BackendSelection
 
   var jobFile: URL { directory.appending(path: ".genshin-launcher-tmp").appending(path: "job.json") }
 
-  init(wine wineStatus: WineStatus, game: GameStatus = installed) {
+  init(wine wineStatus: WineStatus, game: GameStatus = installed, backend: GraphicsBackend = .gptk4) {
     wine = FakeWinePreparer(status: wineStatus)
     fake = FakeGameClient(status: game)
     directory = makeTemporaryDirectory("LauncherWineTests")
-    model = LauncherModel(client: fake, wine: wine, gameDirectory: directory, chunkTempMargin: 0)
+    backendSelection = BackendSelection(backend)
+    let backendSelection = backendSelection
+    model = LauncherModel(
+      client: fake, wine: wine, gameDirectory: directory, graphicsBackendSource: { backendSelection.value },
+      chunkTempMargin: 0)
     log = EventLog(model.events)
   }
 
@@ -54,6 +66,37 @@ private final class Harness {
     #expect(h.model.wineStatus == .ready)
     #expect(h.model.phase == .idle)
     #expect(h.model.primaryAction == .launch)
+  }
+
+  @Test(arguments: GraphicsBackend.allCases)
+  func WIN_005_selectedBackendIsUsedForWineStatusAndPreparation(_ backend: GraphicsBackend) async throws {
+    let h = Harness(wine: missing, backend: backend)
+    let (task, install) = try await h.bootstrapUntilPreparing()
+    #expect(h.wine.statusBackends.first == backend)
+    #expect(h.wine.installBackends == [backend])
+
+    h.wine.finish(install: install)
+    await task.value
+    #expect(h.wine.statusBackends.allSatisfy { $0 == backend })
+  }
+
+  @Test func WIN_005_backendStatusAfterPreparationReflectsASelectionChangedMidInstall() async throws {
+    let h = Harness(wine: missing)
+    h.wine.setStatus(missing, for: .gptk4)
+    h.wine.setStatus(missing, for: .dxmt)
+    let (task, install) = try await h.bootstrapUntilPreparing()
+
+    h.backendSelection.value = .dxmt
+    await h.model.refreshWine()
+    #expect(h.model.wineStatus == missing)
+
+    h.wine.finish(install: install)
+    await task.value
+
+    #expect(h.model.wineStatus == missing)
+    #expect(h.model.primaryAction == .prepareWine)
+    #expect(h.model.lastError == nil)
+    #expect(try await h.log.next() == .wineReady)
   }
 
   @Test(arguments: [

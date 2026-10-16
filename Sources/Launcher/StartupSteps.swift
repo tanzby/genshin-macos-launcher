@@ -4,11 +4,13 @@ import Wine
 /// The seam between the launcher and the Wine runtime. `WineRuntime` is the production implementation;
 /// tests use a Fake so the state machine never touches the disk or the network.
 public protocol WinePreparing: Sendable {
-  /// Whether the pinned Wine and DXMT are installed and intact. Looks at the disk (the version stamp).
-  func status() async -> WineStatus
-  /// Installs Wine, DXMT and the prefix when `status()` is not `.ready`. Must stop when its Task is
-  /// cancelled; downloads resume from their `.part` files on the next call.
-  func ensureInstalled(progress: @escaping @Sendable (WineInstallProgress) -> Void) async throws
+  /// Whether the pinned Wine and `backend`'s runtime are installed and intact. Looks at the disk (the version stamp).
+  func status(for backend: GraphicsBackend) async -> WineStatus
+  /// Installs Wine, `backend`'s runtime and the prefix when `status(for:)` is not `.ready`. Must stop when its Task
+  /// is cancelled; downloads resume from their `.part` files on the next call.
+  func ensureInstalled(
+    for backend: GraphicsBackend, progress: @escaping @Sendable (WineInstallProgress) -> Void
+  ) async throws
 }
 
 /// The environment steps of ADR 0002's startup order that sit around Wine, behind a seam so the state machine
@@ -17,11 +19,11 @@ public struct StartupSteps: Sendable {
   /// Whether Rosetta 2 is installed. Checked before the 2 GB Wine download.
   public var rosettaInstalled: @Sendable () async -> Bool
   /// `GameSession.recover()`: kill what is left of the prefix, replay the journal of a crashed launch.
-  public var recoverSession: @Sendable () async -> Void
+  public var recoverSession: @Sendable (GraphicsBackend) async -> Void
 
   public init(
     rosettaInstalled: @escaping @Sendable () async -> Bool,
-    recoverSession: @escaping @Sendable () async -> Void
+    recoverSession: @escaping @Sendable (GraphicsBackend) async -> Void
   ) {
     self.rosettaInstalled = rosettaInstalled
     self.recoverSession = recoverSession

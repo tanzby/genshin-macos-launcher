@@ -50,6 +50,8 @@ Only one game may run at a time: the tool refuses to start when any Wine process
 scripts/diag/genshin-launcher-diag run --app … --autoplay --timeout 200
 ```
 
+`scripts/diag/fps-measure gptk4 dxmt …` measures walking on the real, logged-in data directory, one bounded run per argument. It starts a copy of the installed app with the dev companion in `measure` mode, which enters the world. It then holds W and S for 15 s each through HID key events (`scripts/diag/holdkey.swift`, which needs Accessibility), and prints the companion's `present:` lines: fps, p50/p99/max and hitches from each drawable's `presentedTime` on the largest layer, plus its drawable size. It closes the game after every run and restores the backend preference.
+
 `--screen-check` checks what is actually on screen. It enters the game, then runs these steps: idle in the world, hide and unhide the app, walk, attack, a control with the window held below the menu bar, and restore. After each step the dev companion saves the game's drawable and logs the screen's top safe-area inset and display number. genshin-launcher-diag then captures that display at once (`screencapture -D`, which needs Screen Recording for the calling terminal). `screen-compare.swift` compares per-row luma profiles (scaling a non-Retina drawable to the screen) and prints `verdict=ok`, `covered` (black over the top strip while the game drew there), `shifted` (best match at a vertical offset), `mismatch` or `size-mismatch`. On a Mac with a notch the control step must report `covered`, which shows the check can fail. The last step, `other-window`, opens Notepad in the prefix: it passes when Notepad's window is on screen and the game is inactive at level 24 or lower. It runs last because a background app may not activate itself, and the check has no Accessibility access to click the game. The PNGs stay in `~/Library/Caches/genshin-launcher-diag/shots/<time>/`.
 
 ```bash
@@ -57,6 +59,10 @@ scripts/diag/genshin-launcher-diag run --app … --screen-check --timeout 200
 ```
 
 Result on 2026-10-07 (14" MacBook Pro, macOS 27.0.1): every step `ok` (top strip luma within 1 between screen and game, body diff ≤ 5.7, offset 0), the control `covered` (top luma 0 on screen vs 105 in the game), and `other-window` ok (Notepad on screen, game inactive at level 0). A run where another app took the screen during a step reports that step as `mismatch`.
+
+## GPTK 4.0 beta 3 integration
+
+Current native-backend integration, payload, and acceptance evidence are tracked in [GPTK 4.0 beta 3 integration](gptk4-beta3-integration.md). The beta 2 results below remain historical and are not beta 3 performance evidence.
 
 Measured on 2026-10-04 (M5 Pro, DXMT, native full screen, fast continuous turn):
 

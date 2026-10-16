@@ -13,11 +13,13 @@ private let noop: @Sendable () -> Void = {}
 
 @Suite struct ClientLaunchTests {
   @Test func APP_019_recoverIsHandedToTheGameSession() async {
-    let rig = ClientRig()
+    let rig = ClientRig(distinctBackendLaunchers: true)
 
-    await rig.client.recover()
+    await rig.client.recover(backend: .gptk4)
+    await rig.client.recover(backend: .dxmt)
 
     #expect(rig.launcher.recoveries.withLock { $0 } == 1)
+    #expect(rig.dxmtLauncher.recoveries.withLock { $0 } == 1)
   }
 
   @Test func WIN_022_commandPromptGetsTheLaunchEnvironmentAndTheGameDirectory() async throws {
@@ -28,12 +30,18 @@ private let noop: @Sendable () -> Void = {}
     let prompt = try #require(rig.launcher.prompts.withLock { $0 }.first)
     #expect(prompt.gameDirectory == rig.game)
     #expect(prompt.recipe.environment["MTL_HUD_ENABLED"] == "1")
-    #expect(prompt.recipe.environment["DXMT_LOG_PATH"] == rig.data.path)
+    #expect(prompt.recipe.environment["DXMT_LOG_PATH"] == nil)
     #expect(rig.launcher.recipes.isEmpty, "opening a prompt must not launch the game")
   }
 
   private func installedRig() -> ClientRig {
     let rig = ClientRig()
+    rig.install("5.6.0")
+    return rig
+  }
+
+  private func installedRig(distinctBackendLaunchers: Bool) -> ClientRig {
+    let rig = ClientRig(distinctBackendLaunchers: distinctBackendLaunchers)
     rig.install("5.6.0")
     return rig
   }
@@ -47,8 +55,23 @@ private let noop: @Sendable () -> Void = {}
     let recipe = try #require(rig.launcher.recipes.first)
     #expect(recipe.gameExecutableName == "YuanShen.exe")
     #expect(recipe.command.last?.contains(rig.game.path.replacingOccurrences(of: "/", with: "\\")) == true)
-    #expect(recipe.environment["DXMT_LOG_PATH"] == rig.data.path)
+    #expect(recipe.environment["DXMT_LOG_PATH"] == nil)
     #expect(recipe.prefixCopies.allSatisfy { $0.source.path.hasPrefix(rig.protonExtras.path) })
+  }
+
+  @Test func GPTK4_isTheDefaultLaunchBackendAndDXMTRequiresAnExplicitSelection() async throws {
+    let rig = installedRig(distinctBackendLaunchers: true)
+
+    _ = try await rig.client.launch(LaunchOptions(gameDirectory: rig.game), onStarted: noop)
+    _ = try await rig.client.launch(
+      LaunchOptions(gameDirectory: rig.game, graphicsBackend: .dxmt), onStarted: noop)
+
+    let gptkRecipe = try #require(rig.launcher.recipes.first)
+    let dxmtRecipe = try #require(rig.dxmtLauncher.recipes.first)
+    #expect(rig.launcher.recipes.count == 1)
+    #expect(rig.dxmtLauncher.recipes.count == 1)
+    #expect(gptkRecipe.environment["DXMT_CONFIG"] == nil)
+    #expect(dxmtRecipe.environment["DXMT_CONFIG"] == "d3d11.preferredMaxFrameRate=60;")
   }
 
   @Test func LCH_032_steamPatchTimeoutFixAndGameModeAreOnWhateverTheOptionsAre() async throws {

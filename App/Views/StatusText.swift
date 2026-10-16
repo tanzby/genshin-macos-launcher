@@ -41,6 +41,10 @@ extension LauncherError {
     case .busy: "Another task is still running."
     case .wineNotReady: "Wine has to be set up first."
     case .rosettaMissing: "Rosetta 2 is not installed. Install it, then reopen Genshin Launcher."
+    case .wineInstall(.gptk4BundleInvalid):
+      "This build has no GPTK 4. Choose DXMT under Settings → Wine."
+    case .wineInstall(.prefixUnrecognized):
+      "The Wine prefix does not look complete. It was left untouched; restore or remove it, then try again."
     case .wineInstall: "Wine could not be set up."
     case .noGameDirectory: "Choose a game folder first."
     case .notInstalled: "The game is not installed."
@@ -105,6 +109,7 @@ extension WineInstallProgress {
     case .extracting: "Extracting"
     case .configuring, .initializingPrefix: "Setting up the Wine environment"
     case .installingDXMT: "Installing DXMT"
+    case .installingGPTK4: "Installing GPTK 4"
     case .finalizing: "Finishing up"
     }
   }
