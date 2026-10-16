@@ -15,7 +15,7 @@ import TestSupport
     "wineboot.log", "winecfg.log", "wine.tar.xz", "icon.icns",
   ]
   static let kept = [
-    "wine-gptk4/bin/wine", "gptk4/lib/x", "logs/game_1.log", "unrelated.txt",
+    "wine-gptk4/bin/wine", "wine-gptk4-native/bin/wine", "gptk4/lib/x", "logs/game_1.log", "unrelated.txt",
   ]
 
   @Test func APP_002_defaultRootIsGenshinLauncherUnderApplicationSupport() {
@@ -27,6 +27,7 @@ import TestSupport
   @Test func APP_002_layoutResolvesUnderRoot() {
     let directory = DataDirectory(root: URL(filePath: "/data/Genshin Launcher"))
     #expect(directory.wine.path == "/data/Genshin Launcher/wine")
+    #expect(directory.wineGPTK4.path == "/data/Genshin Launcher/wine-gptk4-native")
     #expect(directory.winePrefix.path == "/data/Genshin Launcher/wineprefix")
     #expect(directory.logs.path == "/data/Genshin Launcher/logs")
     #expect(directory.background.path == "/data/Genshin Launcher/background")

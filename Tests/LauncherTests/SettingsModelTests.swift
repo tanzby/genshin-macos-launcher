@@ -10,10 +10,11 @@ private func freshDefaults() -> UserDefaults {
 }
 
 @MainActor @Suite struct SettingsModelTests {
-  @Test func CFG_001_defaultsAreOffAndResolutionIs1080p() {
+  @Test func CFG_001_defaultsAndResolutionIs1080p() {
     let settings = SettingsModel(defaults: freshDefaults())
+    #expect(settings.graphicsBackend == .gptk4)
     #expect(settings.gameDirectory == nil)
-    #expect(!settings.retina && !settings.metalHUD && !settings.leftCommandIsControl)
+    #expect(settings.retina && !settings.metalHUD && !settings.leftCommandIsControl)
     #expect(!settings.hdr && !settings.metalFX && !settings.proxyEnabled)
     #expect(settings.customResolution == nil)
     #expect(settings.resolutionWidth == 1920 && settings.resolutionHeight == 1080)
@@ -22,8 +23,9 @@ private func freshDefaults() -> UserDefaults {
   @Test func CFG_001_changesPersistAcrossInstances() {
     let defaults = freshDefaults()
     let first = SettingsModel(defaults: defaults)
+    first.graphicsBackend = .dxmt
     first.gameDirectory = URL(filePath: "/Volumes/Games/Genshin")
-    first.retina = true
+    first.retina = false
     first.metalHUD = true
     first.leftCommandIsControl = true
     first.hdr = true
@@ -34,18 +36,49 @@ private func freshDefaults() -> UserDefaults {
     first.proxyEnabled = true
 
     let second = SettingsModel(defaults: defaults)
+    #expect(second.graphicsBackend == .dxmt)
     #expect(second.gameDirectory == URL(filePath: "/Volumes/Games/Genshin"))
-    #expect(second.retina && second.metalHUD && second.leftCommandIsControl && second.hdr && second.metalFX)
+    #expect(!second.retina && second.metalHUD && second.leftCommandIsControl && second.hdr && second.metalFX)
     #expect(second.customResolution == SettingsModel.Resolution(width: 2560, height: 1440))
     #expect(second.proxyEnabled)
     #expect(second.effectiveProxy == "127.0.0.1:7890")
   }
 
   @Test func CFG_011_metalHudPersistsAndDefaultsOff() { toggles(\.metalHUD) }
-  @Test func CFG_012_retinaPersistsAndDefaultsOff() { toggles(\.retina) }
+  @Test func CFG_012_retinaPersistsAndDefaultsOn() {
+    let defaults = freshDefaults()
+    #expect(SettingsModel(defaults: defaults).retina)
+    SettingsModel(defaults: defaults).retina = false
+    #expect(!SettingsModel(defaults: defaults).retina)
+  }
   @Test func CFG_013_leftCommandAsControlPersistsAndDefaultsOff() { toggles(\.leftCommandIsControl) }
   @Test func CFG_021_hdrPersistsAndDefaultsOff() { toggles(\.hdr) }
   @Test func CFG_029_metalFXPersistsAndDefaultsOff() { toggles(\.metalFX) }
+
+  @Test func CFG_030_aBuildWithoutGPTKDefaultsToDXMT() {
+    let defaults = freshDefaults()
+    #expect(SettingsModel(defaults: defaults, defaultBackend: .dxmt).graphicsBackend == .dxmt)
+    SettingsModel(defaults: defaults, defaultBackend: .dxmt).graphicsBackend = .gptk4
+    #expect(SettingsModel(defaults: defaults, defaultBackend: .dxmt).graphicsBackend == .gptk4)
+  }
+
+  @Test func CFG_030_graphicsBackendPersistsAndDefaultsToGPTK4() {
+    let defaults = freshDefaults()
+    #expect(SettingsModel(defaults: defaults).graphicsBackend == .gptk4)
+    SettingsModel(defaults: defaults).graphicsBackend = .dxmt
+    #expect(defaults.string(forKey: "graphicsBackend") == "dxmt")
+    #expect(SettingsModel(defaults: defaults).graphicsBackend == .dxmt)
+  }
+
+  @Test func CFG_030_launchOptionsKeepTheBackendSelectedWhenTheyWereCreated() {
+    let settings = SettingsModel(defaults: freshDefaults())
+    settings.graphicsBackend = .dxmt
+    let options = settings.launchOptions(gameDirectory: URL(filePath: "/Games/GI"))
+    settings.graphicsBackend = .gptk4
+
+    #expect(options.graphicsBackend == .dxmt)
+    #expect(settings.launchOptions(gameDirectory: URL(filePath: "/Games/GI")).graphicsBackend == .gptk4)
+  }
 
   private func toggles(_ key: ReferenceWritableKeyPath<SettingsModel, Bool>) {
     let defaults = freshDefaults()
@@ -182,10 +215,10 @@ private func freshDefaults() -> UserDefaults {
     #expect(options.proxyHost == "127.0.0.1:7890")
   }
 
-  @MainActor @Test func LCH_005_launchOptionsOfDefaultSettingsChangeNothing() {
+  @MainActor @Test func LCH_005_launchOptionsOfDefaultSettingsOnlyTurnOnRetina() {
     let options = SettingsModel(defaults: freshDefaults()).launchOptions(gameDirectory: URL(filePath: "/Games/GI"))
 
-    #expect(options == LaunchOptions(gameDirectory: URL(filePath: "/Games/GI")))
+    #expect(options == LaunchOptions(gameDirectory: URL(filePath: "/Games/GI"), retina: true))
   }
 }
 
@@ -194,6 +227,7 @@ private func freshDefaults() -> UserDefaults {
 @MainActor @Suite struct SettingsBehaviourTests {
   private func everythingOn(_ settings: SettingsModel) {
     settings.gameDirectory = URL(filePath: "/Volumes/Games/Genshin")
+    settings.graphicsBackend = .dxmt
     settings.retina = true
     settings.metalHUD = true
     settings.leftCommandIsControl = true

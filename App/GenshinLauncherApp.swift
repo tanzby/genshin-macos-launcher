@@ -20,10 +20,10 @@ struct AppRuntime {
   /// when it fails. `--autolaunch` may point at a sandbox root.
   init(autoLaunch: AutoLaunchOptions) throws {
     let data = try autoLaunch.prepareDataDirectory()
-    // One `WineRuntime` for the client (launches the game with it) and the model (prepares it).
-    let wine = WineRuntime(dataDirectory: data, dxmt: .inApp)
+    let settings = SettingsModel(defaultBackend: GPTK4Bundle.inApp == nil ? .dxmt : .gptk4)
+    // One `WineRuntime` chooses a backend per operation; the two runtimes share the prefix.
+    let wine = WineRuntime(dataDirectory: data, dxmt: .inApp, gptk4: .inApp)
     let client = GenshinCNClient.bundled(wine: wine, dataDirectory: data, bundle: .main)
-    let settings = SettingsModel()
     let hosts = GenshinCN.hostsBlocklist()
     let hostsModel = HostsModel(hosts)
     let onboarding = OnboardingModel(
@@ -34,8 +34,10 @@ struct AppRuntime {
     let launcher = LauncherModel(
       client: client, wine: wine, hosts: hostsModel,
       startup: StartupSteps(
-        rosettaInstalled: { StartupSteps.isRosettaInstalled() }, recoverSession: { await client.recover() }),
-      gameDirectorySource: { autoLaunch.gameDirectory(saved: settings.gameDirectory) })
+        rosettaInstalled: { StartupSteps.isRosettaInstalled() },
+        recoverSession: { await client.recover(backend: $0) }),
+      gameDirectorySource: { autoLaunch.gameDirectory(saved: settings.gameDirectory) },
+      graphicsBackendSource: { settings.graphicsBackend })
     launcher.makeLaunchOptions = { settings.launchOptions(gameDirectory: $0) }
     controller = MainController(launcher: launcher, settings: settings, onboarding: onboarding)
     self.client = client

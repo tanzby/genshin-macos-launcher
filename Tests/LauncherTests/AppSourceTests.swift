@@ -92,15 +92,15 @@ enum AppSource {
     #expect(game.contains("Native full screen and Game Mode are always on."))
   }
 
-  // CFG-008: the Wine page shows the pinned versions and offers no choice, so there is no "switch version"
-  // confirmation, no relaunch and no surprise prefix rebuild (see the Wine tests for what a mismatch does).
-  @Test func CFG_008_theWinePageShowsThePinnedVersionAndOffersNoChoice() throws {
+  // CFG-008: Wine stays pinned; only the graphics backend can be selected without rebuilding the shared prefix.
+  @Test func CFG_008_theWinePageShowsThePinnedVersionAndGraphicsBackendChoice() throws {
     let source = try settings.get()
     let wine = String(try #require(source.components(separatedBy: "private struct WinePage").last?
       .components(separatedBy: "private struct AdvancedPage").first))
 
     #expect(wine.contains(#"LabeledContent("Wine", value: WineRuntime.pinnedVersion)"#))
-    #expect(!wine.contains("Picker"))
+    #expect(wine.contains(#"Picker("Graphics backend""#))
+    #expect(wine.contains("GraphicsBackend.allCases"))
   }
 
   // CFG-018: the launcher version (and build) is shown on the General page, read from the bundle.

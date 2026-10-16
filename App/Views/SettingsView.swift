@@ -175,10 +175,17 @@ private struct WinePage: View {
   let dataDirectory: URL
 
   var body: some View {
+    @Bindable var settings = controller.settings
     Form {
       Section("Runtime") {
         LabeledContent("Wine", value: WineRuntime.pinnedVersion)
         LabeledContent("DXMT", value: DXMTBundle.inApp?.shortVersion ?? "-")
+        LabeledContent("GPTK", value: GPTK4Bundle.inApp?.version ?? "-")
+        Picker("Graphics backend", selection: $settings.graphicsBackend) {
+          ForEach(GraphicsBackend.allCases) { backend in
+            Text(backend.title).tag(backend)
+          }
+        }
       }
       Section("Tools") {
         Button("Show Wine Prefix in Finder") {
@@ -190,6 +197,9 @@ private struct WinePage: View {
     }
     .formStyle(.grouped)
     .navigationTitle("Wine")
+    .onChange(of: settings.graphicsBackend) { _, _ in
+      Task { await controller.refreshWineStatus() }
+    }
   }
 }
 

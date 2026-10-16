@@ -31,6 +31,7 @@ public final class LauncherModel {
   /// Read on every use, never copied: the app passes a closure over `SettingsModel`, so a folder picked a moment
   /// ago is the one the next operation sees. Tests with a fixed folder pass `gameDirectory:` instead.
   private var directorySource: @MainActor () -> URL?
+  private var graphicsBackendSource: @MainActor () -> GraphicsBackend
   public package(set) var gameDirectory: URL? {
     get { directorySource() }
     set { directorySource = { newValue } }
@@ -99,6 +100,7 @@ public final class LauncherModel {
     startup: StartupSteps? = nil,
     gameDirectory: URL? = nil,
     gameDirectorySource: (@MainActor () -> URL?)? = nil,
+    graphicsBackendSource: (@MainActor () -> GraphicsBackend)? = nil,
     chunkTempMargin: Int64 = LauncherModel.defaultChunkTempMargin,
     availableDiskSpace: @escaping @Sendable (URL) -> Int64? = LauncherModel.systemAvailableCapacity
   ) {
@@ -107,6 +109,7 @@ public final class LauncherModel {
     self.hosts = hosts
     self.startup = startup
     directorySource = gameDirectorySource ?? { gameDirectory }
+    self.graphicsBackendSource = graphicsBackendSource ?? { .gptk4 }
     diskSpace = DiskSpaceCheck(margin: chunkTempMargin, availableSpace: availableDiskSpace)
     (events, eventSink) = AsyncStream.makeStream()
   }
@@ -140,14 +143,15 @@ public final class LauncherModel {
     guard jobs.exclusive == .idle, !isPausing, !isShuttingDown else { return false }
     guard await rosettaIsAvailable() else { return false }
     hasBootstrapped = true
-    await refreshWine()
+    let backend = graphicsBackendSource()
+    await refreshWine(for: backend)
     guard isWineMissing else {
-      await recoverOnce()
+      await recoverOnce(backend: backend)
       await refresh()
       return false
     }
     do {
-      try await startWinePreparation()
+      try await startWinePreparation(for: backend)
     } catch {
       // Someone else (the user pressing "prepare Wine") got the slot while the status was being read: wait for theirs.
     }
@@ -155,10 +159,11 @@ public final class LauncherModel {
   }
 
   /// Re-reads the Wine state from the disk. Without a `WinePreparing` the launcher assumes Wine is fine.
-  package func refreshWine() async {
+  package func refreshWine() async { await refreshWine(for: graphicsBackendSource()) }
+
+  private func refreshWine(for backend: GraphicsBackend) async {
     guard let wine else { return }
-    let status = await wine.status()
-    wineStatus = status
+    wineStatus = await wine.status(for: backend)
   }
 
   /// Re-checks Rosetta (when there is a check to make) and records the result. False: `lastError` says why.
@@ -176,9 +181,9 @@ public final class LauncherModel {
   /// Runs `recover()` once per process. Overlapping callers share the one running recovery and all wait for
   /// it; it counts as done only after it has returned, so nothing reads the game state before. While it runs
   /// every job and launch entry answers `busy` (it kills the prefix and rewrites game files).
-  private func recoverOnce() async {
+  private func recoverOnce(backend: GraphicsBackend) async {
     guard !hasRecovered, let startup else { return }
-    let task = recovery ?? Task { await startup.recoverSession() }
+    let task = recovery ?? Task { await startup.recoverSession(backend) }
     recovery = task
     await task.value
     hasRecovered = true
@@ -366,7 +371,8 @@ public final class LauncherModel {
     // Progress arrives on worker threads. One ordered stream brings it to the main actor, and it ends when the job
     // returns, so no late update can land after the final state below.
     let (updates, sink) = AsyncStream<JobProgress>.makeStream(bufferingPolicy: .bufferingNewest(1))
-    async let outcome = Self.run(job, client: client, in: store.gameDirectory, progress: sink)
+    async let outcome = Self.run(
+      job, client: client, in: store.gameDirectory, backend: graphicsBackendSource(), progress: sink)
     for await update in updates { progress = update }
     let failure = await outcome
     let paused = Task.isCancelled || failure?.isCancellation == true
@@ -397,11 +403,12 @@ public final class LauncherModel {
 
   /// The job's error, `nil` when it finished. Ends `progress` either way.
   private nonisolated static func run(
-    _ job: GameJob, client: any GameClient, in directory: URL, progress: AsyncStream<JobProgress>.Continuation
+    _ job: GameJob, client: any GameClient, in directory: URL, backend: GraphicsBackend,
+    progress: AsyncStream<JobProgress>.Continuation
   ) async -> (any Error)? {
     defer { progress.finish() }
     do {
-      try await client.run(job, in: directory) { progress.yield($0) }
+      try await client.run(job, in: directory, backend: backend) { progress.yield($0) }
       return nil
     } catch {
       return error
@@ -442,7 +449,7 @@ public final class LauncherModel {
   public func resume() async throws {
     try await recordingFailure {
       if let refusal = refusal(for: .resume) { throw refusal }
-      if isWineMissing { return try await startWinePreparation() }
+      if isWineMissing { return try await startWinePreparation(for: graphicsBackendSource()) }
       guard let pendingJob else { return }
       try await startJob(pendingJob.kind)
     }
@@ -481,10 +488,10 @@ public final class LauncherModel {
   /// Prepares Wine in the exclusive slot. Returns once the Task is running; a no-op when Wine is ready.
   /// Pause is cancel-and-await. The downloads keep their `.part` files, so calling this again resumes.
   public func prepareWine() async throws {
-    try await recordingFailure { try await startWinePreparation() }
+    try await recordingFailure { try await startWinePreparation(for: graphicsBackendSource()) }
   }
 
-  private func startWinePreparation() async throws {
+  private func startWinePreparation(for backend: GraphicsBackend) async throws {
     // Pressed before `bootstrap()` got to the Rosetta check: do it here, the 2 GB download must not come first.
     if !hasBootstrapped, !(await rosettaIsAvailable()) { throw LauncherError.rosettaMissing }
     if let refusal = refusal(for: .prepareWine) { throw refusal }
@@ -493,11 +500,11 @@ public final class LauncherModel {
     progress = .preparing
     jobs.startExclusive(.preparingWine) {
       await self.stopPreDownload()  // shares the launcher's cancel-and-await rule with install/update/repair
-      await self.runWinePreparation(wine)
+      await self.runWinePreparation(wine, backend: backend)
     }
   }
 
-  private func runWinePreparation(_ wine: any WinePreparing) async {
+  private func runWinePreparation(_ wine: any WinePreparing, backend: GraphicsBackend) async {
     let activity = ProcessInfo.processInfo.beginActivity(
       options: [.userInitiated, .idleSystemSleepDisabled], reason: "Genshin Launcher Wine preparation")
     let (updates, sink) = AsyncStream<WineInstallProgress>.makeStream(bufferingPolicy: .bufferingNewest(1))  // only the latest progress matters
@@ -508,7 +515,7 @@ public final class LauncherModel {
         defer { sink.finish() }
         do {
           try Task.checkCancellation()  // paused while waiting for a pre-download: do not begin the install
-          try await wine.ensureInstalled { sink.yield($0) }
+          try await wine.ensureInstalled(for: backend) { sink.yield($0) }
           return nil
         } catch {
           return error
@@ -519,15 +526,17 @@ public final class LauncherModel {
     }
     let error = failure.map(LauncherError.init)
     let paused = Task.isCancelled || failure?.isCancellation == true
-    await refreshWine()  // after a pause or failure still not ready: the next attempt starts from the stamp and the `.part` files
+    let preparedStatus = await wine.status(for: backend)
+    let selectedBackend = graphicsBackendSource()
+    wineStatus = selectedBackend == backend ? preparedStatus : await wine.status(for: selectedBackend)
     if !paused {
-      let failed = error ?? (isWineMissing ? .unexpected("Wine is still not ready after installation") : nil)
+      let failed = error ?? (preparedStatus == .ready ? nil : .unexpected("Wine is still not ready after installation"))
       if let failed {
         lastError = failed
         eventSink.yield(.wineFailed(failed))
       } else {
         progress = .preparing
-        await recoverOnce()
+        await recoverOnce(backend: backend)
         // The game status is only read once Wine is ready. Wine is installed by now, so a pause must not
         // cancel this read (it would leave `status` nil and offer "install"); only shutdown does.
         if !isShuttingDown {

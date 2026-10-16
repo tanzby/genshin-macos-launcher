@@ -21,11 +21,12 @@ private let protonExtras = URL(filePath: "/Users/test/Library/Application Suppor
 
 /// Launch options in `defaultGameDirectory`.
 private func settings(
+  graphicsBackend: GraphicsBackend = .dxmt,
   retina: Bool = false, leftCommandIsControl: Bool = false, metalHUD: Bool = false, hdr: Bool = false,
   metalFX: Bool = false, customResolution: LaunchOptions.Resolution? = nil, proxyHost: String? = nil
 ) -> LaunchOptions {
   LaunchOptions(
-    gameDirectory: defaultGameDirectory, retina: retina, leftCommandIsControl: leftCommandIsControl,
+    gameDirectory: defaultGameDirectory, graphicsBackend: graphicsBackend, retina: retina, leftCommandIsControl: leftCommandIsControl,
     metalHUD: metalHUD, hdr: hdr, metalFX: metalFX, customResolution: customResolution, proxyHost: proxyHost)
 }
 
@@ -52,6 +53,17 @@ private func edits(_ recipe: LaunchRecipe, key: String) -> [RegistryEdit] {
         "DXMT_CONFIG_FILE": "/Users/test/Library/Application Support/Genshin Launcher/dxmt.conf",
         "GST_PLUGIN_FEATURE_RANK": "atdec:MAX,avdec_h264:MAX",
       ])
+  }
+
+  @Test func GPTK4_launchOmitsDXMTEnvironmentAndMetalFXShim() {
+    let recipe = make(settings(graphicsBackend: .gptk4, retina: true, metalFX: true))
+
+    #expect(recipe.environment["WINE_ENABLE_TIMEOUT_FIX"] == "1")
+    #expect(recipe.environment["DXMT_LOG_PATH"] == nil)
+    #expect(recipe.environment["DXMT_CONFIG"] == nil)
+    #expect(recipe.environment["DXMT_CONFIG_FILE"] == nil)
+    #expect(recipe.environment["DXMT_METALFX_SPATIAL_SWAPCHAIN"] == nil)
+    #expect(edits(recipe, key: macDriverKey).first?.action == .set(.string("y")))
   }
 
   @Test func LCH_032_timeoutFixIsAlwaysEnabledWhateverTheSettingsAre() {
@@ -293,7 +305,7 @@ private func edits(_ recipe: LaunchRecipe, key: String) -> [RegistryEdit] {
 
   @Test func CFG_024_CFG_027_CFG_028_CFG_019_theLaunchSettingsOnlyCarryTheSwitchesThatRemain() {
     let expected = [
-      "retina", "leftCommandIsControl", "metalHUD", "hdr", "metalFX", "customResolution", "proxyHost",
+      "graphicsBackend", "retina", "leftCommandIsControl", "metalHUD", "hdr", "metalFX", "customResolution", "proxyHost",
     ]
     #expect(labels(LaunchOptions(gameDirectory: defaultGameDirectory)) == ["gameDirectory"] + expected)
   }

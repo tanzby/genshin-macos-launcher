@@ -1,5 +1,6 @@
 import Foundation
 import Observation
+import Wine
 
 /// Why a directory cannot be the game directory.
 public enum GameDirectoryProblem: Error, Sendable, Equatable {
@@ -90,6 +91,7 @@ public final class SettingsModel {
 
   enum Key {
     static let gameDirectory = "gameDirectory"
+    static let graphicsBackend = "graphicsBackend"
     static let retina = "retina"
     static let leftCommandIsControl = "leftCommandIsControl"
     static let metalHUD = "metalHUD"
@@ -107,6 +109,7 @@ public final class SettingsModel {
   public var gameDirectory: URL? {
     didSet { defaults.set(gameDirectory?.path, forKey: Key.gameDirectory) }
   }
+  public var graphicsBackend: GraphicsBackend { didSet { defaults.set(graphicsBackend.rawValue, forKey: Key.graphicsBackend) } }
   public var retina: Bool { didSet { defaults.set(retina, forKey: Key.retina) } }
   public var leftCommandIsControl: Bool {
     didSet { defaults.set(leftCommandIsControl, forKey: Key.leftCommandIsControl) }
@@ -122,10 +125,13 @@ public final class SettingsModel {
   public var proxyEnabled: Bool { didSet { defaults.set(proxyEnabled, forKey: Key.proxyEnabled) } }
   public private(set) var proxyHost: String
 
-  public init(defaults: UserDefaults = .standard) {
+  /// `defaultBackend` applies until the user picks one: GPTK 4 when the app carries it, DXMT otherwise.
+  public init(defaults: UserDefaults = .standard, defaultBackend: GraphicsBackend = .gptk4) {
     self.defaults = defaults
     gameDirectory = defaults.string(forKey: Key.gameDirectory).map { URL(filePath: $0) }
-    retina = defaults.bool(forKey: Key.retina)
+    graphicsBackend = defaults.string(forKey: Key.graphicsBackend).flatMap(GraphicsBackend.init(rawValue:)) ?? defaultBackend
+    // Retina is on unless turned off: the native-resolution picture is the expected default.
+    retina = defaults.object(forKey: Key.retina) as? Bool ?? true
     leftCommandIsControl = defaults.bool(forKey: Key.leftCommandIsControl)
     metalHUD = defaults.bool(forKey: Key.metalHUD)
     hdr = defaults.bool(forKey: Key.hdr)
@@ -167,7 +173,8 @@ public final class SettingsModel {
   /// What the next launch of the game in `gameDirectory` needs from the settings.
   public func launchOptions(gameDirectory: URL) -> LaunchOptions {
     LaunchOptions(
-      gameDirectory: gameDirectory, retina: retina, leftCommandIsControl: leftCommandIsControl, metalHUD: metalHUD,
+      gameDirectory: gameDirectory, graphicsBackend: graphicsBackend, retina: retina,
+      leftCommandIsControl: leftCommandIsControl, metalHUD: metalHUD,
       hdr: hdr, metalFX: metalFX,
       customResolution: customResolution,
       proxyHost: effectiveProxy)

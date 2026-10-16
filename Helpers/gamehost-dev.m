@@ -9,6 +9,10 @@
  *    window for a minute to enter the game, then time an idle and a
  *    camera-turn phase (length GENSHIN_LAUNCHER_GAMEHOST_TURN seconds)
  *    (the turn itself is driven by turner.exe via SendInput);
+ *  - a movement measurement (GENSHIN_LAUNCHER_GAMEHOST_DEV=measure): enter the game
+ *    like autoplay, then collect the presented times of the main game layer while
+ *    W or S is held (by a person or a synthetic key event); on release they are
+ *    summarised like the frame statistics, plus drawables never presented;
  *  - screenshots: the previous drawable is copied to a PNG
  *    (GENSHIN_LAUNCHER_GAMEHOST_SHOT_DIR), at the end of each phase;
  *  - a screen check (GENSHIN_LAUNCHER_GAMEHOST_DEV=screen): enter the game, then save
@@ -16,6 +20,7 @@
  *    screen at each "shot:" line and compares the two.
  */
 #import <AppKit/AppKit.h>
+#import <Carbon/Carbon.h>
 #import <ImageIO/ImageIO.h>
 #import <Metal/Metal.h>
 #import <QuartzCore/QuartzCore.h>
@@ -37,6 +42,21 @@ static int compareDouble(const void *a, const void *b) {
   return x < y ? -1 : x > y;
 }
 
+/* Interval statistics of n >= 3 ascending timestamps (seconds). */
+typedef struct { double fps, p50, p99, max; int hitches; } IntervalStats;
+static IntervalStats intervalStats(const double *t, int n) {
+  int m = n - 1, hitches = 0;
+  double *d = malloc(sizeof(double) * m);
+  for (int i = 0; i < m; i++) {
+    d[i] = (t[i + 1] - t[i]) * 1000;
+    if (d[i] > 50) hitches++;
+  }
+  qsort(d, m, sizeof(double), compareDouble);
+  IntervalStats st = {m / (t[m] - t[0]), d[m / 2], d[(int)(m * 0.99)], d[m - 1], hitches};
+  free(d);
+  return st;
+}
+
 static void resetFrames(void) {
   os_unfair_lock_lock(&frameLock);
   frameCount = 0;
@@ -54,17 +74,9 @@ static void reportFrames(const char *phase) {
     free(t);
     return;
   }
-  int m = n - 1, hitches = 0;
-  double *d = malloc(sizeof(double) * m), sum = 0;
-  for (int i = 0; i < m; i++) {
-    d[i] = (t[i + 1] - t[i]) * 1000;
-    sum += d[i];
-    if (d[i] > 50) hitches++;
-  }
-  qsort(d, m, sizeof(double), compareDouble);
+  IntervalStats st = intervalStats(t, n);
   gamehost_say("frames: phase=%s frames=%d fps=%.1f p50=%.1fms p99=%.1fms max=%.1fms hitches50=%d",
-               phase, n, m / (sum / 1000), d[m / 2], d[(int)(m * 0.99)], d[m - 1], hitches);
-  free(d);
+               phase, n, st.fps, st.p50, st.p99, st.max, st.hitches);
   free(t);
 }
 
@@ -103,6 +115,61 @@ static void saveShot(id<CAMetalDrawable> drawable, NSString *path) {
   gamehost_say("shot: %s %lux%lu %s", path.UTF8String, (unsigned long)w, (unsigned long)h, ok ? "ok" : "failed");
 }
 
+/* Measure mode: presented times of the largest layer while a movement key is down. */
+static double presentTimes[MAX_FRAMES];
+static int presentCount, droppedCount;
+static bool measureMode, measuring;
+static CAMetalLayer *mainLayer;
+static double mainArea;
+
+static void summarise(const char *phase, double *t, int n, int dropped, CGSize size) {
+  if (n < 3) {
+    gamehost_say("present: phase=%s presented=%d dropped=%d (no data)", phase, n, dropped);
+    return;
+  }
+  qsort(t, n, sizeof(double), compareDouble); /* handlers may arrive out of order */
+  IntervalStats st = intervalStats(t, n);
+  gamehost_say("present: phase=%s size=%.0fx%.0f seconds=%.1f presented=%d dropped=%d fps=%.1f p50=%.1fms "
+               "p99=%.1fms max=%.1fms hitches50=%d",
+               phase, size.width, size.height, t[n - 1] - t[0], n, dropped, st.fps, st.p50, st.p99, st.max,
+               st.hitches);
+}
+
+static void trackPresent(CAMetalLayer *layer, id<CAMetalDrawable> drawable) {
+  CGSize size = layer.drawableSize;
+  os_unfair_lock_lock(&frameLock);
+  if (size.width * size.height > mainArea) {
+    mainArea = size.width * size.height;
+    mainLayer = layer;
+  }
+  bool track = measuring && layer == mainLayer;
+  os_unfair_lock_unlock(&frameLock);
+  if (!track) return;
+  [drawable addPresentedHandler:^(id<MTLDrawable> presented) {
+    CFTimeInterval at = presented.presentedTime;
+    os_unfair_lock_lock(&frameLock);
+    if (measuring) {
+      if (at == 0) droppedCount++;
+      else if (presentCount < MAX_FRAMES) presentTimes[presentCount++] = at;
+    }
+    os_unfair_lock_unlock(&frameLock);
+  }];
+}
+
+static void setMeasuring(const char *key, bool on) {
+  os_unfair_lock_lock(&frameLock);
+  int n = presentCount, dropped = droppedCount;
+  double *t = malloc(sizeof(double) * (n > 0 ? n : 1));
+  memcpy(t, presentTimes, sizeof(double) * n);
+  CGSize size = mainLayer ? mainLayer.drawableSize : CGSizeZero;
+  measuring = on;
+  presentCount = droppedCount = 0;
+  os_unfair_lock_unlock(&frameLock);
+  gamehost_say("measure: %s %s", key, on ? "down" : "up");
+  if (!on) summarise(key, t, n, dropped, size);
+  free(t);
+}
+
 static IMP origNextDrawable;
 static id hookNextDrawable(CAMetalLayer *self, SEL _cmd) {
   // Copy the previous (already presented) frame before the next one starts.
@@ -126,6 +193,7 @@ static id hookNextDrawable(CAMetalLayer *self, SEL _cmd) {
   // requested screenshot so normal frame timing is unaffected.
   if (makeWritable) self.framebufferOnly = NO;
   id<CAMetalDrawable> d = ((id (*)(id, SEL))origNextDrawable)(self, _cmd);
+  if (d && measureMode) trackPresent(self, d);
   os_unfair_lock_lock(&frameLock);
   lastDrawable = d;
   os_unfair_lock_unlock(&frameLock);
@@ -282,6 +350,26 @@ static void screenCheck(void) {
   after(t + 7, ^{ gamehost_say("screen: done"); });
 }
 
+/* Polls W and S in the combined session state, which includes synthetic events. */
+static void measure(void) {
+  static const char *active;
+  static dispatch_source_t timer; /* kept for the life of the process */
+  timer = dispatch_source_create(DISPATCH_SOURCE_TYPE_TIMER, 0, 0, dispatch_get_main_queue());
+  dispatch_source_set_timer(timer, DISPATCH_TIME_NOW, 20 * NSEC_PER_MSEC, 5 * NSEC_PER_MSEC);
+  dispatch_source_set_event_handler(timer, ^{
+    bool w = CGEventSourceKeyState(kCGEventSourceStateCombinedSessionState, kVK_ANSI_W);
+    bool s = CGEventSourceKeyState(kCGEventSourceStateCombinedSessionState, kVK_ANSI_S);
+    const char *down = w ? "W" : s ? "S" : NULL;
+    if (down == active) return;
+    if (active) setMeasuring(active, false);
+    if (down) setMeasuring(down, true);
+    active = down;
+  });
+  dispatch_resume(timer);
+  enterGame();
+  after(ENTER_SECONDS, ^{ gamehost_say("measure: ready"); });
+}
+
 void gamehost_dev_start(void *window) {
   static bool started;
   if (started) return;
@@ -293,4 +381,6 @@ void gamehost_dev_start(void *window) {
   const char *mode = getenv("GENSHIN_LAUNCHER_GAMEHOST_DEV");
   if (mode && !strcmp(mode, "autoplay")) autoplay();
   if (mode && !strcmp(mode, "screen")) screenCheck();
+  measureMode = mode && !strcmp(mode, "measure");
+  if (measureMode) measure();
 }

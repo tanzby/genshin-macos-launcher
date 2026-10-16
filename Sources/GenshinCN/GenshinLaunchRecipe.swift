@@ -49,16 +49,18 @@ public enum GenshinLaunchRecipe {
       else { return nil }
       return (width, height)
     }
-    let metalFX = options.metalFX && resolution == nil
+    let metalFX = options.graphicsBackend == .dxmt && options.metalFX && resolution == nil
 
     var environment = [
       "WINE_ENABLE_TIMEOUT_FIX": "1",
       "WINEESYNC": "1",
-      "DXMT_LOG_PATH": dataDirectory.path,
-      "DXMT_CONFIG": "d3d11.preferredMaxFrameRate=60;",
-      "DXMT_CONFIG_FILE": dataDirectory.appending(path: "dxmt.conf").path,
       "GST_PLUGIN_FEATURE_RANK": "atdec:MAX,avdec_h264:MAX",
     ]
+    if options.graphicsBackend == .dxmt {
+      environment["DXMT_LOG_PATH"] = dataDirectory.path
+      environment["DXMT_CONFIG"] = "d3d11.preferredMaxFrameRate=60;"
+      environment["DXMT_CONFIG_FILE"] = dataDirectory.appending(path: "dxmt.conf").path
+    }
     if options.metalHUD { environment["MTL_HUD_ENABLED"] = "1" }
     if metalFX { environment["DXMT_METALFX_SPATIAL_SWAPCHAIN"] = "1" }
     if let proxy = options.proxyHost, !proxy.isEmpty {
@@ -69,7 +71,8 @@ public enum GenshinLaunchRecipe {
     func yesNo(_ value: Bool) -> RegistryValue { .string(value ? "y" : "n") }
     var registry = [
       RegistryEdit(
-        key: macDriverKey, name: "RetinaMode", action: .set(yesNo(options.retina && !metalFX)), restoresOnExit: false),
+        key: macDriverKey, name: "RetinaMode",
+        action: .set(yesNo(options.retina && !metalFX)), restoresOnExit: false),
       RegistryEdit(
         key: macDriverKey, name: "LeftCommandIsCtrl", action: .set(yesNo(options.leftCommandIsControl)),
         restoresOnExit: false),

@@ -67,11 +67,12 @@ final class ClientRig: @unchecked Sendable {
   let game: URL
   let data: URL
   let protonExtras: URL
-  let launcher = FakeLauncher()
+  let launcher: FakeLauncher
+  let dxmtLauncher: FakeLauncher
   let client: GenshinCNClient
 
   /// `branches` is the body of getGameBranches; `nil` makes every request fail like a missing network.
-  init(branches: Data? = nil) {
+  init(branches: Data? = nil, distinctBackendLaunchers: Bool = false) {
     root = temporaryURL("genshin-launcher-client")
     game = root.appending(path: "Game", directoryHint: .isDirectory)
     data = root.appending(path: "Data", directoryHint: .isDirectory)
@@ -80,8 +81,12 @@ final class ClientRig: @unchecked Sendable {
     let (session, _) = BackgroundStub.session { url in
       url.path.hasSuffix("getGameBranches") ? branches.map { (200, $0) } : nil
     }
+    let launcher = FakeLauncher(), dxmtLauncher = FakeLauncher()
+    self.launcher = launcher
+    self.dxmtLauncher = dxmtLauncher
     client = GenshinCNClient(
-      dataDirectory: data, protonExtras: protonExtras, launcher: launcher,
+      dataDirectory: data, protonExtras: protonExtras,
+      launcher: { distinctBackendLaunchers && $0 == .dxmt ? dxmtLauncher : launcher },
       sophon: SophonClient(game: GenshinCN.sophonGame, session: session))
   }
 

@@ -38,7 +38,7 @@ private func makeController(
 
   @Test func APP_001_aMissingRosettaIsRetriedOnTheNextRefreshUntilItIsInstalled() async {
     let installed = Mutex(false)
-    let steps = StartupSteps(rosettaInstalled: { installed.withLock { $0 } }, recoverSession: {})
+    let steps = StartupSteps(rosettaInstalled: { installed.withLock { $0 } }, recoverSession: { _ in })
     let (controller, client, _) = makeController(startup: steps)
     await controller.refresh()
     #expect(controller.launcher.isRosettaMissing)

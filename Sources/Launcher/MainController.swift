@@ -46,6 +46,10 @@ public final class MainController {
     await reload()
   }
 
+  public func refreshWineStatus() async {
+    await launcher.refreshWine()
+  }
+
   private func reload() async {
     // Until the startup sequence has got past the Rosetta check, every reload runs it again.
     if launcher.hasBootstrapped {

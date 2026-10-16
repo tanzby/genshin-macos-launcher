@@ -53,6 +53,7 @@ public struct LaunchOptions: Sendable, Equatable {
   }
 
   public var gameDirectory: URL
+  public var graphicsBackend: GraphicsBackend
   public var retina: Bool
   public var leftCommandIsControl: Bool
   public var metalHUD: Bool
@@ -64,10 +65,12 @@ public struct LaunchOptions: Sendable, Equatable {
   public var proxyHost: String?
 
   public init(
-    gameDirectory: URL, retina: Bool = false, leftCommandIsControl: Bool = false, metalHUD: Bool = false,
+    gameDirectory: URL, graphicsBackend: GraphicsBackend = .gptk4, retina: Bool = false,
+    leftCommandIsControl: Bool = false, metalHUD: Bool = false,
     hdr: Bool = false, metalFX: Bool = false, customResolution: Resolution? = nil, proxyHost: String? = nil
   ) {
     self.gameDirectory = gameDirectory
+    self.graphicsBackend = graphicsBackend
     self.retina = retina
     self.leftCommandIsControl = leftCommandIsControl
     self.metalHUD = metalHUD
@@ -108,7 +111,10 @@ public protocol GameClient: Sendable {
   func status(in directory: URL?) async throws -> GameStatus
   /// Runs `job` and returns once all its work has stopped: when it is done, when it fails, or after a cancellation
   /// (throwing `CancellationError`). `progress` may be called from any thread until then.
-  func run(_ job: GameJob, in directory: URL, progress: @escaping @Sendable (JobProgress) -> Void) async throws
+  func run(
+    _ job: GameJob, in directory: URL, backend: GraphicsBackend,
+    progress: @escaping @Sendable (JobProgress) -> Void
+  ) async throws
   /// Bytes the job will write after decompression, excluding the chunk-cache margin the launcher adds.
   /// Install: unpacked total. Update and pre-download: download size plus new files. 0 when nothing is written.
   /// This is the launcher's preflight, run before it writes anything, so it also refuses a folder the job could

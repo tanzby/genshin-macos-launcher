@@ -45,7 +45,7 @@ private final class StepsProbe: Sendable {
           return $0.rosetta
         }
       },
-      recoverSession: { [self] in
+      recoverSession: { [self] _ in
         if state.withLock({ $0.stallsRecovery }) {
           recoveryStarted.push(())
           _ = await recoveryGate.pop()

@@ -14,7 +14,6 @@ import Testing
       options.availableBytes = 1_000_000_000
       let h = try makeWineHarness(in: dir, options: options)
       try h.writeFile("wine/sentinel.txt")
-      try h.writeFile("wineprefix/sentinel.txt")
 
       let required = wineFixtureArchiveSize + wineFixtureInstalledSize
         + wineFixturePrefixSize
@@ -24,7 +23,7 @@ import Testing
 
       #expect(h.downloader.requests.isEmpty)
       #expect(wineExists(h.root.appending(path: "wine/sentinel.txt")))
-      #expect(wineExists(h.root.appending(path: "wineprefix/sentinel.txt")))
+      #expect(!wineExists(h.root.appending(path: "wineprefix")))
       #expect(h.runner.calls.isEmpty)
     }
   }
@@ -111,7 +110,7 @@ import Testing
           request.destination.deletingLastPathComponent().resolvingSymlinksInPath().path
             == h.layout.downloadsDirectory.resolvingSymlinksInPath().path)
       }
-      #expect(!wineExists(h.layout.downloadsDirectory))  // gone once the install succeeded
+      #expect(wineExists(h.layout.downloadsDirectory.appending(path: "wine-\(h.fixtures.distribution.sha256.prefix(16)).archive")))
     }
   }
 

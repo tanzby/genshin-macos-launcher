@@ -1,0 +1,69 @@
+#!/bin/zsh
+# Usage: fps-measure <gptk4|dxmt>... Bounded present-time measurement on the REAL data directory and logged-in
+# prefix, one run per argument (e.g. `fps-measure gptk4 dxmt gptk4 dxmt`). Each run starts a copy of the installed
+# app with the dev companion in measure mode (Helpers/gamehost-dev.m), which enters the world; then W and S are held
+# 15 s each so the character walks out and back, and the companion logs `present:` lines from the drawables'
+# presentedTime; `gpu:` lines give the GPU utilization over the same 15 s. The game is closed with wineserver -k
+# after every run; the graphics backend preference is set back to its previous value at the end. Apple's GPTK payload in the copy is not re-signed (only the outer bundle).
+set -eu
+repo=${0:A:h:h:h}
+app="/Applications/Genshin Launcher.app"
+data="$HOME/Library/Application Support/Genshin Launcher"
+log="$data/logs/gamehost.log"
+work=$(mktemp -d -t fps-measure)
+domain=io.github.tanzby.genshin-launcher
+previous=$(defaults read $domain graphicsBackend 2>/dev/null || echo gptk4)
+# Closes the game in the shared prefix (whichever runtime runs it) and the launcher copy.
+close_game() {
+  "$repo/scripts/diag/genshin-launcher-diag" kill --data-dir "$data" >/dev/null
+  sleep 3
+  pkill -f "$work/Genshin Launcher.app/Contents/MacOS" 2>/dev/null || true
+}
+cleanup() {
+  close_game
+  defaults write $domain graphicsBackend -string "$previous"
+  rm -rf "$work"
+}
+trap cleanup EXIT
+pgrep -f 'YuanShen.exe|wineserver|Contents/MacOS/Genshin Launcher' >/dev/null && { echo "quit the launcher and the game first"; exit 1; }
+
+ditto "$app" "$work/Genshin Launcher.app"
+sh "$repo/Helpers/build.sh" --dev "$work/Genshin Launcher.app/Contents/Helpers" >/dev/null
+codesign -f -s - "$work/Genshin Launcher.app" 2>/dev/null
+"$repo/scripts/dev/check-gptk4" "$work/Genshin Launcher.app/Contents/Resources/gptk4" >/dev/null
+swiftc -O -o "$work/holdkey" "$repo/scripts/diag/holdkey.swift"
+game_dir=$(defaults read $domain gameDirectory)
+
+for backend in "$@"; do
+  defaults write $domain graphicsBackend -string "$backend"
+  start=$(wc -l < "$log" 2>/dev/null || echo 0)
+  # A clean environment: the game inherits the launcher's.
+  env -i HOME=$HOME USER=$USER LOGNAME=$USER TMPDIR=$TMPDIR PATH=/usr/bin:/bin:/usr/sbin:/sbin \
+    open -n --env GENSHIN_LAUNCHER_GAMEHOST_DEV=measure --env GENSHIN_LAUNCHER_AUTOLAUNCH=1 \
+    --env GENSHIN_LAUNCHER_GAME_DIR="$game_dir" "$work/Genshin Launcher.app" --args --autolaunch
+  newlog() { tail -n +$((start + 1)) "$log" 2>/dev/null; }
+  deadline=$((SECONDS + 300))
+  until newlog | grep -q 'measure: ready' || (( SECONDS > deadline )); do sleep 2; done
+  pid=$(pgrep -f '^Z:.*YuanShen.exe' | tail -1 || true)
+  if newlog | grep -q 'measure: ready' && [ -n "$pid" ]; then
+    sleep 10
+    for key in W S; do
+      "$repo/scripts/diag/genshin-launcher-diag" activate "$pid" --timeout 10 >/dev/null || echo "activate failed"
+      # GPU utilization while walking (IOAccelerator "Device Utilization %", sampled every 0.5 s): headroom under
+      # the frame cap. It reflects the GPU's current clock, so it is a comparison, not an absolute capacity.
+      ( while :; do ioreg -r -d 1 -c IOAccelerator -w0 | grep -oE '"Device Utilization %"=[0-9]+' | cut -d= -f2; sleep 0.5; done ) \
+        > "$work/gpu" &
+      sampler=$!
+      "$work/holdkey" $([ $key = W ] && echo 13 || echo 1) 15
+      kill $sampler
+      awk -v k=$key '{s+=$1; if ($1>m) m=$1; n++} END {printf "gpu: phase=%s samples=%d mean=%.0f%% max=%d%%\n", k, n, s/n, m}' "$work/gpu"
+      sleep 3
+    done
+  else
+    echo "timed out before the world"
+  fi
+  close_game
+  echo "== $backend $(date +%H:%M:%S)"
+  newlog | grep -E 'present:|dev companion unavailable' || echo "no present lines"
+  sleep 5
+done
