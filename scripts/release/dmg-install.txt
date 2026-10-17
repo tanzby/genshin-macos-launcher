@@ -1,0 +1,17 @@
+Genshin Launcher 安装说明
+
+1. 把 Genshin Launcher 拖到旁边的 Applications（应用程序）文件夹。
+
+2. 第一次打开时，macOS 会提示无法验证这个 App，点「完成」。
+   这是因为 App 没有 Apple 开发者签名和公证，不是文件损坏。用下面任一方法放行一次即可：
+
+   方法 A：打开「系统设置 › 隐私与安全性」，滚到底部「安全性」，
+           点 Genshin Launcher 旁边的「仍要打开」，输入密码确认。
+           这个按钮只在刚被拦下后出现一段时间，没看到就先再打开一次 App。
+
+   方法 B：在「终端」里运行（App 已经拖进 Applications 之后再运行）：
+           xattr -dr com.apple.quarantine "/Applications/Genshin Launcher.app"
+
+3. 之后的版本由 App 内置的更新器自动下载安装，不用再重复这些步骤。
+
+要求：Apple 芯片的 Mac，macOS 26 或更高版本。
