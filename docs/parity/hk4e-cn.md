@@ -157,7 +157,7 @@
 | LCH-029 | 全屏时覆盖刘海区域 | 照搬 | x86_64 shim/host 原样搬 (ADR 0002)；只能 E2E | diag | diag：`genshin-launcher-diag` |
 | LCH-030 | 窗口关闭 15 秒后进程仍在则自行退出 | 照搬 | x86_64 shim/host 原样搬 (ADR 0002)；只能 E2E | diag | diag：`genshin-launcher-diag` |
 | LCH-031 | 本机主机名在本地直接解析 | 照搬 | TS 行为不变；LaunchRecipe/GameSession 重做 | diag | diag：`genshin-launcher-diag probe`（注入 gamehost.dylib 的 x86_64 探针解析本机主机名；完整 diag 运行也会做这一项） |
-| LCH-032 | Metal HUD、超时修复与 DLL 覆盖 | 改写 | [#28](https://github.com/tanzby/yet-another-anime-game-launcher/issues/28) A9：Timeout Fix 固定开启，`WINE_ENABLE_TIMEOUT_FIX` 恒为启用值；Metal HUD 打开时显示全部指标（`MTL_HUD_ELEMENTS`） | diag | GenshinLaunchRecipeTests |
+| LCH-032 | Metal HUD、超时修复与 DLL 覆盖 | 改写 | [#28](https://github.com/tanzby/yet-another-anime-game-launcher/issues/28) A9：Timeout Fix 固定开启，`WINE_ENABLE_TIMEOUT_FIX` 恒为启用值；Metal HUD 只设 `MTL_HUD_ENABLED=1`，用默认布局，GPTK 时显示 D3DMetal 自带的 Game Porting Toolkit 信息块 | diag | GenshinLaunchRecipeTests |
 | LCH-033 | DXMT 环境变量与 60 帧上限 | 改写 | [#28](https://github.com/tanzby/yet-another-anime-game-launcher/issues/28) A6：DXMT 上限 60；打开「解锁 120 帧」（CFG-019）时为 120 | 单元 | GenshinLaunchRecipeTests |
 | LCH-034 | 代理环境变量 | 改写 | [#28](https://github.com/tanzby/yet-another-anime-game-launcher/issues/28) B17 | 单元 | GenshinLaunchRecipeTests |
 | LCH-035 | 空字符串的环境变量不会传递 | 照搬 | TS 行为不变；LaunchRecipe/GameSession 重做 | 单元 | GameSessionLaunchTests |
