@@ -78,12 +78,15 @@ private func edits(_ recipe: LaunchRecipe, key: String) -> [RegistryEdit] {
     #expect(make().environment["WINEDLLOVERRIDES"] == nil)
   }
 
-  @Test func LCH_032_metalHudIsSetToOneOnlyWhenEnabled() {
+  @Test func LCH_032_metalHudIsSetToOneWithEveryMetricOnlyWhenEnabled() {
     let on = make(settings(metalHUD: true))
     let off = make(settings(metalHUD: false))
 
     #expect(on.environment["MTL_HUD_ENABLED"] == "1")
+    #expect(on.environment["MTL_HUD_ELEMENTS"]?.split(separator: ",").count == 20)
+    #expect(on.environment["MTL_HUD_ELEMENTS"]?.hasPrefix("device,rosetta,") == true)
     #expect(off.environment["MTL_HUD_ENABLED"] == nil)
+    #expect(off.environment["MTL_HUD_ELEMENTS"] == nil)
     #expect(on.environment["WINEESYNC"] == "1")  // positive: the rest is still there
   }
 
