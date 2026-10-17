@@ -119,10 +119,10 @@ package struct LaunchTiming: Sendable {
 package struct GameHostHelpers: Sendable, Equatable {
   package var shim: URL
   package var dylib: URL
-  /// `AppIcon.icns`, shown by the Game Mode notification. `nil` leaves the game bundle without an icon.
+  /// `AppIcon.icns`, shown by the Game Mode notification. Missing or `nil` leaves the game bundle without an icon.
   package var icon: URL?
 
-  package init(shim: URL, dylib: URL, icon: URL? = nil) {
+  package init(shim: URL, dylib: URL, icon: URL?) {
     self.shim = shim
     self.dylib = dylib
     self.icon = icon

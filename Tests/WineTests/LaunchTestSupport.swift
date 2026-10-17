@@ -45,6 +45,10 @@ func launchRead(_ url: URL) -> String? {
   (try? Data(contentsOf: url)).map { String(decoding: $0, as: UTF8.self) }
 }
 
+func launchReadPlist(_ url: URL) -> [String: Any]? {
+  (try? Data(contentsOf: url)).flatMap { try? PropertyListSerialization.propertyList(from: $0, format: nil) as? [String: Any] }
+}
+
 func launchModificationDate(_ url: URL) -> Date? {
   (try? FileManager.default.attributesOfItem(atPath: url.path))?[.modificationDate] as? Date
 }
@@ -533,8 +537,8 @@ func withLaunchFixture<T>(
     if options.helpers {
       let shim = dir.appending(path: "helpers/genshin-launcher-wine-shim")
       let dylib = dir.appending(path: "helpers/genshin-launcher-gamehost.dylib")
-      try writeFile(LaunchBytes.shim, to: shim)
       let icon = dir.appending(path: "helpers/AppIcon.icns")
+      try writeFile(LaunchBytes.shim, to: shim)
       try writeFile(LaunchBytes.dylib, to: dylib)
       try writeFile(LaunchBytes.icon, to: icon)
       helpers = GameHostHelpers(shim: shim, dylib: dylib, icon: icon)

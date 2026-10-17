@@ -222,9 +222,7 @@ private func expectNoGameHostVariables(_ f: LaunchFixture, sourceLocation: Sourc
       let result = await f.makeSession(helpers: helpers).launch(makeLaunchRecipe())
 
       #expect(result == .exited)
-      let data = try #require(try? Data(contentsOf: f.infoPlist))
-      let plist = try #require(
-        try? PropertyListSerialization.propertyList(from: data, options: [], format: nil) as? [String: Any])
+      let plist = try #require(launchReadPlist(f.infoPlist))
       #expect(plist["LSSupportsGameMode"] as? Bool == true)  // positive: the plist was written
       #expect(plist["CFBundleIconFile"] == nil)
       #expect(!FileManager.default.fileExists(atPath: f.bundleIcon.path))
@@ -355,8 +353,7 @@ private func expectNoGameHostVariables(_ f: LaunchFixture, sourceLocation: Sourc
       let result = await f.session.launch(makeLaunchRecipe())
 
       #expect(result == .exited)
-      let data = try #require(try? Data(contentsOf: f.infoPlist))
-      let plist = try? PropertyListSerialization.propertyList(from: data, options: [], format: nil) as? [String: Any]
+      let plist = launchReadPlist(f.infoPlist)
       #expect(plist?["CFBundleExecutable"] as? String == "wine")
       #expect(f.services.registered.count == 2)
       #expect(f.runner.calls(.codesign).count == 1)
