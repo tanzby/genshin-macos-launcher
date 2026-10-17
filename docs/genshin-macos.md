@@ -12,7 +12,7 @@ macOS enables Game Mode only when **both** hold for the front process, as decide
 Implementation (setting "Native full screen + Game Mode", on by default, `config_game_mode`):
 
 - `src/wine/game-host.ts` installs `Helpers/wine-shim.c` as `<wine>/lib/wine/x86_64-unix/wine` and keeps the original host as `wine-host`. Wine execs that path for every new Windows process. When `argv[1]` contains the game executable, the shim execs `GenshinLauncherGame.app/Contents/MacOS/wine` instead. That file is a copy of `wine-host` in a bundle registered with `lsregister`. All other processes run `wine-host` unchanged.
-- The bundle copy is re-signed with `-i io.github.tanzby.genshin-launcher.game`. If the code-signing identifier differs from the bundle identifier, every `getaddrinfo` in the process stalls for about 35 s.
+- The bundle copy is re-signed with `-i io.github.tanzby.genshin-launcher.game`. If the code-signing identifier differs from the bundle identifier, every `getaddrinfo` in the process stalls for about 35 s. The bundle also gets the launcher's `AppIcon.icns` (`CFBundleIconFile`), which the "Game Mode on" notification shows.
 - `Helpers/gamehost.c` is injected into the game process only. The shim sets `DYLD_INSERT_LIBRARIES` from `GENSHIN_LAUNCHER_GAME_HOST_DYLIB` when it execs the game and clears it for the game's child processes. It links only libSystem and attaches once `winemac.so` is loaded. It does six things:
   - moves the game window (at least half the screen) into a native full-screen Space;
   - makes that window cover the whole screen, notch area included. On a Mac with a notch, a native full-screen Space showed a black strip along the top (33 pt on a 14" MacBook Pro), for two reasons:

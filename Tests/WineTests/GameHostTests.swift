@@ -209,6 +209,56 @@ private func expectNoGameHostVariables(_ f: LaunchFixture, sourceLocation: Sourc
       #expect(plist["LSUIElement"] as? Bool == true)
       #expect(plist["NSHighResolutionCapable"] as? Bool == true)
       #expect(plist["NSPrincipalClass"] as? String == "WineApplication")
+      #expect(plist["CFBundleIconFile"] as? String == "AppIcon")
+      #expect(launchRead(f.bundleIcon) == LaunchBytes.icon)
+    }
+  }
+
+  @Test func LCH_025_withoutAnIconTheBundleHasNoneAndGameModeStaysOn() async throws {
+    try await withLaunchFixture(helperOptions) { f in
+      var helpers = try #require(f.helpers)
+      helpers.icon = nil
+
+      let result = await f.makeSession(helpers: helpers).launch(makeLaunchRecipe())
+
+      #expect(result == .exited)
+      let plist = try #require(launchReadPlist(f.infoPlist))
+      #expect(plist["LSSupportsGameMode"] as? Bool == true)  // positive: the plist was written
+      #expect(plist["CFBundleIconFile"] == nil)
+      #expect(!FileManager.default.fileExists(atPath: f.bundleIcon.path))
+      #expect(f.runner.gameCall?.environment["GENSHIN_LAUNCHER_GAME_HOST_EXE"] == f.macOSWine.path)
+    }
+  }
+
+  @Test func LCH_025_anIconThatCannotBeCopiedLeavesTheBundleWithoutOneAndGameModeOn() async throws {
+    try await withLaunchFixture(helperOptions) { f in
+      try writeFile("not a directory", to: f.bundleIcon.deletingLastPathComponent())  // Contents/Resources
+
+      let result = await f.session.launch(makeLaunchRecipe())
+
+      #expect(result == .exited)
+      let plist = try #require(launchReadPlist(f.infoPlist))
+      #expect(plist["LSSupportsGameMode"] as? Bool == true)  // positive: the plist was written
+      #expect(plist["CFBundleIconFile"] == nil)
+      #expect(f.runner.gameCall?.environment["GENSHIN_LAUNCHER_GAME_HOST_EXE"] == f.macOSWine.path)
+    }
+  }
+
+  @Test func LCH_025_aChangedIconIsCopiedAndRegisteredAgainWithoutSigningAgain() async throws {
+    try await withLaunchFixture(helperOptions) { f in
+      _ = await f.session.launch(makeLaunchRecipe())
+      #expect(f.services.registered.count == 1)
+      try writeFile("FAKE-APP-ICON-V2", to: try #require(f.helpers?.icon))
+      let longAgo = Date(timeIntervalSince1970: 1_000_000_000)
+      try launchSetModificationDate(longAgo, of: f.layout.gameHostApp)
+
+      let result = await f.session.launch(makeLaunchRecipe())
+
+      #expect(result == .exited)
+      #expect(launchRead(f.bundleIcon) == "FAKE-APP-ICON-V2")
+      #expect(launchModificationDate(f.layout.gameHostApp) != longAgo)  // the icon cache sees the change
+      #expect(f.services.registered.count == 2)
+      #expect(f.runner.calls(.codesign).count == 1)
     }
   }
 
@@ -317,8 +367,7 @@ private func expectNoGameHostVariables(_ f: LaunchFixture, sourceLocation: Sourc
       let result = await f.session.launch(makeLaunchRecipe())
 
       #expect(result == .exited)
-      let data = try #require(try? Data(contentsOf: f.infoPlist))
-      let plist = try? PropertyListSerialization.propertyList(from: data, options: [], format: nil) as? [String: Any]
+      let plist = launchReadPlist(f.infoPlist)
       #expect(plist?["CFBundleExecutable"] as? String == "wine")
       #expect(f.services.registered.count == 2)
       #expect(f.runner.calls(.codesign).count == 1)

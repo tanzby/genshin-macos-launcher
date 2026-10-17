@@ -69,7 +69,7 @@ public final class GenshinCNClient: GameClient {
     let dylib = directory.appending(path: "genshin-launcher-gamehost.dylib")
     let fileManager = FileManager.default
     guard fileManager.fileExists(atPath: shim.path), fileManager.fileExists(atPath: dylib.path) else { return nil }
-    return GameHostHelpers(shim: shim, dylib: dylib)
+    return GameHostHelpers(shim: shim, dylib: dylib, icon: appBundle.appending(path: "Contents/Resources/AppIcon.icns"))
   }
 
   /// `GameSession.recover()` for the launcher's startup sequence (`StartupSteps.recoverSession`).

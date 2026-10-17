@@ -234,6 +234,8 @@ final class Counter: @unchecked Sendable {
     try Data("dylib".utf8).write(to: helpers.appending(path: "genshin-launcher-gamehost.dylib"))
     #expect(
       GenshinCNClient.helpers(in: app)
-        == GameHostHelpers(shim: helpers.appending(path: "genshin-launcher-wine-shim"), dylib: helpers.appending(path: "genshin-launcher-gamehost.dylib")))
+        == GameHostHelpers(
+          shim: helpers.appending(path: "genshin-launcher-wine-shim"), dylib: helpers.appending(path: "genshin-launcher-gamehost.dylib"),
+          icon: app.appending(path: "Contents/Resources/AppIcon.icns")))
   }
 }
