@@ -26,7 +26,7 @@ Implementation (setting "Native full screen + Game Mode", on by default, `config
 
 ## Metal HUD
 
-The setting "Metal HUD" sets `MTL_HUD_ENABLED=1` and lists every metric from Apple's [Customizing the Metal Performance HUD](https://developer.apple.com/documentation/xcode/customizing-metal-performance-hud) in `MTL_HUD_ELEMENTS`: device, Rosetta, layer size and scale, memory, FPS and frame-interval graphs and histogram, GPU time and timeline, present delay, thermal state, Metal CPU time, shader compilation, frame number, disk I/O and the top labeled command buffers and encoders. `MTL_HUD_SHOW_ZERO_METRICS=1` keeps metrics that are still 0 on screen. The second line on the right shows the graphics API the game's drawable comes from, so the backend can be read off the HUD: `D3D11` with GPTK (D3DMetal reports it), `Metal` with DXMT. Checked on 2026-10-17 with both backends (GPTK 103 fps, DXMT 92 fps, "Unlock 120 FPS" on). Triple-clicking the HUD opens its own configuration panel for the session.
+The setting "Metal HUD" sets only `MTL_HUD_ENABLED=1`, the default layout, as CrossOver does. With GPTK the HUD adds a "Game Porting Toolkit 4.0b3" section that D3DMetal registers itself: its version and the Dispatch, Draw, Clear/Copy Resource, ExecuteIndirect and Tile Update counts. Setting `MTL_HUD_ELEMENTS` hides that section, even when its ids are in the list, so the launcher sets no element list. The second line on the right shows the graphics API the game's drawable comes from: `D3D11` with GPTK, `Metal` with DXMT. Checked on 2026-10-17 with both backends. Triple-clicking the HUD opens its own configuration panel for the session.
 
 ## Process cleanup
 
