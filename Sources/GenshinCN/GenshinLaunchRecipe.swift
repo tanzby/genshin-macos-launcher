@@ -13,6 +13,9 @@ public enum GenshinLaunchRecipe {
   static let widthValue = "Screenmanager Resolution Width_h182942802"
   static let heightValue = "Screenmanager Resolution Height_h2627697771"
   static let displayName = "原神"
+  /// The frame-rate cap: the game's own, and the one forced by "Unlock 120 FPS" (CFG-019, LCH-033).
+  static let defaultFrameRate = 60
+  static let unlockedFrameRate = 120
 
   /// Game files moved aside while the game runs (LCH-014): crash reporters and the Vulkan loader.
   static let movedAside = [
@@ -56,9 +59,12 @@ public enum GenshinLaunchRecipe {
       "WINEESYNC": "1",
       "GST_PLUGIN_FEATURE_RANK": "atdec:MAX,avdec_h264:MAX",
     ]
+    // gamehost.dylib lifts the game's own cap (Helpers/fps-unlock.c); DXMT's cap has to follow.
+    let maxFrameRate = options.unlockFrameRate ? unlockedFrameRate : defaultFrameRate
+    if options.unlockFrameRate { environment["GENSHIN_LAUNCHER_FPS_TARGET"] = String(maxFrameRate) }
     if options.graphicsBackend == .dxmt {
       environment["DXMT_LOG_PATH"] = dataDirectory.path
-      environment["DXMT_CONFIG"] = "d3d11.preferredMaxFrameRate=60;"
+      environment["DXMT_CONFIG"] = "d3d11.preferredMaxFrameRate=\(maxFrameRate);"
       environment["DXMT_CONFIG_FILE"] = dataDirectory.appending(path: "dxmt.conf").path
     }
     if options.metalHUD { environment["MTL_HUD_ENABLED"] = "1" }

@@ -66,18 +66,18 @@ enum AppSource {
     await model.waitUntilIdle()
   }
 
-  // CFG-005: a sidebar of pages, not the TS modal's tabs. FPS unlock and ReShade are gone with the "Advanced" tab
-  // they lived on, and the licenses are listed on the Advanced page.
+  // CFG-005: a sidebar of pages, not the TS modal's tabs. ReShade is gone with the "Advanced" tab it lived on, and
+  // the licenses are listed on the Advanced page.
   @Test func CFG_005_theSettingsWindowHasASidebarOfFourPages() throws {
     let source = try settings.get()
 
     #expect(source.contains("case general, game, wine, advanced"))
     #expect(source.contains("NavigationSplitView"))
     #expect(source.contains("List(Page.allCases"))
-    #expect(!source.contains("ReShade") && !source.lowercased().contains("fps"))
+    #expect(!source.contains("ReShade"))
   }
 
-  // CFG-030: the Game page holds HDR, MetalFX and the custom resolution. Steam patch, Timeout Fix and Game Mode
+  // CFG-030: the Game page holds HDR, MetalFX, the 120 FPS unlock and the custom resolution. Steam patch, Timeout Fix and Game Mode
   // are always on and have no switch (#28 A9); the page says so instead.
   @Test func CFG_030_theGamePageListsHdrMetalFxAndTheCustomResolutionInOrder() throws {
     let source = try settings.get()
@@ -86,8 +86,9 @@ enum AppSource {
 
     let hdr = try AppSource.position(of: #"Toggle("HDR""#, in: game)
     let metalFX = try AppSource.position(of: #"Toggle("MetalFX upscaling""#, in: game)
+    let fps = try AppSource.position(of: #"Toggle("Unlock 120 FPS""#, in: game)
     let resolution = try AppSource.position(of: #"Toggle("Custom resolution""#, in: game)
-    #expect(hdr < metalFX && metalFX < resolution)
+    #expect(hdr < metalFX && metalFX < fps && fps < resolution)
     #expect(!game.contains(#"Toggle("Steam"#) && !game.contains(#"Toggle("Timeout"#) && !game.contains(#"Toggle("Game Mode"#))
     #expect(game.contains("Native full screen and Game Mode are always on."))
   }

@@ -4,10 +4,11 @@
 # app with the dev companion in measure mode (Helpers/gamehost-dev.m), which enters the world; then W and S are held
 # 15 s each so the character walks out and back, and the companion logs `present:` lines from the drawables'
 # presentedTime; `gpu:` lines give the GPU utilization over the same 15 s. The game is closed with wineserver -k
-# after every run; the graphics backend preference is set back to its previous value at the end. Apple's GPTK payload in the copy is not re-signed (only the outer bundle).
+# after every run; the graphics backend preference is set back to its previous value at the end. FPS_MEASURE_APP=<path>
+# measures another build than the installed app. Apple's GPTK payload in the copy is not re-signed (only the outer bundle).
 set -eu
 repo=${0:A:h:h:h}
-app="/Applications/Genshin Launcher.app"
+app=${FPS_MEASURE_APP:-"/Applications/Genshin Launcher.app"}
 data="$HOME/Library/Application Support/Genshin Launcher"
 log="$data/logs/gamehost.log"
 work=$(mktemp -d -t fps-measure)

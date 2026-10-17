@@ -5,6 +5,7 @@ This project builds on, bundles or links the following. Notices are added as eac
 | Component | Use | License |
 |---|---|---|
 | [Yet Another Anime Game Launcher](https://github.com/yaagl/yet-another-anime-game-launcher) (3Shain) | Origin of `Helpers/` C sources and of the launcher behaviour this app reimplements | MIT |
+| [Genshin_StarRail_fps_unlocker](https://github.com/winTEuser/Genshin_StarRail_fps_unlocker) (NullName / winTEuser) | Byte signature of the game's frame-rate variable, used by `Helpers/fps-unlock.c`; no code copied | MIT |
 | [Sparkle](https://github.com/sparkle-project/Sparkle) | Self-update | MIT |
 | [swift-protobuf](https://github.com/apple/swift-protobuf) | Sophon manifest parsing | Apache-2.0 |
 | [zstd](https://github.com/facebook/zstd) v1.5.7 (`Sources/CZstd`, decompressor only) | Decompressing Sophon manifests and chunks | BSD-3-Clause (dual BSD/GPLv2; used under BSD) |

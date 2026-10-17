@@ -97,6 +97,7 @@ public final class SettingsModel {
     static let metalHUD = "metalHUD"
     static let hdr = "hdr"
     static let metalFX = "metalFX"
+    static let unlockFrameRate = "unlockFrameRate"
     static let customResolutionEnabled = "customResolutionEnabled"
     static let resolutionWidth = "resolutionWidth"
     static let resolutionHeight = "resolutionHeight"
@@ -117,6 +118,7 @@ public final class SettingsModel {
   public var metalHUD: Bool { didSet { defaults.set(metalHUD, forKey: Key.metalHUD) } }
   public var hdr: Bool { didSet { defaults.set(hdr, forKey: Key.hdr) } }
   public var metalFX: Bool { didSet { defaults.set(metalFX, forKey: Key.metalFX) } }
+  public var unlockFrameRate: Bool { didSet { defaults.set(unlockFrameRate, forKey: Key.unlockFrameRate) } }
   public var customResolutionEnabled: Bool {
     didSet { defaults.set(customResolutionEnabled, forKey: Key.customResolutionEnabled) }
   }
@@ -136,6 +138,7 @@ public final class SettingsModel {
     metalHUD = defaults.bool(forKey: Key.metalHUD)
     hdr = defaults.bool(forKey: Key.hdr)
     metalFX = defaults.bool(forKey: Key.metalFX)
+    unlockFrameRate = defaults.bool(forKey: Key.unlockFrameRate)
     customResolutionEnabled = defaults.bool(forKey: Key.customResolutionEnabled)
     let width = defaults.integer(forKey: Key.resolutionWidth)
     let height = defaults.integer(forKey: Key.resolutionHeight)
@@ -175,7 +178,7 @@ public final class SettingsModel {
     LaunchOptions(
       gameDirectory: gameDirectory, graphicsBackend: graphicsBackend, retina: retina,
       leftCommandIsControl: leftCommandIsControl, metalHUD: metalHUD,
-      hdr: hdr, metalFX: metalFX,
+      hdr: hdr, metalFX: metalFX, unlockFrameRate: unlockFrameRate,
       customResolution: customResolution,
       proxyHost: effectiveProxy)
   }

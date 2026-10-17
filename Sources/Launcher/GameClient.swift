@@ -59,6 +59,8 @@ public struct LaunchOptions: Sendable, Equatable {
   public var metalHUD: Bool
   public var hdr: Bool
   public var metalFX: Bool
+  /// Lift the game's 60 FPS cap (to 120 for Genshin).
+  public var unlockFrameRate: Bool
   /// `nil` leaves the game's own resolution alone.
   public var customResolution: Resolution?
   /// Raw `host:port`; `nil` or empty means no proxy.
@@ -67,7 +69,8 @@ public struct LaunchOptions: Sendable, Equatable {
   public init(
     gameDirectory: URL, graphicsBackend: GraphicsBackend = .gptk4, retina: Bool = false,
     leftCommandIsControl: Bool = false, metalHUD: Bool = false,
-    hdr: Bool = false, metalFX: Bool = false, customResolution: Resolution? = nil, proxyHost: String? = nil
+    hdr: Bool = false, metalFX: Bool = false, unlockFrameRate: Bool = false, customResolution: Resolution? = nil,
+    proxyHost: String? = nil
   ) {
     self.gameDirectory = gameDirectory
     self.graphicsBackend = graphicsBackend
@@ -76,6 +79,7 @@ public struct LaunchOptions: Sendable, Equatable {
     self.metalHUD = metalHUD
     self.hdr = hdr
     self.metalFX = metalFX
+    self.unlockFrameRate = unlockFrameRate
     self.customResolution = customResolution
     self.proxyHost = proxyHost
   }

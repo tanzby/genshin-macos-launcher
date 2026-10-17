@@ -123,6 +123,7 @@ targets:
     platform: macOS
     sources:
       - path: Helpers/gamehost.c
+      - path: Helpers/fps-unlock.c
     settings:
       base:
         PRODUCT_NAME: genshin-launcher-gamehost

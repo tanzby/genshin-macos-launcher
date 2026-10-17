@@ -10,10 +10,11 @@
  * (which brings AppKit in) is loaded.
  *
  * It also answers lookups of this Mac's own host name locally (see
- * gamehost_getaddrinfo).
+ * gamehost_getaddrinfo) and, when asked, lifts the frame-rate cap (fps-unlock.c).
  *
  * Env: GENSHIN_LAUNCHER_GAMEHOST_LOG=<file>  optional log file
  *      GENSHIN_LAUNCHER_GAMEHOST_DEV=<mode>   load genshin-launcher-gamehost-dev.dylib (see there)
+ *      GENSHIN_LAUNCHER_FPS_TARGET=<n>        frame-rate cap to force (see fps-unlock.c)
  */
 #include <dispatch/dispatch.h>
 #include <dlfcn.h>
@@ -69,6 +70,8 @@ __attribute__((visibility("default"))) void gamehost_say(const char *fmt, ...) {
   write(logFd, buf, n);
 }
 #define say gamehost_say
+
+void gamehost_fps_start(void); /* fps-unlock.c */
 
 /* GENSHIN_LAUNCHER_GAMEHOST_DEV: load the development companion (frame statistics,
  * scripted input, screenshots) next to this library. */
@@ -400,4 +403,5 @@ __attribute__((constructor)) static void init(void) {
   if (gethostname(hostName, sizeof hostName)) *hostName = 0;
   hostName[sizeof hostName - 1] = 0;
   _dyld_register_func_for_add_image(onImage);
+  gamehost_fps_start();
 }

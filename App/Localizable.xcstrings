@@ -2058,6 +2058,23 @@
         }
       }
     },
+    "Unlock 120 FPS": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Unlock 120 FPS"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "解锁 120 帧"
+          }
+        }
+      }
+    },
     "Update Game": {
       "extractionState": "manual",
       "localizations": {
