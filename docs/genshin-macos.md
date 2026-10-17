@@ -24,6 +24,10 @@ Implementation (setting "Native full screen + Game Mode", on by default, `config
   - answers lookups of the Mac's own `<host>.local` name from the interface address. That lookup is mDNS, which counts as Local Network access, and the bundled game is silently held about 35 s on it. Other names use the system resolver.
 - The process exits if it is still running 15 s after its window closed. The launcher cannot time this out itself: its wait on `steam.exe` only returns once the game process is gone.
 
+## Metal HUD
+
+The setting "Metal HUD" sets `MTL_HUD_ENABLED=1` and lists every metric from Apple's [Customizing the Metal Performance HUD](https://developer.apple.com/documentation/xcode/customizing-metal-performance-hud) in `MTL_HUD_ELEMENTS`: device, Rosetta, layer size and scale, memory, FPS and frame-interval graphs and histogram, GPU time and timeline, present delay, thermal state, Metal CPU time, shader compilation, frame number, disk I/O and the top labeled command buffers and encoders. `MTL_HUD_SHOW_ZERO_METRICS=1` keeps metrics that are still 0 on screen. The second line on the right shows the graphics API the game's drawable comes from, so the backend can be read off the HUD: `D3D11` with GPTK (D3DMetal reports it), `Metal` with DXMT. Checked on 2026-10-17 with both backends (GPTK 103 fps, DXMT 92 fps, "Unlock 120 FPS" on). Triple-clicking the HUD opens its own configuration panel for the session.
+
 ## Process cleanup
 
 `Wine.shutdown()` runs `wineserver -k`, then kills every process of the prefix. A process belongs to the prefix if it maps files from `/tmp/.wine-<uid>/server-<dev>-<inode of prefix>`, or if its working directory is inside the prefix. The second rule catches orphans whose wineserver died, such as `winedevice.exe`. Shutdown runs before each launch. After the game exits, the launcher waits at most 15 s for Wine to exit on its own before forcing shutdown.

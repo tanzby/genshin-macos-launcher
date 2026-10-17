@@ -16,6 +16,13 @@ public enum GenshinLaunchRecipe {
   /// The frame-rate cap: the game's own, and the one forced by "Unlock 120 FPS" (CFG-019, LCH-033).
   static let defaultFrameRate = 60
   static let unlockedFrameRate = 120
+  /// Every Metal HUD metric (Apple's "Customizing the Metal Performance HUD"). The API line shows the backend: D3D11
+  /// for GPTK (D3DMetal), Metal for DXMT.
+  static let metalHUDElements = [
+    "device", "rosetta", "layersize", "layerscale", "memory", "fps", "frameinterval", "gputime", "thermal",
+    "frameintervalgraph", "presentdelay", "frameintervalhistogram", "metalcpu", "gputimeline", "shaders", "framenumber",
+    "disk", "fpsgraph", "toplabeledcommandbuffers", "toplabeledencoders",
+  ].joined(separator: ",")
 
   /// Game files moved aside while the game runs (LCH-014): crash reporters and the Vulkan loader.
   static let movedAside = [
@@ -67,7 +74,11 @@ public enum GenshinLaunchRecipe {
       environment["DXMT_CONFIG"] = "d3d11.preferredMaxFrameRate=\(maxFrameRate);"
       environment["DXMT_CONFIG_FILE"] = dataDirectory.appending(path: "dxmt.conf").path
     }
-    if options.metalHUD { environment["MTL_HUD_ENABLED"] = "1" }
+    if options.metalHUD {
+      environment["MTL_HUD_ENABLED"] = "1"
+      environment["MTL_HUD_ELEMENTS"] = metalHUDElements
+      environment["MTL_HUD_SHOW_ZERO_METRICS"] = "1"
+    }
     if metalFX { environment["DXMT_METALFX_SPATIAL_SWAPCHAIN"] = "1" }
     if let proxy = options.proxyHost, !proxy.isEmpty {
       environment["HTTP_PROXY"] = proxy

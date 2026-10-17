@@ -78,12 +78,20 @@ private func edits(_ recipe: LaunchRecipe, key: String) -> [RegistryEdit] {
     #expect(make().environment["WINEDLLOVERRIDES"] == nil)
   }
 
-  @Test func LCH_032_metalHudIsSetToOneOnlyWhenEnabled() {
+  @Test func LCH_032_metalHudIsSetToOneWithEveryMetricOnlyWhenEnabled() {
     let on = make(settings(metalHUD: true))
     let off = make(settings(metalHUD: false))
 
     #expect(on.environment["MTL_HUD_ENABLED"] == "1")
+    #expect(
+      on.environment["MTL_HUD_ELEMENTS"]
+        == "device,rosetta,layersize,layerscale,memory,fps,frameinterval,gputime,thermal,frameintervalgraph,presentdelay,"
+        + "frameintervalhistogram,metalcpu,gputimeline,shaders,framenumber,disk,fpsgraph,toplabeledcommandbuffers,"
+        + "toplabeledencoders")
+    #expect(on.environment["MTL_HUD_SHOW_ZERO_METRICS"] == "1")
     #expect(off.environment["MTL_HUD_ENABLED"] == nil)
+    #expect(off.environment["MTL_HUD_ELEMENTS"] == nil)
+    #expect(off.environment["MTL_HUD_SHOW_ZERO_METRICS"] == nil)
     #expect(on.environment["WINEESYNC"] == "1")  // positive: the rest is still there
   }
 
