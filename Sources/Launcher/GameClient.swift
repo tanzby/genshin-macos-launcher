@@ -42,9 +42,6 @@ public enum JobProgress: Sendable, Equatable {
 
 /// A snapshot of the settings at launch time. Domain modules never read `UserDefaults`.
 public struct LaunchOptions: Sendable, Equatable {
-  /// The frame-rate cap `unlockFrameRate` forces.
-  public static let unlockedFrameRate = 120
-
   public struct Resolution: Sendable, Equatable {
     public var width: Int
     public var height: Int
@@ -62,7 +59,7 @@ public struct LaunchOptions: Sendable, Equatable {
   public var metalHUD: Bool
   public var hdr: Bool
   public var metalFX: Bool
-  /// Force the game's frame-rate cap to `LaunchOptions.unlockedFrameRate`.
+  /// Lift the game's 60 FPS cap (to 120 for Genshin).
   public var unlockFrameRate: Bool
   /// `nil` leaves the game's own resolution alone.
   public var customResolution: Resolution?

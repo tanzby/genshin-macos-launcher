@@ -26,8 +26,9 @@ void gamehost_say(const char *fmt, ...);
 
 /* Where Wine maps the game executable when nothing is in the way. */
 #define PREFERRED_BASE 0x140000000ULL
-/* The image and its .text appear a few seconds after the process starts. */
+/* The image appears a few seconds after the process starts; its .text is scanned at most SCAN_TRIES times. */
 #define FIND_SECONDS 120
+#define SCAN_TRIES 5
 
 typedef struct {
   uint64_t base;
@@ -38,8 +39,14 @@ typedef struct {
 static int32_t target;
 static uint64_t fpsVar;
 static int lastSeen = 0x7fffffff;
-static int findAttempts;
+static int findAttempts, scanAttempts;
+static Image image; /* image.base == 0 until found */
 static dispatch_source_t timer;
+
+static void giveUp(const char *why) {
+  say("fps: %s, unlock off", why);
+  dispatch_source_cancel(timer);
+}
 
 /* Reads that fail instead of faulting: the address may be unmapped or guarded. */
 static bool readMemory(uint64_t address, void *out, size_t size) {
@@ -118,16 +125,14 @@ static uint64_t scan(const Image *image) {
 }
 
 static void locate(void) {
-  Image image;
-  uint64_t variable = findImage(&image) ? scan(&image) : 0;
-  if (variable) {
-    fpsVar = variable;
-    say("fps: variable at %s+0x%llx, forcing %d", image.base == PREFERRED_BASE ? "image" : "relocated image",
-        variable - image.base, target);
-  } else if (++findAttempts == FIND_SECONDS) {
-    say("fps: frame-rate variable not found, unlock off");
-    dispatch_source_cancel(timer);
+  if (!image.base && !findImage(&image)) {
+    image.base = 0;
+    if (++findAttempts == FIND_SECONDS) giveUp("game image not found");
+    return;
   }
+  fpsVar = scan(&image);
+  if (fpsVar) say("fps: variable at 0x%llx (image 0x%llx), forcing %d", fpsVar, image.base, target);
+  else if (++scanAttempts == SCAN_TRIES) giveUp("frame-rate signature not found");
 }
 
 static void tick(void *ctx) {
@@ -138,17 +143,14 @@ static void tick(void *ctx) {
   }
   int32_t value;
   if (!readMemory(fpsVar, &value, sizeof value)) {
-    say("fps: variable no longer readable, unlock off");
-    dispatch_source_cancel(timer);
+    giveUp("variable no longer readable");
     return;
   }
   if (value == target) return;
   if (value != lastSeen) say("fps: game set %d, writing %d", value, target);
   lastSeen = value;
-  if (mach_vm_write(mach_task_self(), (mach_vm_address_t)fpsVar, (vm_offset_t)&target, sizeof target) != KERN_SUCCESS) {
-    say("fps: write failed, unlock off");
-    dispatch_source_cancel(timer);
-  }
+  if (mach_vm_write(mach_task_self(), (mach_vm_address_t)fpsVar, (vm_offset_t)&target, sizeof target) != KERN_SUCCESS)
+    giveUp("write failed");
 }
 
 void gamehost_fps_start(void) {
