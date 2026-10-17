@@ -230,6 +230,20 @@ private func expectNoGameHostVariables(_ f: LaunchFixture, sourceLocation: Sourc
     }
   }
 
+  @Test func LCH_025_anIconThatCannotBeCopiedLeavesTheBundleWithoutOneAndGameModeOn() async throws {
+    try await withLaunchFixture(helperOptions) { f in
+      try writeFile("not a directory", to: f.bundleIcon.deletingLastPathComponent())  // Contents/Resources
+
+      let result = await f.session.launch(makeLaunchRecipe())
+
+      #expect(result == .exited)
+      let plist = try #require(launchReadPlist(f.infoPlist))
+      #expect(plist["LSSupportsGameMode"] as? Bool == true)  // positive: the plist was written
+      #expect(plist["CFBundleIconFile"] == nil)
+      #expect(f.runner.gameCall?.environment["GENSHIN_LAUNCHER_GAME_HOST_EXE"] == f.macOSWine.path)
+    }
+  }
+
   @Test func LCH_025_aChangedIconIsCopiedAndRegisteredAgainWithoutSigningAgain() async throws {
     try await withLaunchFixture(helperOptions) { f in
       _ = await f.session.launch(makeLaunchRecipe())
