@@ -83,10 +83,15 @@ private func edits(_ recipe: LaunchRecipe, key: String) -> [RegistryEdit] {
     let off = make(settings(metalHUD: false))
 
     #expect(on.environment["MTL_HUD_ENABLED"] == "1")
-    #expect(on.environment["MTL_HUD_ELEMENTS"]?.split(separator: ",").count == 20)
-    #expect(on.environment["MTL_HUD_ELEMENTS"]?.hasPrefix("device,rosetta,") == true)
+    #expect(
+      on.environment["MTL_HUD_ELEMENTS"]
+        == "device,rosetta,layersize,layerscale,memory,fps,frameinterval,gputime,thermal,frameintervalgraph,presentdelay,"
+        + "frameintervalhistogram,metalcpu,gputimeline,shaders,framenumber,disk,fpsgraph,toplabeledcommandbuffers,"
+        + "toplabeledencoders")
+    #expect(on.environment["MTL_HUD_SHOW_ZERO_METRICS"] == "1")
     #expect(off.environment["MTL_HUD_ENABLED"] == nil)
     #expect(off.environment["MTL_HUD_ELEMENTS"] == nil)
+    #expect(off.environment["MTL_HUD_SHOW_ZERO_METRICS"] == nil)
     #expect(on.environment["WINEESYNC"] == "1")  // positive: the rest is still there
   }
 

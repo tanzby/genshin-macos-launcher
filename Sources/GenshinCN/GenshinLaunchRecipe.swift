@@ -77,6 +77,7 @@ public enum GenshinLaunchRecipe {
     if options.metalHUD {
       environment["MTL_HUD_ENABLED"] = "1"
       environment["MTL_HUD_ELEMENTS"] = metalHUDElements
+      environment["MTL_HUD_SHOW_ZERO_METRICS"] = "1"
     }
     if metalFX { environment["DXMT_METALFX_SPATIAL_SWAPCHAIN"] = "1" }
     if let proxy = options.proxyHost, !proxy.isEmpty {
