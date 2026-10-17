@@ -42,6 +42,9 @@ public enum JobProgress: Sendable, Equatable {
 
 /// A snapshot of the settings at launch time. Domain modules never read `UserDefaults`.
 public struct LaunchOptions: Sendable, Equatable {
+  /// The frame-rate cap `unlockFrameRate` forces.
+  public static let unlockedFrameRate = 120
+
   public struct Resolution: Sendable, Equatable {
     public var width: Int
     public var height: Int
@@ -59,6 +62,8 @@ public struct LaunchOptions: Sendable, Equatable {
   public var metalHUD: Bool
   public var hdr: Bool
   public var metalFX: Bool
+  /// Force the game's frame-rate cap to `LaunchOptions.unlockedFrameRate`.
+  public var unlockFrameRate: Bool
   /// `nil` leaves the game's own resolution alone.
   public var customResolution: Resolution?
   /// Raw `host:port`; `nil` or empty means no proxy.
@@ -67,7 +72,8 @@ public struct LaunchOptions: Sendable, Equatable {
   public init(
     gameDirectory: URL, graphicsBackend: GraphicsBackend = .gptk4, retina: Bool = false,
     leftCommandIsControl: Bool = false, metalHUD: Bool = false,
-    hdr: Bool = false, metalFX: Bool = false, customResolution: Resolution? = nil, proxyHost: String? = nil
+    hdr: Bool = false, metalFX: Bool = false, unlockFrameRate: Bool = false, customResolution: Resolution? = nil,
+    proxyHost: String? = nil
   ) {
     self.gameDirectory = gameDirectory
     self.graphicsBackend = graphicsBackend
@@ -76,6 +82,7 @@ public struct LaunchOptions: Sendable, Equatable {
     self.metalHUD = metalHUD
     self.hdr = hdr
     self.metalFX = metalFX
+    self.unlockFrameRate = unlockFrameRate
     self.customResolution = customResolution
     self.proxyHost = proxyHost
   }

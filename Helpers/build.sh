@@ -13,7 +13,7 @@ mkdir -p "$out"
 
 if [ "$dev" = 0 ]; then
   clang -arch x86_64 -O2 -Wall -Wextra -o "$out/genshin-launcher-wine-shim" "$here/wine-shim.c"
-  clang -arch x86_64 -O2 -Wall -Wextra -dynamiclib -o "$out/genshin-launcher-gamehost.dylib" "$here/gamehost.c"
+  clang -arch x86_64 -O2 -Wall -Wextra -dynamiclib -o "$out/genshin-launcher-gamehost.dylib" "$here/gamehost.c" "$here/fps-unlock.c"
   codesign -f -s - "$out/genshin-launcher-wine-shim" "$out/genshin-launcher-gamehost.dylib" 2>/dev/null
   exit 0
 fi

@@ -15,7 +15,7 @@ private func freshDefaults() -> UserDefaults {
     #expect(settings.graphicsBackend == .gptk4)
     #expect(settings.gameDirectory == nil)
     #expect(settings.retina && !settings.metalHUD && !settings.leftCommandIsControl)
-    #expect(!settings.hdr && !settings.metalFX && !settings.proxyEnabled)
+    #expect(!settings.hdr && !settings.metalFX && !settings.unlockFrameRate && !settings.proxyEnabled)
     #expect(settings.customResolution == nil)
     #expect(settings.resolutionWidth == 1920 && settings.resolutionHeight == 1080)
   }
@@ -54,6 +54,7 @@ private func freshDefaults() -> UserDefaults {
   @Test func CFG_013_leftCommandAsControlPersistsAndDefaultsOff() { toggles(\.leftCommandIsControl) }
   @Test func CFG_021_hdrPersistsAndDefaultsOff() { toggles(\.hdr) }
   @Test func CFG_029_metalFXPersistsAndDefaultsOff() { toggles(\.metalFX) }
+  @Test func CFG_019_unlockFrameRatePersistsAndDefaultsOff() { toggles(\.unlockFrameRate) }
 
   @Test func CFG_030_aBuildWithoutGPTKDefaultsToDXMT() {
     let defaults = freshDefaults()
@@ -202,6 +203,7 @@ private func freshDefaults() -> UserDefaults {
     settings.metalHUD = true
     settings.hdr = true
     settings.metalFX = true
+    settings.unlockFrameRate = true
     settings.customResolutionEnabled = true
     settings.setResolution(width: 2560, height: 1440)
     settings.proxyEnabled = true
@@ -211,6 +213,7 @@ private func freshDefaults() -> UserDefaults {
 
     #expect(options.gameDirectory == URL(filePath: "/Games/GI"))
     #expect(options.retina && options.leftCommandIsControl && options.metalHUD && options.hdr && options.metalFX)
+    #expect(options.unlockFrameRate)
     #expect(options.customResolution == .init(width: 2560, height: 1440))
     #expect(options.proxyHost == "127.0.0.1:7890")
   }
@@ -233,6 +236,7 @@ private func freshDefaults() -> UserDefaults {
     settings.leftCommandIsControl = true
     settings.hdr = true
     settings.metalFX = true
+    settings.unlockFrameRate = true
     settings.customResolutionEnabled = true
     settings.setResolution(width: 2560, height: 1440)
     settings.setProxyHost("127.0.0.1:7890")
@@ -271,10 +275,11 @@ private func freshDefaults() -> UserDefaults {
     #expect(keys.allSatisfy { key in !["locale", "language", "lang"].contains { key.lowercased().contains($0) } })
   }
 
-  // CFG-019: FPS unlock did nothing in the TS launcher and is deleted; the cap is fixed (LCH-033).
-  @Test func CFG_019_noFpsSettingExists() {
+  // CFG-019: the TS launcher's FPS settings (target value, hotkeys) stay gone; only the 120 FPS switch exists.
+  @Test func CFG_019_theOnlyFrameRateSettingIsTheUnlockSwitch() {
     let keys = storedKeys(afterEverythingOn: everythingOn)
 
+    #expect(keys.contains("unlockFrameRate"))
     #expect(keys.allSatisfy { !$0.lowercased().contains("fps") })
   }
 }

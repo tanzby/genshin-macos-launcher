@@ -56,9 +56,12 @@ public enum GenshinLaunchRecipe {
       "WINEESYNC": "1",
       "GST_PLUGIN_FEATURE_RANK": "atdec:MAX,avdec_h264:MAX",
     ]
+    // gamehost.dylib lifts the game's own cap (Helpers/fps-unlock.c); DXMT's cap has to follow.
+    let maxFrameRate = options.unlockFrameRate ? LaunchOptions.unlockedFrameRate : 60
+    if options.unlockFrameRate { environment["GENSHIN_LAUNCHER_FPS_TARGET"] = String(maxFrameRate) }
     if options.graphicsBackend == .dxmt {
       environment["DXMT_LOG_PATH"] = dataDirectory.path
-      environment["DXMT_CONFIG"] = "d3d11.preferredMaxFrameRate=60;"
+      environment["DXMT_CONFIG"] = "d3d11.preferredMaxFrameRate=\(maxFrameRate);"
       environment["DXMT_CONFIG_FILE"] = dataDirectory.appending(path: "dxmt.conf").path
     }
     if options.metalHUD { environment["MTL_HUD_ENABLED"] = "1" }

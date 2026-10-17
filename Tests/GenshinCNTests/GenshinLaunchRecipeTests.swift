@@ -23,11 +23,13 @@ private let protonExtras = URL(filePath: "/Users/test/Library/Application Suppor
 private func settings(
   graphicsBackend: GraphicsBackend = .dxmt,
   retina: Bool = false, leftCommandIsControl: Bool = false, metalHUD: Bool = false, hdr: Bool = false,
-  metalFX: Bool = false, customResolution: LaunchOptions.Resolution? = nil, proxyHost: String? = nil
+  metalFX: Bool = false, unlockFrameRate: Bool = false, customResolution: LaunchOptions.Resolution? = nil,
+  proxyHost: String? = nil
 ) -> LaunchOptions {
   LaunchOptions(
     gameDirectory: defaultGameDirectory, graphicsBackend: graphicsBackend, retina: retina, leftCommandIsControl: leftCommandIsControl,
-    metalHUD: metalHUD, hdr: hdr, metalFX: metalFX, customResolution: customResolution, proxyHost: proxyHost)
+    metalHUD: metalHUD, hdr: hdr, metalFX: metalFX, unlockFrameRate: unlockFrameRate, customResolution: customResolution,
+    proxyHost: proxyHost)
 }
 
 private func make(_ options: LaunchOptions = settings(), gameDirectory: URL = defaultGameDirectory) -> LaunchRecipe {
@@ -122,6 +124,17 @@ private func edits(_ recipe: LaunchRecipe, key: String) -> [RegistryEdit] {
     #expect(off.environment["DXMT_METALFX_SPATIAL_SWAPCHAIN"] == nil)
     #expect(withResolution.environment["WINEESYNC"] == "1")
     #expect(withResolution.environment["DXMT_METALFX_SPATIAL_SWAPCHAIN"] == nil)
+  }
+
+  @Test func CFG_019_unlockAsksGamehostFor120AndRaisesTheDXMTCap() {
+    let dxmt = make(settings(unlockFrameRate: true))
+    let gptk = make(settings(graphicsBackend: .gptk4, unlockFrameRate: true))
+
+    #expect(dxmt.environment["GENSHIN_LAUNCHER_FPS_TARGET"] == "120")
+    #expect(dxmt.environment["DXMT_CONFIG"] == "d3d11.preferredMaxFrameRate=120;")
+    #expect(gptk.environment["GENSHIN_LAUNCHER_FPS_TARGET"] == "120")
+    #expect(gptk.environment["DXMT_CONFIG"] == nil)
+    #expect(make().environment["GENSHIN_LAUNCHER_FPS_TARGET"] == nil)
   }
 
   @Test func LCH_026_recipeNamesTheGameExecutableAndDisplayName() {
@@ -299,13 +312,14 @@ private func edits(_ recipe: LaunchRecipe, key: String) -> [RegistryEdit] {
 }
 
 // The switches of the TS launcher that are gone: Steam patch, Timeout Fix and Game Mode are always on (#28 A9)
-// and FPS unlock does nothing (#28 A6). Nothing in the settings that reach the recipe can name them.
+// Nothing in the settings that reach the recipe can name them.
 @Suite("Launch settings have no fixed-on switches") struct FixedSwitchTests {
   private func labels(_ value: Any) -> [String] { Mirror(reflecting: value).children.compactMap(\.label) }
 
   @Test func CFG_024_CFG_027_CFG_028_CFG_019_theLaunchSettingsOnlyCarryTheSwitchesThatRemain() {
     let expected = [
-      "graphicsBackend", "retina", "leftCommandIsControl", "metalHUD", "hdr", "metalFX", "customResolution", "proxyHost",
+      "graphicsBackend", "retina", "leftCommandIsControl", "metalHUD", "hdr", "metalFX", "unlockFrameRate",
+      "customResolution", "proxyHost",
     ]
     #expect(labels(LaunchOptions(gameDirectory: defaultGameDirectory)) == ["gameDirectory"] + expected)
   }
@@ -324,7 +338,7 @@ private func edits(_ recipe: LaunchRecipe, key: String) -> [RegistryEdit] {
     #expect(make(settings(retina: true, metalHUD: true)).environment["WINE_ENABLE_TIMEOUT_FIX"] == "1")
   }
 
-  @Test func CFG_019_theFrameRateCapIsFixedAt60WhateverTheSettingsAre() {
+  @Test func CFG_019_theFrameRateCapIs60UnlessUnlocked() {
     for settings in [settings(), settings(metalHUD: true, hdr: true, metalFX: true)] {
       #expect(make(settings).environment["DXMT_CONFIG"] == "d3d11.preferredMaxFrameRate=60;")
     }

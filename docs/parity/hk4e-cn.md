@@ -94,7 +94,7 @@
 | CFG-016 | 界面语言的默认值 | 改写 | [#28](https://github.com/tanzby/yet-another-anime-game-launcher/issues/28) A10 语言跟随系统 | 组件 | `CFG_016_*`（SettingsBehaviourTests、AppSourceTests：语言跟随系统，不存语言） |
 | CFG-017 | 界面语言的保存方式 | 改写 | [#28](https://github.com/tanzby/yet-another-anime-game-launcher/issues/28) A10 语言跟随系统 | 组件 | `CFG_017_*`（同 CFG-016） |
 | CFG-018 | 启动器版本显示 | 改写 | [#21](https://github.com/tanzby/yet-another-anime-game-launcher/issues/21) SwiftUI 主界面 / 设置窗口重新设计 | 组件 | `CFG_018_*`（AppSourceTests） |
-| CFG-019 | FPS 解锁（不起作用） | 改写 | [#28](https://github.com/tanzby/yet-another-anime-game-launcher/issues/28) A6 删 FPS，DXMT 固定 60 | 组件 | `CFG_019_*`（FixedSwitchTests、SettingsBehaviourTests：FPS 设置已删，帧率上限固定 60） |
+| CFG-019 | FPS 解锁（不起作用） | 改写 | [#28](https://github.com/tanzby/yet-another-anime-game-launcher/issues/28) A6 删掉了 TS 的 FPS 设置；之后按维护者要求加回「解锁 120 帧」开关（默认关），由 gamehost.dylib 在游戏进程内改写帧率变量（`Helpers/fps-unlock.c`） | 组件 | `CFG_019_*`（FixedSwitchTests、SettingsModelTests、GenshinLaunchRecipeTests：只有一个开关，默认关，打开时上限 120） |
 | CFG-020 | ReShade | 作废 | [#28](https://github.com/tanzby/yet-another-anime-game-launcher/issues/28) A7 删 ReShade（ADR 0002 已按此修订） | — |  |
 | CFG-021 | 启用 HDR | 照搬 | [#28](https://github.com/tanzby/yet-another-anime-game-launcher/issues/28) A9 保留的用户偏好 | 组件 |`CFG_021_*`（SettingsModelTests） |
 | CFG-022 | Workaround #3（不起作用） | 作废 | [#28](https://github.com/tanzby/yet-another-anime-game-launcher/issues/28) A9 删除的开关 | — |  |
@@ -158,7 +158,7 @@
 | LCH-030 | 窗口关闭 15 秒后进程仍在则自行退出 | 照搬 | x86_64 shim/host 原样搬 (ADR 0002)；只能 E2E | diag | diag：`genshin-launcher-diag` |
 | LCH-031 | 本机主机名在本地直接解析 | 照搬 | TS 行为不变；LaunchRecipe/GameSession 重做 | diag | diag：`genshin-launcher-diag probe`（注入 gamehost.dylib 的 x86_64 探针解析本机主机名；完整 diag 运行也会做这一项） |
 | LCH-032 | Metal HUD、超时修复与 DLL 覆盖 | 改写 | [#28](https://github.com/tanzby/yet-another-anime-game-launcher/issues/28) A9：Timeout Fix 固定开启，`WINE_ENABLE_TIMEOUT_FIX` 恒为启用值 | diag | GenshinLaunchRecipeTests |
-| LCH-033 | DXMT 环境变量与 60 帧上限 | 改写 | [#28](https://github.com/tanzby/yet-another-anime-game-launcher/issues/28) A6 删 FPS，DXMT 固定 60 | 单元 | GenshinLaunchRecipeTests |
+| LCH-033 | DXMT 环境变量与 60 帧上限 | 改写 | [#28](https://github.com/tanzby/yet-another-anime-game-launcher/issues/28) A6：DXMT 上限 60；打开「解锁 120 帧」（CFG-019）时为 120 | 单元 | GenshinLaunchRecipeTests |
 | LCH-034 | 代理环境变量 | 改写 | [#28](https://github.com/tanzby/yet-another-anime-game-launcher/issues/28) B17 | 单元 | GenshinLaunchRecipeTests |
 | LCH-035 | 空字符串的环境变量不会传递 | 照搬 | TS 行为不变；LaunchRecipe/GameSession 重做 | 单元 | GameSessionLaunchTests |
 | LCH-036 | 游戏退出后最多等待 Wine 15 秒，超时强杀 | 改写 | [#28](https://github.com/tanzby/yet-another-anime-game-launcher/issues/28) B15 | diag | GameSessionLaunchTests（启动超时、退出等待与强杀）；`LCH_036_*`（Launcher 把 `.startupTimedOut` 映射成 `launchTimeout`；120 s 超时本身在 `GameSession`）；diag：`genshin-launcher-diag` |

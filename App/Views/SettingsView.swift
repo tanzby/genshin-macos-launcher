@@ -133,6 +133,7 @@ private struct GamePage: View {
       Section {
         Toggle("HDR", isOn: $settings.hdr)
         Toggle("MetalFX upscaling", isOn: $settings.metalFX)
+        Toggle("Unlock 120 FPS", isOn: $settings.unlockFrameRate)
         Toggle("Custom resolution", isOn: $settings.customResolutionEnabled)
         if settings.customResolutionEnabled {
           LabeledContent("Resolution") {
