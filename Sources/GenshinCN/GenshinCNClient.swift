@@ -62,14 +62,15 @@ public final class GenshinCNClient: GameClient {
   }
 
   /// The Game Mode helpers inside an app bundle, or `nil` when either is missing (the game then starts
-  /// without Game Mode, LCH-023).
+  /// without Game Mode, LCH-023). A missing icon only leaves the game bundle without one.
   static func helpers(in appBundle: URL) -> GameHostHelpers? {
     let directory = appBundle.appending(path: "Contents/Helpers", directoryHint: .isDirectory)
     let shim = directory.appending(path: "genshin-launcher-wine-shim")
     let dylib = directory.appending(path: "genshin-launcher-gamehost.dylib")
     let fileManager = FileManager.default
     guard fileManager.fileExists(atPath: shim.path), fileManager.fileExists(atPath: dylib.path) else { return nil }
-    return GameHostHelpers(shim: shim, dylib: dylib)
+    let icon = appBundle.appending(path: "Contents/Resources/AppIcon.icns")
+    return GameHostHelpers(shim: shim, dylib: dylib, icon: fileManager.fileExists(atPath: icon.path) ? icon : nil)
   }
 
   /// `GameSession.recover()` for the launcher's startup sequence (`StartupSteps.recoverSession`).

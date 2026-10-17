@@ -425,6 +425,7 @@ final class FakeSleeper: @unchecked Sendable {
 enum LaunchBytes {
   static let shim = "FAKE-SHIM-BINARY"
   static let dylib = "FAKE-GAMEHOST-DYLIB"
+  static let icon = "FAKE-APP-ICON"
   static let wine = "FAKE-WINE-LOADER"
   static let host = "FAKE-WINE-HOST"
 }
@@ -474,6 +475,7 @@ struct LaunchFixture {
   var macOSWine: URL { layout.gameHostApp.appending(path: "Contents/MacOS/wine") }
   var macOSDotWineHost: URL { layout.gameHostApp.appending(path: "Contents/MacOS/.wine-host") }
   var infoPlist: URL { layout.gameHostApp.appending(path: "Contents/Info.plist") }
+  var bundleIcon: URL { layout.gameHostApp.appending(path: "Contents/Resources/AppIcon.icns") }
 
   /// `/tmp/.wine-<uid>/server-<dev hex>-<inode hex>` for this prefix, exactly as the sweep must derive it.
   var serverDirectory: String {
@@ -532,8 +534,10 @@ func withLaunchFixture<T>(
       let shim = dir.appending(path: "helpers/genshin-launcher-wine-shim")
       let dylib = dir.appending(path: "helpers/genshin-launcher-gamehost.dylib")
       try writeFile(LaunchBytes.shim, to: shim)
+      let icon = dir.appending(path: "helpers/AppIcon.icns")
       try writeFile(LaunchBytes.dylib, to: dylib)
-      helpers = GameHostHelpers(shim: shim, dylib: dylib)
+      try writeFile(LaunchBytes.icon, to: icon)
+      helpers = GameHostHelpers(shim: shim, dylib: dylib, icon: icon)
     }
 
     let trace = LaunchTrace()

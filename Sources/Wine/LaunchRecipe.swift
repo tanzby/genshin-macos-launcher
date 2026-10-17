@@ -114,15 +114,18 @@ package struct LaunchTiming: Sendable {
   }
 }
 
-/// The Game Mode helpers inside the app bundle (`Contents/Helpers/`). Passed in so `Wine` never touches
-/// `Bundle.main`.
+/// The Game Mode helpers inside the app bundle (`Contents/Helpers/`), plus the launcher's icon for the game
+/// bundle. Passed in so `Wine` never touches `Bundle.main`.
 package struct GameHostHelpers: Sendable, Equatable {
   package var shim: URL
   package var dylib: URL
+  /// `AppIcon.icns`, shown by the Game Mode notification. `nil` leaves the game bundle without an icon.
+  package var icon: URL?
 
-  package init(shim: URL, dylib: URL) {
+  package init(shim: URL, dylib: URL, icon: URL? = nil) {
     self.shim = shim
     self.dylib = dylib
+    self.icon = icon
   }
 }
 

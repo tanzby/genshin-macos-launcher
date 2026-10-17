@@ -232,8 +232,13 @@ final class Counter: @unchecked Sendable {
     try Data("shim".utf8).write(to: helpers.appending(path: "genshin-launcher-wine-shim"))
     #expect(GenshinCNClient.helpers(in: app) == nil)
     try Data("dylib".utf8).write(to: helpers.appending(path: "genshin-launcher-gamehost.dylib"))
-    #expect(
-      GenshinCNClient.helpers(in: app)
-        == GameHostHelpers(shim: helpers.appending(path: "genshin-launcher-wine-shim"), dylib: helpers.appending(path: "genshin-launcher-gamehost.dylib")))
+    let found = GameHostHelpers(
+      shim: helpers.appending(path: "genshin-launcher-wine-shim"), dylib: helpers.appending(path: "genshin-launcher-gamehost.dylib"))
+    #expect(GenshinCNClient.helpers(in: app) == found)
+
+    let icon = app.appending(path: "Contents/Resources/AppIcon.icns")
+    try FileManager.default.createDirectory(at: icon.deletingLastPathComponent(), withIntermediateDirectories: true)
+    try Data("icns".utf8).write(to: icon)
+    #expect(GenshinCNClient.helpers(in: app)?.icon == icon)
   }
 }

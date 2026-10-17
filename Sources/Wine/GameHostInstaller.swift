@@ -34,6 +34,7 @@ struct GameHostInstaller {
   var bundleExecutable: URL { layout.gameHostApp.appending(path: "Contents/MacOS/wine") }
   var bundleHostCopy: URL { layout.gameHostApp.appending(path: "Contents/MacOS/.wine-host") }
   var infoPlist: URL { layout.gameHostApp.appending(path: "Contents/Info.plist") }
+  var bundleIcon: URL { layout.gameHostApp.appending(path: "Contents/Resources/AppIcon.icns") }
 
   /// The four `GENSHIN_LAUNCHER_*` variables, or `[:]` when Game Mode is unavailable.
   func prepare(for recipe: LaunchRecipe) async -> [String: String] {
@@ -96,8 +97,17 @@ struct GameHostInstaller {
       changed = true
     }
 
-    // 3. Info.plist, rewritten only when its content differs.
-    let plist = Self.infoPlist(displayName: recipe.gameDisplayName)
+    // 3. The launcher's icon, which the Game Mode notification shows. Copied only when it differs; a missing
+    //    one just leaves the bundle without an icon.
+    let icon = helpers.icon.flatMap { fileManager.fileExists(atPath: $0.path) ? $0 : nil }
+    if let icon, !fileManager.contentsEqual(atPath: icon.path, andPath: bundleIcon.path) {
+      try fileManager.createDirectory(at: bundleIcon.deletingLastPathComponent(), withIntermediateDirectories: true)
+      try replace(icon, with: bundleIcon)
+      changed = true
+    }
+
+    // 4. Info.plist, rewritten only when its content differs.
+    let plist = Self.infoPlist(displayName: recipe.gameDisplayName, hasIcon: icon != nil)
     let existing = (try? Data(contentsOf: infoPlist)).flatMap {
       try? PropertyListSerialization.propertyList(from: $0, format: nil) as? NSDictionary
     }
@@ -107,8 +117,10 @@ struct GameHostInstaller {
       changed = true
     }
 
-    // 4. LaunchServices only needs to hear about it when something changed.
+    // 5. LaunchServices only needs to hear about it when something changed. The icon cache is keyed on the
+    //    bundle's modification date, so bump it or a new icon is not shown.
     if changed {
+      try? fileManager.setAttributes([.modificationDate: Date()], ofItemAtPath: layout.gameHostApp.path)
       do {
         try launchServices.register(appAt: layout.gameHostApp)
       } catch {
@@ -121,8 +133,8 @@ struct GameHostInstaller {
     if !hostCopyCurrent { try replace(host, with: bundleHostCopy) }
   }
 
-  static func infoPlist(displayName: String) -> [String: Any] {
-    [
+  static func infoPlist(displayName: String, hasIcon: Bool) -> [String: Any] {
+    var plist: [String: Any] = [
       "CFBundleInfoDictionaryVersion": "6.0",
       "CFBundlePackageType": "APPL",
       "CFBundleExecutable": "wine",
@@ -137,6 +149,8 @@ struct GameHostInstaller {
       "NSHighResolutionCapable": true,
       "NSPrincipalClass": "WineApplication",
     ]
+    if hasIcon { plist["CFBundleIconFile"] = "AppIcon" }
+    return plist
   }
 
   /// Copies `source` next to `destination` under a temporary name, so the final step is a rename.
