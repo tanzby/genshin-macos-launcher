@@ -2,7 +2,7 @@
 
 Push a semver tag from `main` (`1.0.0-rc.1`, ..., `1.0.0`). `.github/workflows/release.yaml` builds the arm64 app (ad-hoc signed), packs `GenshinLauncher-<ver>.dmg` with `scripts/release/make-dmg`, signs `appcast.xml` with `generate_appcast`, and publishes a regular release (never marked prerelease, so `releases/latest/download/appcast.xml` always points at the newest tag).
 
-- The DMG is the only download: people install from it, and it is the appcast enclosure (see `scripts/release/make-dmg`). It carries `安装说明.txt` from `scripts/release/dmg-install.txt`, which is also the top of the release notes.
+- The DMG is the only download: people install from it, and it is the appcast enclosure: Sparkle copies only bundles, folders and `.pkg` files out of a disk image, so it skips the `/Applications` link and the text file (`scripts/release/make-dmg`). It carries `安装说明.txt` from `scripts/release/dmg-install.txt`, which is also the top of the release notes.
 - The app is ad-hoc signed and not notarized, so a downloaded copy is blocked on first launch until the user allows it once. Only a Developer ID signature plus notarization removes that prompt; it needs a paid Apple Developer account.
 - `CFBundleShortVersionString` is the tag. `CFBundleVersion` is `github.run_number`, a plain integer that only grows, so Sparkle ordering never depends on rc suffixes.
 - Without the `SPARKLE_ED_PRIVATE_KEY` secret, or while `SUPublicEDKey` in `project.yml` is empty, a tag run is a dry run: it builds and uploads the files as a workflow artifact and publishes nothing. The Actions tab's "Run workflow" is always a dry run.
