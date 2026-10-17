@@ -28,7 +28,7 @@ void gamehost_say(const char *fmt, ...);
 #define PREFERRED_BASE 0x140000000ULL
 /* The image appears a few seconds after the process starts; its .text is scanned at most SCAN_TRIES times. */
 #define FIND_SECONDS 120
-#define SCAN_TRIES 5
+#define SCAN_TRIES 30
 
 typedef struct {
   uint64_t base;
@@ -146,7 +146,10 @@ static void tick(void *ctx) {
     giveUp("variable no longer readable");
     return;
   }
-  if (value == target) return;
+  if (value == target) {
+    lastSeen = target; /* log the game's next write-back too */
+    return;
+  }
   if (value != lastSeen) say("fps: game set %d, writing %d", value, target);
   lastSeen = value;
   if (mach_vm_write(mach_task_self(), (mach_vm_address_t)fpsVar, (vm_offset_t)&target, sizeof target) != KERN_SUCCESS)
