@@ -1,7 +1,7 @@
 name: Release
 
 # A semver tag (1.0.0-rc.1, 1.0.0, ...) builds the app and publishes a regular
-# release with GenshinLauncher-<ver>.zip (Sparkle enclosure), GenshinLauncher-<ver>.dmg and appcast.xml.
+# release with GenshinLauncher-<ver>.dmg (for people and as the Sparkle enclosure) and appcast.xml.
 # It stays a dry run (artifacts only, nothing published) until the secret
 # SPARKLE_ED_PRIVATE_KEY exists and SUPublicEDKey is set in project.yml.
 # Run it by hand from the Actions tab to dry-run on any branch.
@@ -135,16 +135,12 @@ jobs:
           lipo -archs "$app/Contents/MacOS/Genshin Launcher"
           echo "APP=$PWD/$app" >> "$GITHUB_ENV"
 
-      - name: Package zip and dmg
+      - name: Package dmg
         run: |
           set -eu
-          mkdir -p dist/updates dmg-root
-          # ditto keeps symlinks, so the framework signatures stay valid.
-          ditto -c -k --sequesterRsrc --keepParent "$APP" "dist/updates/GenshinLauncher-$VERSION.zip"
-          cp -R "$APP" dmg-root/
-          ln -s /Applications dmg-root/Applications
-          hdiutil create -volname "Genshin Launcher" -srcfolder dmg-root -fs APFS -format ULFO "dist/GenshinLauncher-$VERSION.dmg"
-          ls -l dist dist/updates
+          mkdir -p dist
+          scripts/release/make-dmg "$APP" "dist/GenshinLauncher-$VERSION.dmg"
+          ls -l dist
 
       - name: Generate appcast
         if: env.PUBLISH == 'true'
@@ -160,7 +156,7 @@ jobs:
           # The private key goes in through stdin only, never to disk or argv.
           printf '%s' "$SPARKLE_ED_PRIVATE_KEY" | "$RUNNER_TEMP/sparkle/bin/generate_appcast" --ed-key-file - \
             --download-url-prefix "https://github.com/$GITHUB_REPOSITORY/releases/download/$VERSION/" \
-            -o dist/appcast.xml dist/updates
+            -o dist/appcast.xml dist
           grep -q 'sparkle:edSignature' dist/appcast.xml \
             || { echo "::error::appcast has no EdDSA signature"; exit 1; }
           grep -q "<sparkle:shortVersionString>$VERSION<" dist/appcast.xml \
@@ -168,7 +164,7 @@ jobs:
           # The secret must pair with the SUPublicEDKey built into the app, or every
           # client would reject this update. Check before anything is published.
           sig=$(grep -o 'sparkle:edSignature="[^"]*"' dist/appcast.xml | head -1 | cut -d'"' -f2)
-          swift scripts/release/verify-ed-signature.swift "$ED_PUBLIC_KEY" "$sig" "dist/updates/GenshinLauncher-$VERSION.zip" \
+          swift scripts/release/verify-ed-signature.swift "$ED_PUBLIC_KEY" "$sig" "dist/GenshinLauncher-$VERSION.dmg" \
             || { echo "::error::SPARKLE_ED_PRIVATE_KEY does not match SUPublicEDKey"; exit 1; }
           cat dist/appcast.xml
 
@@ -186,8 +182,5 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -eu
-          cat > notes.md <<'NOTES'
-          First install: drag Genshin Launcher to Applications, then allow it once under System Settings > Privacy & Security > Open Anyway. The app is ad-hoc signed and not notarized. Later updates arrive through the built-in updater.
-          NOTES
-          gh release create "$VERSION" --verify-tag --title "$VERSION" --generate-notes --notes-file notes.md \
-            "dist/GenshinLauncher-$VERSION.dmg" "dist/updates/GenshinLauncher-$VERSION.zip" dist/appcast.xml
+          gh release create "$VERSION" --verify-tag --title "$VERSION" --generate-notes --notes-file scripts/release/dmg-install.txt \
+            "dist/GenshinLauncher-$VERSION.dmg" dist/appcast.xml

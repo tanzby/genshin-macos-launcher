@@ -124,13 +124,14 @@ for n in 1 2; do
 done
 
 echo "== Sign test.2 and write the appcast"
-ditto -c -k --sequesterRsrc --keepParent "$work/stage/2/Genshin Launcher.app" "$work/serve/GenshinLauncher-1.0.0-test.2.zip"
+# The same DMG layout as a release (scripts/release/make-dmg), so the check covers the shipped update format.
+scripts/release/make-dmg "$work/stage/2/Genshin Launcher.app" "$work/serve/GenshinLauncher-1.0.0-test.2.dmg"
 "$work/tools/bin/generate_appcast" --ed-key-file - <"$work/keys/ed.key" \
   --download-url-prefix "http://127.0.0.1:$port/" -o "$work/serve/appcast.xml" "$work/serve"
 grep -q 'sparkle:edSignature' "$work/serve/appcast.xml"
 grep -q '<sparkle:shortVersionString>1.0.0-test.2<' "$work/serve/appcast.xml"
 sig=$(grep -o 'sparkle:edSignature="[^"]*"' "$work/serve/appcast.xml" | head -1 | cut -d'"' -f2)
-swift scripts/release/verify-ed-signature.swift "$pub" "$sig" "$work/serve/GenshinLauncher-1.0.0-test.2.zip"
+swift scripts/release/verify-ed-signature.swift "$pub" "$sig" "$work/serve/GenshinLauncher-1.0.0-test.2.dmg"
 
 echo "== Serve the feed on 127.0.0.1:$port"
 nohup python3 -I -m http.server "$port" --bind 127.0.0.1 --directory "$work/serve" >"$work/server.log" 2>&1 &

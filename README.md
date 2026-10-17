@@ -10,6 +10,10 @@ Planning happens in this repo's GitHub issues; decisions are in `docs/adr/` and 
 
 - Apple Silicon Mac, macOS 26 or later
 
+## 下载安装
+
+从 [Releases](https://github.com/tanzby/genshin-macos-launcher/releases/latest) 下载 `GenshinLauncher-<版本>.dmg`。App 没有 Apple 开发者签名和公证，第一次打开会被 macOS 拦下，需要放行一次，步骤见 [安装说明](scripts/release/dmg-install.txt)（DMG 里的「安装说明.txt」和每个 release 的说明是同一份）。
+
 ## Build
 
 See `CONTRIBUTING.md` for setup, building and testing.

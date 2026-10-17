@@ -1,7 +1,9 @@
 # Releasing
 
-Push a semver tag from `main` (`1.0.0-rc.1`, ..., `1.0.0`). `.github/workflows/release.yaml` builds the arm64 app (ad-hoc signed), packs `GenshinLauncher-<ver>.zip` and `GenshinLauncher-<ver>.dmg`, signs `appcast.xml` with `generate_appcast`, and publishes a regular release (never marked prerelease, so `releases/latest/download/appcast.xml` always points at the newest tag).
+Push a semver tag from `main` (`1.0.0-rc.1`, ..., `1.0.0`). `.github/workflows/release.yaml` builds the arm64 app (ad-hoc signed), packs `GenshinLauncher-<ver>.dmg` with `scripts/release/make-dmg`, signs `appcast.xml` with `generate_appcast`, and publishes a regular release (never marked prerelease, so `releases/latest/download/appcast.xml` always points at the newest tag).
 
+- The DMG is the only download: people install from it, and it is the appcast enclosure: Sparkle copies only bundles, folders and `.pkg` files out of a disk image, so it skips the `/Applications` link and the text file (`scripts/release/make-dmg`). It carries `安装说明.txt` from `scripts/release/dmg-install.txt`, which is also the top of the release notes.
+- The app is ad-hoc signed and not notarized, so a downloaded copy is blocked on first launch until the user allows it once. Only a Developer ID signature plus notarization removes that prompt; it needs a paid Apple Developer account.
 - `CFBundleShortVersionString` is the tag. `CFBundleVersion` is `github.run_number`, a plain integer that only grows, so Sparkle ordering never depends on rc suffixes.
 - Without the `SPARKLE_ED_PRIVATE_KEY` secret, or while `SUPublicEDKey` in `project.yml` is empty, a tag run is a dry run: it builds and uploads the files as a workflow artifact and publishes nothing. The Actions tab's "Run workflow" is always a dry run.
 - Before publishing, `scripts/release/verify-ed-signature.swift` checks the appcast signature against the `SUPublicEDKey` built into the app, so a secret holding the wrong private key fails the run instead of shipping an update every client rejects.
@@ -11,7 +13,7 @@ Push a semver tag from `main` (`1.0.0-rc.1`, ..., `1.0.0`). `.github/workflows/r
 
 ## Local update check (before tagging 1.0.0)
 
-`scripts/dev/sparkle-local-check` builds two copies of the current commit (`1.0.0-test.1` build 9001, `1.0.0-test.2` build 9002) and signs the second one with a throwaway key kept in a file (never the release key, never the Keychain). Both copies get the test public key and a feed on `http://127.0.0.1:18765/appcast.xml` (plain http for the test copies only, `project.yml` is untouched). It serves the feed, installs test.1 under `~/Library/Caches/genshin-launcher-sparkle-test/` with its data directory there too, and starts it.
+`scripts/dev/sparkle-local-check` builds two copies of the current commit (`1.0.0-test.1` build 9001, `1.0.0-test.2` build 9002) and packs the second one into a release DMG (`scripts/release/make-dmg`) signed with a throwaway key kept in a file (never the release key, never the Keychain). Both copies get the test public key and a feed on `http://127.0.0.1:18765/appcast.xml` (plain http for the test copies only, `project.yml` is untouched). It serves the feed, installs test.1 under `~/Library/Caches/genshin-launcher-sparkle-test/` with its data directory there too, and starts it.
 
 1. Run `scripts/dev/sparkle-local-check`. It stops at "waiting for a click".
 2. In test.1 choose Genshin Launcher > Check for Updates…. Sparkle must offer 1.0.0-test.2, install it and relaunch; About shows test.2. This must work with the first-launch onboarding sheet open.

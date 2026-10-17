@@ -69,7 +69,7 @@ Sparkle 支持 dmg、zip、tar、Apple Archive（`.aar`）和 pkg（[Documentati
 | 首次手动安装 | 不直观 | 拖拽到 Applications，体验好 |
 | 符号链接 | `ditto -c -k --sequesterRsrc --keepParent Genshin Launcher.app GenshinLauncher-x.y.z.zip` 能保留 | 能保留 |
 
-建议 release 同时附两个资产：`GenshinLauncher-x.y.z.dmg` 给人下载，`GenshinLauncher-x.y.z.zip` 作为 appcast 的 enclosure。官方特别提醒「Make sure symlinks are preserved」，否则 framework 的签名会被破坏，Sparkle 会把更新当成签名损坏拒绝。所以**不要用 `zip -r`**。
+（已被取代：release 现在只发 DMG，DMG 同时是 enclosure，见 `docs/release.md`。）建议 release 同时附两个资产：`GenshinLauncher-x.y.z.dmg` 给人下载，`GenshinLauncher-x.y.z.zip` 作为 appcast 的 enclosure。官方特别提醒「Make sure symlinks are preserved」，否则 framework 的签名会被破坏，Sparkle 会把更新当成签名损坏拒绝。所以**不要用 `zip -r`**。
 
 delta 更新：`generate_appcast` 能根据目录里的旧归档自动生成 delta（[Publishing](https://sparkle-project.org/documentation/publishing/)）。原生 App 本身不含 Wine（Wine 放在数据目录），体积小，**第一阶段不做 delta**，CI 也就不需要保存历史归档。
 
