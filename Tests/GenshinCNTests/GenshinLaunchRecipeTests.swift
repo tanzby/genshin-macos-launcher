@@ -88,6 +88,12 @@ private func edits(_ recipe: LaunchRecipe, key: String) -> [RegistryEdit] {
     #expect(on.environment["WINEESYNC"] == "1")  // positive: the rest is still there
   }
 
+  @Test func gptk4PacesPresentsAtTheFrameRateCap() {
+    #expect(make(settings(graphicsBackend: .gptk4)).environment["D3DM_MAX_FPS"] == "60")
+    #expect(make(settings(graphicsBackend: .gptk4, unlockFrameRate: true)).environment["D3DM_MAX_FPS"] == "120")
+    #expect(make(settings(graphicsBackend: .dxmt)).environment["D3DM_MAX_FPS"] == nil)
+  }
+
   @Test func debugModeAddsTheDiagnosticLoggingOnly() {
     let on = make(settings(debugMode: true))
     let off = make(settings())

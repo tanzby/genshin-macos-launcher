@@ -34,30 +34,43 @@
 | DXMT | 5 | W | 60.0 | 16.7 ms | 16.7 ms | 16.7 ms | 0 | 0 |
 | DXMT | 5 | S | 60.0 | 16.7 ms | 16.7 ms | 16.7 ms | 0 | 0 |
 
-## 卡顿归因（2026-10-18）
+## 卡顿归因（2026-10-18，已查明）
 
-`scripts/diag/fps-measure` 现在给每次 >50 ms 的 present 间隔写一行 `hitch: phase= t= wall= dur=`（mach 与墙钟时间），并与测量期间 0.25 s 轮询的着色器缓存大小（`$DARWIN_USER_CACHE_DIR/{d3dm,dxmt}/YuanShen.exe`）和 0.5 s 的 GPU 利用率对齐，输出 `HITCH backend= cache= cause=shader-cache|gpu|unknown count=`。判定窗口是卡顿前 `dur`+200 ms 到之后 200 ms：窗口内缓存变大记为 shader-cache，否则 GPU 利用率 ≥90% 记为 gpu，其余 unknown。`FPS_MEASURE_COLD=1` 把该后端的缓存目录移开、跑完还原。
+结论先行：GPTK 的「卡」由三件事叠加，前两件已有证据并已处理或说明，第三件是 GPTK 自身的开销。
 
-| 后端 | 缓存 | W 段 hitch | S 段 hitch | 归因 |
-|---|---|---|---|---|
-| GPTK 4 | 暖 | 11（最长 204 ms） | 3 | 14 次全是 unknown，窗口内缓存没有增长，GPU 利用率均值 75%、最高 88% |
-| DXMT | 暖 | 0 | 0 | — |
-| GPTK 4 | 冷 | 1 | 3 | 3 次 gpu（GPU 利用率 86–96%），1 次 unknown |
-| DXMT | 冷 | 6（最长 162 ms） | 0 | 6 次全是 shader-cache |
+1. **帧节奏不均（持续存在，已修）**：GPTK 默认在 120 Hz 屏上 60 fps 时，present 间隔是 8.3 ms 和 25 ms 交替（一轮 15 s：<12.5 ms 416 次，<29.2 ms 432 次，16.7 ms 附近仅 58 次），DXMT 则是 901 次全是 16.7 ms。D3DMetal 没有帧率目标时一做完就 present。设 `D3DM_MAX_FPS=60` 后同一场景 901/903 次全是 16.7 ms，p99 从 25.0 降到 16.7 ms，GPU 利用率不变（93%）。`GenshinLaunchRecipe` 现在对 GPTK 设 `D3DM_MAX_FPS` 为帧率上限（60，解锁帧率时 120）。解锁到 120 后 GPU 跑满（96–100%），只有约 86 fps，间隔 8.3/16.7 ms 是 GPU 受限的自然结果，`D3DM_MAX_FPS=120` 对它没有影响。
+2. **运行中编译新着色器（偶发的 >50 ms 卡顿）**：此前「暖缓存下 GPTK 仍卡、缓存没有增长」的两个前提都不对。D3DMetal 在**退出时**才把 `bytecode_cache.bin`、`stage_cache.bin` 写回（文件 mtime 在游戏关闭的那一刻），0.25 s 轮询看不到增长；而且每次在没走过的地方都会新增条目。证据（同一台机器，GPTK，同一条 W 去 S 回的路线，连续四轮）：
 
-每格只有一轮，且位置按上次退出为准（本次开跑前换到了新区域），后端之间不是同一段路，数字只作定性判断。
+| 轮次 | 本轮缓存增长（bytecode+stage） | >50 ms 卡顿 | 卡顿归因 |
+|---|---|---|---|
+| 1 | +0.72 MB | 2 | 2 次 GPU 背压（渲染线程在等已提交的帧） |
+| 2 | +1.9 MB | 5 | 4 次与 Metal 编译服务的 XPC 请求重合，1 次背压 |
+| 3 | +0.13 MB | 0 | — |
+| 4 | 0 | 1（54 ms） | GPU 利用率 ≥90%，栈上只见游戏自己的代码 |
 
-结论：
-- DXMT 的卡顿是着色器编译：暖缓存零卡顿，冷缓存的卡顿全部伴随缓存增长。
-- GPTK 在暖缓存、新区域下仍有 14 次卡顿，却没有缓存增长，所以「GPTK 卡是因为首次着色器编译」这个推测没有得到支持。冷缓存时 GPTK 反而卡顿少，且多为 GPU 近乎满载。D3DMetal 的缓存很可能不是在运行中增量写入（本次轮询没有看到随运行增长），所以缓存写入这条旁证对它不敏感；这是推测，没有验证。
-- 暖缓存 GPTK 的 unknown 卡顿因此还没有原因。可能是 CPU 侧（D3DMetal 内部的资源或管线创建、流式加载的 IO）。要定位，需要在卡顿发生的当下采样主线程；`hitch:` 行只在该阶段结束后才写出，来不及触发 `sample`，下一步要改成 companion 在进程内实时检测并触发，或整段用 `sample`/`xctrace` 限时录制。
+   卡顿数跟本轮新编译的着色器量同升同降：缓存稳定后就几乎没有卡顿。进程内栈采样（见下）在卡顿当下抓到的线程里有 `MTLCompilerScheduler` → `xpc_connection_send_message_with_reply_sync`（等待 Metal 编译服务）和 `libmetalirconverter` 的 LLVM 优化 pass（DXIL → Metal IR 转换）。这是 D3DMetal 自己的运行期编译，和 DXMT 冷缓存时的行为同类。所以先前把「GPTK 暖缓存 14 次卡顿」和「DXMT 暖缓存 0 次」放在一起比，混杂了两个后端缓存覆盖的路线不同。冷缓存对比里两者本来就都卡（GPTK 4 次，DXMT 6 次）。
+3. **GPU 负载更高**：同一路线、同样 60 fps、3024×1964，GPU 利用率 GPTK 92–94%，DXMT 79–84%。GPU 近满载时，渲染线程会在 `D3DMCommandQueueWorker::DoExecute`（等在途命令缓冲的信号量）和 `DXGISwapChain::Present1` 里等 GPU，造成 54–70 ms 的卡顿（上表的「GPU 背压」）。这部分是 GPTK 渲染成本比 DXMT 高，不是 launcher 能修的；降低分辨率或画质可以缓解，没有实测。
 
-没有做的：`xctrace record --template 'Metal System Trace'` 对 Wine 进程是否可用没有验证；hitch 触发的 `sample`（理由见上）。
+### 方法与数据来源
 
-建议（按证据强弱）：
-1. 不要为 GPTK 做「预热缓存」：证据不支持。DXMT 则值得做：冷缓存首次在新区域一定卡，缓存目录要在更新、Wine 升级和 launcher 的清理逻辑里保持不失效。
-2. GPTK 先查暖缓存 unknown 卡顿的真正原因（上面的实时采样），再决定优化方向；在此之前不要改帧率上限或垂直同步设置。
-3. 冷缓存 GPTK 的 gpu 类卡顿与 GPU 近乎满载同时出现，降低渲染分辨率或画质可以作为对照实验，但本次没有测。
+每一层 tracing 都加在开发工具里（Debug 模式下才写日志），按顺序加，每加一层就跑一次限时测量：
+
+- 进程内卡顿栈采样（`Helpers/gamehost-dev.m`）：watchdog 线程发现渲染层 45 ms 没有取 drawable，就逐个挂起游戏线程、沿 `rbp` 链读栈、恢复，每次卡顿抓 8 次，写到 `GENSHIN_LAUNCHER_GAMEHOST_STALLS`。不用 `sample`：它启动加符号化要数百毫秒，卡顿早已过去。`nd:` 行记录 `nextDrawable` 本身的耗时，所有运行里都没有超过 10 ms 的，所以不是 drawable 获取阻塞。
+- `scripts/diag/stall-report` 按栈分类（shader-convert、compiler-xpc、io、gpu-backpressure、windows-code）并与 `hitch:` 行按时间对齐。
+- `scripts/diag/proc-cpu.swift`：每 50 ms 记录 `MTLCompilerService` 的累计 CPU 时间，卡顿窗口内增长 ≥20 ms 记为 `cause=compile`。
+- `fps-measure` 额外记录每轮前后的 `*_cache.bin` 大小、present 间隔分布（`pacing:`）、`FPS_MEASURE_ENV` 传环境变量、`FPS_MEASURE_XCTRACE=<模板>` 限时录 xctrace。
+- xctrace「Metal System Trace」可以 attach 到 Wine 进程（`--attach <pid>` 成功，导出 `metal-gpu-intervals`、`ca-client-present-request` 等表）。但录制本身带来每 5 s 一次约 100 ms 的周期性卡顿，所以它只用来确认可用，不用来做归因；这一轮没有得出需要它的结论。
+
+没做或没查到的：
+- GPU 背压卡顿里，具体是哪个 draw 让 GPU 慢，没有往下查（需要 Xcode 的 GPU 帧捕获，Wine 进程下未验证）。
+- 「新着色器何时编译」没有在 `D3DMetal` 里下钩子计时；证据是栈和缓存增长的相关，不是逐次调用计时。
+- 每种情况样本量小（GPTK 4 轮、DXMT 2 轮），数字只作定性判断。
+
+### 优化与建议
+
+- 已做：GPTK 设 `D3DM_MAX_FPS`，帧节奏变均匀（见上）。端到端用构建出的 App（没有手动设环境变量）复测，结果见 PR 描述。
+- 不做：GPTK 的「预热缓存」没有可行办法，缓存内容取决于玩家走过的路线，且只在退出时写回；因此游戏被强杀或崩溃时当次新增的着色器会丢，下次进同一区域再卡一次。launcher 的正常退出路径应继续让 Wine 正常结束。
+- DXMT 的缓存目录要在更新、Wine 升级和 launcher 的清理逻辑里保持不失效。
 
 ## 分发门槛
 

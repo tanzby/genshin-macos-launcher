@@ -61,6 +61,10 @@ swiftc -O -o "$work/holdkey" "$repo/scripts/diag/holdkey.swift"
 swiftc -O -o "$work/proc-cpu" "$repo/scripts/diag/proc-cpu.swift"
 game_dir=$(defaults read $domain gameDirectory)
 
+# FPS_MEASURE_ENV="NAME=value NAME2=value" adds environment variables to the launcher (and so the game).
+extra_env=()
+for e in ${=FPS_MEASURE_ENV:-}; do extra_env+=(--env "$e"); done
+
 for backend in "$@"; do
   defaults write $domain graphicsBackend -string "$backend"
   cache="$cachedir/$([ $backend = dxmt ] && echo dxmt || echo d3dm)/YuanShen.exe"
@@ -76,7 +80,7 @@ for backend in "$@"; do
   start=$(wc -l < "$log" 2>/dev/null || echo 0)
   # A clean environment: the game inherits the launcher's.
   env -i HOME=$HOME USER=$USER LOGNAME=$USER TMPDIR=$TMPDIR PATH=/usr/bin:/bin:/usr/sbin:/sbin \
-    open -n --env GENSHIN_LAUNCHER_DEBUG=1 --env GENSHIN_LAUNCHER_GAMEHOST_STALLS="$work/stalls.$backend" --env GENSHIN_LAUNCHER_GAMEHOST_DEV=measure --env GENSHIN_LAUNCHER_AUTOLAUNCH=1 \
+    open -n --env GENSHIN_LAUNCHER_DEBUG=1 "${extra_env[@]}" --env GENSHIN_LAUNCHER_GAMEHOST_STALLS="$work/stalls.$backend" --env GENSHIN_LAUNCHER_GAMEHOST_DEV=measure --env GENSHIN_LAUNCHER_AUTOLAUNCH=1 \
     --env GENSHIN_LAUNCHER_GAME_DIR="$game_dir" "$work/Genshin Launcher.app" --args --autolaunch
   newlog() { tail -n +$((start + 1)) "$log" 2>/dev/null; }
   deadline=$((SECONDS + 300))
@@ -125,7 +129,7 @@ for backend in "$@"; do
   echo "== $backend $(date +%H:%M:%S)"
   echo "cache-files before: ${cache_before:-none}"
   echo "cache-files after:  $(cache_files)"
-  newlog | grep -E 'present:|dev companion unavailable' || echo "no present lines"
+  newlog | grep -E 'present:|pacing:|dev companion unavailable' || echo "no present lines"
   newlog | grep 'hitch:' | sed 's/^.*hitch:/hitch:/' > "$work/hitches"
   cat "$work/hitches"
   # Stall sampler output (stall:/stack:/nd: lines, Helpers/gamehost-dev.m), kept for analysis.

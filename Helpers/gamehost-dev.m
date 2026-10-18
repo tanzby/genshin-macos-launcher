@@ -152,6 +152,14 @@ static void summarise(const char *phase, double *t, int n, int dropped, CGSize s
   qsort(t, n, sizeof(double), compareDouble); /* handlers may arrive out of order */
   IntervalStats st = intervalStats(t, n);
   logHitches(phase, t, n);
+  /* Pacing: how many intervals fall on each display tick count (8.3 ms = one 120 Hz refresh). */
+  int bucket[6] = {0}; /* <12.5, <20.8, <29.2, <37.5, <50, >=50 ms */
+  for (int i = 0; i + 1 < n; i++) {
+    double ms = (t[i + 1] - t[i]) * 1000;
+    bucket[ms < 12.5 ? 0 : ms < 20.8 ? 1 : ms < 29.2 ? 2 : ms < 37.5 ? 3 : ms < 50 ? 4 : 5]++;
+  }
+  gamehost_trace("pacing: phase=%s ms<12.5=%d <20.8=%d <29.2=%d <37.5=%d <50=%d >=50=%d", phase, bucket[0], bucket[1],
+                 bucket[2], bucket[3], bucket[4], bucket[5]);
   gamehost_trace("present: phase=%s size=%.0fx%.0f seconds=%.1f presented=%d dropped=%d fps=%.1f p50=%.1fms "
                "p99=%.1fms max=%.1fms hitches50=%d",
                phase, size.width, size.height, t[n - 1] - t[0], n, dropped, st.fps, st.p50, st.p99, st.max,

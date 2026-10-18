@@ -77,6 +77,11 @@ public enum GenshinLaunchRecipe {
       environment["GENSHIN_LAUNCHER_DEBUG"] = "1"
       environment["WINEDEBUG"] = Self.debugWineChannels
     }
+    if options.graphicsBackend == .gptk4 {
+      // Without a target D3DMetal presents as soon as a frame is done, so on a 120 Hz screen the intervals
+      // alternate 8.3/25 ms at 60 fps; with it they are an even 16.7 ms like DXMT's (docs/gptk4-beta3-integration.md).
+      environment["D3DM_MAX_FPS"] = String(maxFrameRate)
+    }
     if options.metalHUD {
       // Default layout only: MTL_HUD_ELEMENTS would hide the "Game Porting Toolkit" section D3DMetal adds.
       environment["MTL_HUD_ENABLED"] = "1"
