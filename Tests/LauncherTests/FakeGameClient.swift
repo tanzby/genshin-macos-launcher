@@ -5,6 +5,13 @@ import Wine
 
 @testable import Launcher
 
+extension GameStatus {
+  /// The game is installed and current, and the remote answered (so online).
+  static let installed = GameStatus(localVersion: "5.0.0", remoteVersion: "5.0.0")
+  /// Nothing installed, the remote answered.
+  static let notInstalled = GameStatus(localVersion: nil, remoteVersion: "5.0.0")
+}
+
 /// Scriptable `GameClient`. Every `run(job)` suspends until the test drives it; every interesting
 /// moment is appended to an ordered event log ("run:update", "terminated:preDownload", "launch", ...).
 final class FakeGameClient: GameClient, Sendable {

@@ -1,0 +1,41 @@
+#!/bin/bash
+# Signs the DMG in <dir> and writes <dir>/appcast.xml with Sparkle's generate_appcast, then checks the appcast
+# lists <version> and that its EdDSA signature verifies against <ed-public-key> (the SUPublicEDKey built into the
+# app), so a key mismatch fails here instead of on every client. release.yaml and scripts/dev/sparkle-local-check
+# both use it. The private key goes in through stdin only, never to disk or argv.
+#
+#   scripts/release/make-appcast <dir> <download-url-prefix> <version> <ed-public-key> < private-key
+#
+# The Sparkle tools are cached in $SPARKLE_TOOLS_DIR (default: a temporary directory).
+set -euo pipefail
+[ $# -eq 4 ] || { echo "usage: $0 <dir> <download-url-prefix> <version> <ed-public-key> < private-key" >&2; exit 2; }
+dir=$1
+prefix=$2
+version=$3
+pub=$4
+# On GitHub Actions a failure is also shown as an annotation.
+fail() { echo "${GITHUB_ACTIONS:+::error::}$*" >&2; exit 1; }
+
+# The Sparkle version in Package.swift.
+sparkle_version=2.10.0
+sparkle_sha256=c2bf58aa8387266ac179357b1415d6f2635f044da8be41042af32425dae6da0c
+
+tools=${SPARKLE_TOOLS_DIR:-}
+if [ -z "$tools" ]; then
+  tools=$(mktemp -d)
+  trap 'rm -rf "$tools"' EXIT
+fi
+if [ ! -x "$tools/bin/generate_appcast" ]; then
+  mkdir -p "$tools"
+  curl -fsSL -o "$tools/sparkle.tar.xz" \
+    "https://github.com/sparkle-project/Sparkle/releases/download/$sparkle_version/Sparkle-$sparkle_version.tar.xz"
+  echo "$sparkle_sha256  $tools/sparkle.tar.xz" | shasum -a 256 -c -
+  tar -xJf "$tools/sparkle.tar.xz" -C "$tools" ./bin
+fi
+
+"$tools/bin/generate_appcast" --ed-key-file - --download-url-prefix "$prefix" -o "$dir/appcast.xml" "$dir"
+grep -q 'sparkle:edSignature' "$dir/appcast.xml" || fail "appcast has no EdDSA signature"
+grep -q "<sparkle:shortVersionString>$version<" "$dir/appcast.xml" || fail "appcast does not list $version"
+sig=$(grep -o 'sparkle:edSignature="[^"]*"' "$dir/appcast.xml" | head -1 | cut -d'"' -f2)
+swift "$(dirname "$0")/verify-ed-signature.swift" "$pub" "$sig" "$dir/GenshinLauncher-$version.dmg" \
+  || fail "the private key does not match the public key $pub"

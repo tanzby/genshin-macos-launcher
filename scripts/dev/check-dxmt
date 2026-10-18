@@ -1,0 +1,17 @@
+#!/bin/sh
+# Asserts a DXMT build holds every file in scripts/dxmt-files, and with <commit> also that its VERSION is that
+# commit and winemetal.so is x86_64. Usage: check-dxmt <dir> [commit]
+set -eu
+dir=$1
+here="$(dirname "$0")"
+fail=0
+# On GitHub Actions a failure is also shown as an annotation.
+err() { echo "${GITHUB_ACTIONS:+::error::}$*"; fail=1; }
+for f in $(grep -v '^#' "$here/../dxmt-files"); do
+  [ -s "$dir/$f" ] || err "missing: $dir/$f"
+done
+if [ $# -ge 2 ]; then
+  [ "$(lipo -archs "$dir/x86_64-unix/winemetal.so")" = x86_64 ] || err "not x86_64: winemetal.so"
+  [ "$(cat "$dir/VERSION")" = "$2" ] || err "VERSION is not $2"
+fi
+exit $fail

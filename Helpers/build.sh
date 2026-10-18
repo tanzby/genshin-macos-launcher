@@ -1,22 +1,11 @@
 #!/bin/sh
-# Build the x86_64 (Rosetta) game-host helpers into OUTDIR (default:
-# build/helpers): the wine loader shim and genshin-launcher-gamehost.dylib.
-# With --dev, build only the development pieces used by
-# `scripts/diag/genshin-launcher-diag run --autoplay` instead: genshin-launcher-gamehost-dev.dylib and, when
-# llvm-mingw is available (LLVM_MINGW=/path or on PATH), turner.exe.
+# Build the x86_64 (Rosetta) development helpers used by `scripts/diag/genshin-launcher-diag run --autoplay` into
+# OUTDIR (default: build/helpers): genshin-launcher-gamehost-dev.dylib and, when llvm-mingw is available
+# (LLVM_MINGW=/path or on PATH), turner.exe. The shipped helpers are XcodeGen targets (project.yml).
 set -eu
 here="$(cd "$(dirname "$0")" && pwd)"
-dev=0
-if [ "${1:-}" = "--dev" ]; then dev=1; shift; fi
 out="${1:-$here/../build/helpers}"
 mkdir -p "$out"
-
-if [ "$dev" = 0 ]; then
-  clang -arch x86_64 -O2 -Wall -Wextra -o "$out/genshin-launcher-wine-shim" "$here/wine-shim.c"
-  clang -arch x86_64 -O2 -Wall -Wextra -dynamiclib -o "$out/genshin-launcher-gamehost.dylib" "$here/gamehost.c" "$here/fps-unlock.c"
-  codesign -f -s - "$out/genshin-launcher-wine-shim" "$out/genshin-launcher-gamehost.dylib" 2>/dev/null
-  exit 0
-fi
 
 clang -arch x86_64 -O2 -Wall -fobjc-arc -dynamiclib -undefined dynamic_lookup \
   -framework AppKit -framework Metal -framework QuartzCore -framework ImageIO \

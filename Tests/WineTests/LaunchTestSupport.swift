@@ -12,17 +12,6 @@ import TestSupport
 
 // MARK: - Small helpers
 
-final class Locked<Value>: @unchecked Sendable {
-  private let lock = NSLock()
-  private var _value: Value
-  init(_ value: Value) { _value = value }
-  var value: Value {
-    get { lock.withLock { _value } }
-    set { lock.withLock { _value = newValue } }
-  }
-  func mutate<R>(_ body: (inout Value) -> R) -> R { lock.withLock { body(&_value) } }
-}
-
 /// One ordered log shared by every fake, so tests can assert cross-fake ordering (`-k` then kills then restore).
 final class LaunchTrace: @unchecked Sendable {
   private let events = Locked<[String]>([])

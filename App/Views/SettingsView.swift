@@ -1,5 +1,6 @@
 import AppKit
 import Launcher
+import Platform
 import SwiftUI
 import Wine
 
@@ -27,7 +28,7 @@ struct SettingsView: View {
     }
   }
 
-  let dataDirectory: URL
+  let dataDirectory: DataDirectory
   let updater: UpdaterModel
   @State private var page: Page? = .general
 
@@ -173,7 +174,7 @@ private struct GamePage: View {
 
 private struct WinePage: View {
   @Environment(MainController.self) private var controller
-  let dataDirectory: URL
+  let dataDirectory: DataDirectory
 
   var body: some View {
     @Bindable var settings = controller.settings
@@ -190,7 +191,7 @@ private struct WinePage: View {
       }
       Section("Tools") {
         Button("Show Wine Prefix in Finder") {
-          reveal(WineLayout(root: dataDirectory).prefixDirectory)
+          reveal(WineLayout(root: dataDirectory.root).prefixDirectory)
         }
         Button("Open Wine Command Prompt") { Task { await controller.openWineCommandPrompt() } }
           .disabled(!controller.canOpenWineCommandPrompt)
@@ -205,13 +206,13 @@ private struct WinePage: View {
 }
 
 private struct AdvancedPage: View {
-  let dataDirectory: URL
+  let dataDirectory: DataDirectory
 
   var body: some View {
     Form {
       Section("Folders") {
-        Button("Show Data Folder in Finder") { reveal(dataDirectory) }
-        Button("Show Logs in Finder") { reveal(WineLayout(root: dataDirectory).logsDirectory) }
+        Button("Show Data Folder in Finder") { reveal(dataDirectory.root) }
+        Button("Show Logs in Finder") { reveal(dataDirectory.logs) }
       }
       Section("Licenses") {
         ForEach(Credits.components, id: \.name) { component in

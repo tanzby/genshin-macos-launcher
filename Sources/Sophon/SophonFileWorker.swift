@@ -64,7 +64,7 @@ struct FileWorker: Sendable {
       case .wrongSize:
         throw reject(.invalidManifest("chunk \(chunk.id) does not hold \(chunk.uncompressedSize) bytes"))
       case .decoded(let plain, let plainMD5, let hasher):
-        guard plainMD5.caseInsensitiveCompare(chunk.md5) == .orderedSame else {
+        guard plainMD5.isSameDigest(as: chunk.md5) else {
           throw reject(.checksumMismatch(path: file.path))
         }
         try handle.seek(toOffset: chunk.offset)
@@ -82,7 +82,7 @@ struct FileWorker: Sendable {
     } else {
       assembledMD5 = try await Offload.run { try MD5Hasher.hex(ofFileAt: assembly, cancelled: $0) }
     }
-    guard assembledMD5.caseInsensitiveCompare(file.md5) == .orderedSame else {
+    guard assembledMD5.isSameDigest(as: file.md5) else {
       try? fileManager.removeItem(at: assembly)
       throw SophonError.checksumMismatch(path: file.path)
     }

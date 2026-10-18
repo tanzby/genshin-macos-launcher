@@ -9,7 +9,7 @@ Setup and requirements: `CONTRIBUTING.md`.
 - `scripts/dev/macos-check` runs the repo checks, `swift test`, then `xcodegen generate` and `xcodebuild`. It is the CI `swift` job and the pre-push hook.
 - `swift test` on its own for the library targets.
 - `scripts/build-dxmt` builds DXMT (submodule `third_party/dxmt`) into `build/dxmt`, which XcodeGen puts into the app (ADR 0003). Without it the app builds but cannot install Wine.
-- `Helpers/build.sh [--dev]` builds the x86_64 helpers by hand; normally XcodeGen builds them.
+- `Helpers/build.sh` builds the x86_64 development helpers (`gamehost-dev.m`, `turner.c`); XcodeGen builds the shipped ones.
 
 ## Architecture
 

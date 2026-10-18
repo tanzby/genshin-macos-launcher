@@ -7,11 +7,10 @@ import TestSupport
 @testable import Launcher
 
 /// Nothing installed, the remote answered (so online).
-private let notInstalled = GameStatus(remoteVersion: "5.0.0")
 
 @MainActor
 private func makeController(
-  status: GameStatus = GameStatus(localVersion: "5.0.0", remoteVersion: "5.0.0"),
+  status: GameStatus = GameStatus.installed,
   hosts: HostsBlocklist.Status = .current, startup: StartupSteps? = nil, gameDirectory: URL? = temporaryURL("genshin-launcher-mc")
 ) -> (MainController, FakeGameClient, SettingsModel) {
   let settings = SettingsModel(defaults: makeTemporaryDefaults("controller").defaults)
@@ -55,14 +54,14 @@ private func makeController(
     client.setStatusFailure(LauncherError.offline)
     await controller.refresh()
     #expect(!controller.presentation.buttonEnabled)
-    client.setStatus(GameStatus(localVersion: "5.0.0", remoteVersion: "5.0.0"))
+    client.setStatus(GameStatus.installed)
     await controller.refreshWhenIdle()
     #expect(controller.presentation.button == .launch)
     #expect(controller.presentation.buttonEnabled)
   }
 
   @Test func APP_010_reactivationLeavesARunningJobAlone() async throws {
-    let (controller, client, _) = makeController(status: notInstalled)
+    let (controller, client, _) = makeController(status: .notInstalled)
     await controller.refresh()
     await controller.perform(.install)
     _ = try await client.nextRun()
@@ -82,7 +81,7 @@ private func makeController(
   }
 
   @Test func APP_017_installRightAfterPickingAFolderDoesNotWaitForARefresh() async throws {
-    let (controller, client, settings) = makeController(status: notInstalled, gameDirectory: nil)
+    let (controller, client, settings) = makeController(status: .notInstalled, gameDirectory: nil)
     await controller.refresh()
     settings.gameDirectory = temporaryURL("genshin-launcher-mc")
     await controller.perform(.install)
@@ -92,7 +91,7 @@ private func makeController(
   }
 
   @Test func APP_017_installWithoutADirectoryAsksForOneInsteadOfFailing() async {
-    let (controller, client, _) = makeController(status: notInstalled, gameDirectory: nil)
+    let (controller, client, _) = makeController(status: .notInstalled, gameDirectory: nil)
     await controller.refresh()
     #expect(controller.needsGameDirectory(for: .install))
     await controller.perform(.install)
@@ -102,7 +101,7 @@ private func makeController(
 
   @Test func APP_013_aRefusedStartSurfacesAsAnErrorInTheCapsule() async {
     let (controller, client, _) = makeController(
-      status: GameStatus(localVersion: "5.0.0", remoteVersion: "5.0.0"))
+      status: GameStatus.installed)
     client.setRequiredDiskSpace(10 << 30, for: .repair)
     let tiny = LauncherModel(client: client, gameDirectory: URL(filePath: "/tmp/x"), availableDiskSpace: { _ in 1 << 30 })
     let c = MainController(launcher: tiny, settings: controller.settings, onboarding: controller.onboarding)
@@ -116,7 +115,7 @@ private func makeController(
   }
 
   @Test func APP_013_aStartThatWorksClearsTheEarlierRefusal() async throws {
-    let (controller, client, settings) = makeController(status: notInstalled, gameDirectory: nil)
+    let (controller, client, settings) = makeController(status: .notInstalled, gameDirectory: nil)
     await controller.refresh()
     await controller.perform(.install)
     #expect(controller.launcher.lastError == .noGameDirectory)
@@ -128,7 +127,7 @@ private func makeController(
   }
 
   @Test func APP_017_pauseAndResumeGoThroughTheLauncher() async throws {
-    let (controller, client, _) = makeController(status: notInstalled)
+    let (controller, client, _) = makeController(status: .notInstalled)
     await controller.refresh()
     await controller.perform(.install)
     let run = try await client.nextRun()

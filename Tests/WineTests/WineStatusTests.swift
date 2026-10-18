@@ -45,7 +45,7 @@ import Testing
   func emptyDirectory() async throws {
     try await withWineTempDirectory { dir in
       let h = try makeWineHarness(in: dir)
-      #expect(await h.runtime.status() == .needsInstall(.notInstalled))
+      #expect(await h.runtime.status(for: .dxmt) == .needsInstall(.notInstalled))
     }
   }
 
@@ -54,7 +54,7 @@ import Testing
     try await withWineTempDirectory { dir in
       let h = try makeWineHarness(in: dir)
       try h.writeFile("wine/bin/wine")
-      #expect(await h.runtime.status() == .needsInstall(.interrupted))
+      #expect(await h.runtime.status(for: .dxmt) == .needsInstall(.interrupted))
     }
   }
 
@@ -62,7 +62,7 @@ import Testing
   func readyAfterInstall() async throws {
     try await withWineTempDirectory { dir in
       let h = try await makeInstalledWineHarness(in: dir)
-      #expect(await h.runtime.status() == .ready)
+      #expect(await h.runtime.status(for: .dxmt) == .ready)
     }
   }
 
@@ -72,7 +72,7 @@ import Testing
       let h = try await makeInstalledWineHarness(in: dir)
       try JSONEncoder().encode(WineStamp(wineVersion: "other", dxmtVersion: h.fixtures.dxmt.version))
         .write(to: h.layout.stampFile)
-      #expect(await h.runtime.status() == .needsInstall(.versionMismatch))
+      #expect(await h.runtime.status(for: .dxmt) == .needsInstall(.versionMismatch))
     }
   }
 
@@ -82,7 +82,7 @@ import Testing
       let h = try await makeInstalledWineHarness(in: dir)
       try JSONEncoder().encode(WineStamp(wineVersion: h.fixtures.distribution.id, dxmtVersion: "0000000"))
         .write(to: h.layout.stampFile)
-      #expect(await h.runtime.status() == .needsInstall(.dxmtOutdated))
+      #expect(await h.runtime.status(for: .dxmt) == .needsInstall(.dxmtOutdated))
     }
   }
 
@@ -93,7 +93,7 @@ import Testing
       let bare = WineRuntime(
         dataDirectory: DataDirectory(root: h.root), distribution: h.fixtures.distribution, dxmt: nil,
         downloader: h.downloader, runner: h.runner)
-      #expect(await bare.status() == .ready)
+      #expect(await bare.status(for: .dxmt) == .ready)
     }
   }
 
@@ -104,7 +104,7 @@ import Testing
       try JSONEncoder().encode(
         WineStamp(wineVersion: "11.0-dxmt-signed-with-patches", dxmtVersion: h.fixtures.dxmt.version)
       ).write(to: h.layout.stampFile)
-      #expect(await h.runtime.status() == .needsInstall(.versionMismatch))
+      #expect(await h.runtime.status(for: .dxmt) == .needsInstall(.versionMismatch))
     }
   }
 
@@ -118,7 +118,7 @@ import Testing
         #expect(other != WineRuntime.pinnedVersion)
         try JSONEncoder().encode(WineStamp(wineVersion: other, dxmtVersion: h.fixtures.dxmt.version))
           .write(to: h.layout.stampFile)
-        #expect(await h.runtime.status() == .needsInstall(.versionMismatch))
+        #expect(await h.runtime.status(for: .dxmt) == .needsInstall(.versionMismatch))
       }
     }
   }
@@ -128,7 +128,7 @@ import Testing
     try await withWineTempDirectory { dir in
       let h = try await makeInstalledWineHarness(in: dir)
       try Data("this is not json".utf8).write(to: h.layout.stampFile)
-      #expect(await h.runtime.status() == .needsInstall(.versionMismatch))
+      #expect(await h.runtime.status(for: .dxmt) == .needsInstall(.versionMismatch))
     }
   }
 
@@ -145,7 +145,7 @@ import Testing
     try await withWineTempDirectory { dir in
       let h = try await makeInstalledWineHarness(in: dir)
       try FileManager.default.removeItem(at: h.root.appending(path: relative))
-      let status = await h.runtime.status()
+      let status = await h.runtime.status(for: .dxmt)
       guard case .needsInstall(.corrupt) = status else {
         Issue.record("expected .needsInstall(.corrupt) after deleting \(relative), got \(status)")
         return
@@ -159,11 +159,11 @@ import Testing
       let h = try await makeInstalledWineHarness(in: dir)
       let unixWine = h.layout.unixLibraryDirectory.appending(path: "wine")
       try? FileManager.default.removeItem(at: unixWine)
-      #expect(await h.runtime.status() == .ready)
+      #expect(await h.runtime.status(for: .dxmt) == .ready)
       try FileManager.default.createDirectory(
         at: h.layout.unixLibraryDirectory, withIntermediateDirectories: true)
       try Data("renamed".utf8).write(to: h.layout.unixLibraryDirectory.appending(path: "wine-renamed"))
-      #expect(await h.runtime.status() == .ready)
+      #expect(await h.runtime.status(for: .dxmt) == .ready)
     }
   }
 
@@ -172,7 +172,7 @@ import Testing
     try await withWineTempDirectory { dir in
       let h = try await makeInstalledWineHarness(in: dir)
       try? FileManager.default.removeItem(at: h.layout.unixLibraryDirectory.appending(path: "wine-host"))
-      #expect(await h.runtime.status() == .ready)
+      #expect(await h.runtime.status(for: .dxmt) == .ready)
     }
   }
 }

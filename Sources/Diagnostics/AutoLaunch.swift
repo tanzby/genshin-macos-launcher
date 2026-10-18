@@ -78,7 +78,7 @@ public final class DiagLog: Sendable {
   }
 
   public func say(_ message: String) {
-    let line = "\(ISO8601DateFormatter().string(from: Date())) \(message)\n"
+    let line = "\(Date().ISO8601Format()) \(message)\n"
     lock.withLock {
       guard let handle = try? FileHandle(forWritingTo: file) else {
         try? Data(line.utf8).write(to: file)
@@ -105,20 +105,18 @@ public struct AutoLaunch {
 
   let model: LauncherModel
   let log: DiagLog
-  let pollInterval: Duration
   let progressInterval: Duration
   let allowDownload: Bool
   /// Writes the hosts blocklist (administrator password dialog) when the launcher refuses to start without it.
   let hosts: (any HostsBlocking)?
 
   public init(
-    model: LauncherModel, hosts: (any HostsBlocking)? = nil, log: DiagLog, pollInterval: Duration = .milliseconds(200),
+    model: LauncherModel, hosts: (any HostsBlocking)? = nil, log: DiagLog,
     progressInterval: Duration = .seconds(5), allowDownload: Bool = false
   ) {
     self.model = model
     self.hosts = hosts
     self.log = log
-    self.pollInterval = pollInterval
     self.progressInterval = progressInterval
     self.allowDownload = allowDownload
   }
@@ -180,9 +178,8 @@ public struct AutoLaunch {
   }
 
   private func waitUntilIdle() async {
-    while model.phase != .idle {
-      try? await Task.sleep(for: pollInterval)
-    }
+    let model = model
+    for await phase in Observations({ model.phase }) where phase == .idle { return }
   }
 
   /// One line per phase change, and a progress line every `progressInterval` while a job runs.

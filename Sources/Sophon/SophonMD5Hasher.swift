@@ -19,6 +19,19 @@ enum MD5Hasher {
   }
 }
 
+extension MD5Hasher {
+  /// Size and MD5 both match. A missing file does not match.
+  static func matches(_ url: URL, size: Int64, md5: String, cancelled: CancelFlag) throws -> Bool {
+    guard url.fileSize == size else { return false }
+    return try hex(ofFileAt: url, cancelled: cancelled).isSameDigest(as: md5)
+  }
+}
+
+extension String {
+  /// Hex digests compare without regard to case.
+  func isSameDigest(as other: String) -> Bool { caseInsensitiveCompare(other) == .orderedSame }
+}
+
 extension Digest {
   var hexString: String { map { String(format: "%02x", $0) }.joined() }
 }

@@ -13,8 +13,6 @@ import TestSupport
 // MARK: - Fixtures
 
 private enum Status {
-  static let notInstalled = GameStatus(localVersion: nil, remoteVersion: "5.0.0")
-  static let installed = GameStatus(localVersion: "5.0.0", remoteVersion: "5.0.0")
   static let needsUpdate = GameStatus(localVersion: "4.9.0", remoteVersion: "5.0.0", canUpdate: true)
   static let preDownloadable = GameStatus(localVersion: "5.0.0", remoteVersion: "5.0.0", canPreDownload: true)
   static let updatableAndPreDownloadable = GameStatus(
@@ -27,9 +25,9 @@ private struct JobScenario: Sendable, CustomTestStringConvertible {
   var testDescription: String { job.rawValue }
 
   static let all = [
-    JobScenario(job: .install, status: Status.notInstalled),
+    JobScenario(job: .install, status: GameStatus.notInstalled),
     JobScenario(job: .update, status: Status.needsUpdate),
-    JobScenario(job: .repair, status: Status.installed),
+    JobScenario(job: .repair, status: GameStatus.installed),
     JobScenario(job: .preDownload, status: Status.preDownloadable),
   ]
 }
@@ -129,16 +127,16 @@ private func jobJSON(kind: String, target: String? = nil, extra: String = "") ->
   }
 
   @Test func APP_010_isOnlineWhenRemoteVersionIsPresent() async {
-    let h = await Harness(status: Status.installed)
+    let h = await Harness(status: GameStatus.installed)
     #expect(h.model.isOnline == true)
   }
 
   @Test func APP_010_refreshFailureKeepsPreviousStatusInsteadOfFlippingToInstall() async {
-    let h = await Harness(status: Status.installed)
+    let h = await Harness(status: GameStatus.installed)
     #expect(h.model.primaryAction == .launch)
     h.fake.setStatusFailure(GameClientError.network)
     await h.model.refresh()
-    #expect(h.model.status == Status.installed)
+    #expect(h.model.status == GameStatus.installed)
     #expect(h.model.primaryAction == .launch)
   }
 
@@ -149,7 +147,7 @@ private func jobJSON(kind: String, target: String? = nil, extra: String = "") ->
   }
 
   @Test func APP_010_refreshAfterFailureRecoversToNewStatus() async {
-    let h = await Harness(status: Status.installed)
+    let h = await Harness(status: GameStatus.installed)
     h.fake.setStatusFailure(GameClientError.network)
     await h.model.refresh()
     h.fake.setStatus(Status.needsUpdate)
@@ -163,7 +161,7 @@ private func jobJSON(kind: String, target: String? = nil, extra: String = "") ->
 
 @MainActor @Suite struct APP_013_ErrorTests {
   @Test func APP_013_errorReturnsToIdleAndRetryWorks() async throws {
-    let h = await Harness(status: Status.notInstalled)
+    let h = await Harness(status: GameStatus.notInstalled)
     let first = try await h.begin(.install)
     #expect(h.model.phase == .installing)
     h.fake.finish(run: first, throwing: GameClientError.network)
@@ -183,7 +181,7 @@ private func jobJSON(kind: String, target: String? = nil, extra: String = "") ->
 
   @Test func APP_013_nonClientErrorIsReportedAsUnexpected() async throws {
     struct Boom: Error {}
-    let h = await Harness(status: Status.notInstalled)
+    let h = await Harness(status: GameStatus.notInstalled)
     let index = try await h.begin(.install)
     h.fake.finish(run: index, throwing: Boom())
     await h.model.waitUntilIdle()
@@ -200,7 +198,7 @@ private func jobJSON(kind: String, target: String? = nil, extra: String = "") ->
   }
 
   @Test func APP_013_aRunThatThrowsCancellationCountsAsPauseNotError() async throws {
-    let h = await Harness(status: Status.notInstalled)
+    let h = await Harness(status: GameStatus.notInstalled)
     let index = try await h.begin(.install)
     h.fake.finish(run: index, throwing: CancellationError())
     await h.model.waitUntilIdle()
@@ -212,7 +210,7 @@ private func jobJSON(kind: String, target: String? = nil, extra: String = "") ->
   }
 
   @Test func APP_013_downloadJobResumesAfterError() async throws {
-    let h = await Harness(status: Status.notInstalled)
+    let h = await Harness(status: GameStatus.notInstalled)
     let first = try await h.begin(.install)
     h.fake.finish(run: first, throwing: GameClientError.network)
     await h.model.waitUntilIdle()
@@ -227,7 +225,7 @@ private func jobJSON(kind: String, target: String? = nil, extra: String = "") ->
 
   @Test func APP_013_launchOutcomeErrorsDoNotLeaveJobState() async throws {
     // A failed job must not leave the launcher in a state that blocks the next launch.
-    let h = await Harness(status: Status.installed)
+    let h = await Harness(status: GameStatus.installed)
     try await h.beginLaunch()
     h.fake.finishLaunch(.failedToLaunch)
     await h.model.waitUntilIdle()
@@ -312,7 +310,7 @@ private func jobJSON(kind: String, target: String? = nil, extra: String = "") ->
   }
 
   @Test func APP_015_secondLaunchWhileLaunchingIsBusy() async throws {
-    let h = await Harness(status: Status.installed)
+    let h = await Harness(status: GameStatus.installed)
     try await h.beginLaunch()
     await #expect(throws: LauncherError.busy) { try await h.model.launch() }
     #expect(h.fake.launchOptions.count == 1)
@@ -360,7 +358,7 @@ private func jobJSON(kind: String, target: String? = nil, extra: String = "") ->
 @MainActor @Suite struct INS_004_DiskSpaceTests {
   @Test func INS_004_shortageThrowsAndLeavesNoTrace() async throws {
     let h = await Harness(
-      status: Status.notInstalled, chunkTempMargin: 1_000, availableDiskSpace: { _ in 5_000 })
+      status: GameStatus.notInstalled, chunkTempMargin: 1_000, availableDiskSpace: { _ in 5_000 })
     h.fake.setRequiredDiskSpace(10_000, for: .install)
     await #expect(throws: LauncherError.insufficientDiskSpace(required: 11_000, available: 5_000)) {
       try await h.model.start(.install)
@@ -372,7 +370,7 @@ private func jobJSON(kind: String, target: String? = nil, extra: String = "") ->
   }
 
   @Test func INS_005_aFolderTheClientRefusesLeavesNoJobFileBehind() async throws {
-    let h = await Harness(status: Status.notInstalled)
+    let h = await Harness(status: GameStatus.notInstalled)
     h.fake.setDiskCheckFailure(GameClientError.installDirectoryNotEmpty)
 
     await #expect(throws: LauncherError.client(.installDirectoryNotEmpty)) { try await h.model.start(.install) }
@@ -386,7 +384,7 @@ private func jobJSON(kind: String, target: String? = nil, extra: String = "") ->
   @Test func INS_004_requiredIncludesChunkTempMargin() async throws {
     // 10_000 + 1_000 margin: 10_999 is one byte short.
     let h = await Harness(
-      status: Status.notInstalled, chunkTempMargin: 1_000, availableDiskSpace: { _ in 10_999 })
+      status: GameStatus.notInstalled, chunkTempMargin: 1_000, availableDiskSpace: { _ in 10_999 })
     h.fake.setRequiredDiskSpace(10_000, for: .install)
     await #expect(throws: LauncherError.insufficientDiskSpace(required: 11_000, available: 10_999)) {
       try await h.model.start(.install)
@@ -395,14 +393,14 @@ private func jobJSON(kind: String, target: String? = nil, extra: String = "") ->
 
   @Test func INS_004_exactlyEnoughSpaceIsAccepted() async throws {
     let h = await Harness(
-      status: Status.notInstalled, chunkTempMargin: 1_000, availableDiskSpace: { _ in 11_000 })
+      status: GameStatus.notInstalled, chunkTempMargin: 1_000, availableDiskSpace: { _ in 11_000 })
     h.fake.setRequiredDiskSpace(10_000, for: .install)
     try await h.begin(.install)
     #expect(h.model.phase == .installing)
   }
 
   @Test func INS_004_unknownAvailableSpaceDoesNotBlock() async throws {
-    let h = await Harness(status: Status.notInstalled, chunkTempMargin: 1_000, availableDiskSpace: { _ in nil })
+    let h = await Harness(status: GameStatus.notInstalled, chunkTempMargin: 1_000, availableDiskSpace: { _ in nil })
     h.fake.setRequiredDiskSpace(10_000, for: .install)
     try await h.begin(.install)
     #expect(h.model.phase == .installing)
@@ -410,7 +408,7 @@ private func jobJSON(kind: String, target: String? = nil, extra: String = "") ->
 
   @Test func INS_004_zeroRequiredSkipsTheCheckEvenWithMargin() async throws {
     let h = await Harness(
-      status: Status.notInstalled, chunkTempMargin: 1_000, availableDiskSpace: { _ in 0 })
+      status: GameStatus.notInstalled, chunkTempMargin: 1_000, availableDiskSpace: { _ in 0 })
     h.fake.setRequiredDiskSpace(0, for: .install)
     try await h.begin(.install)
     #expect(h.model.phase == .installing)
@@ -431,7 +429,7 @@ private func jobJSON(kind: String, target: String? = nil, extra: String = "") ->
   @Test func INS_004_availableSpaceIsQueriedForTheGameDirectory() async throws {
     let queried = Queried()
     let h = await Harness(
-      status: Status.notInstalled, chunkTempMargin: 0,
+      status: GameStatus.notInstalled, chunkTempMargin: 0,
       availableDiskSpace: { url in
         queried.record(url)
         return 1
@@ -470,14 +468,14 @@ private final class Queried: Sendable {
   }
 
   @Test func INS_015_jobFileKeptAfterPause() async throws {
-    let h = await Harness(status: Status.notInstalled)
+    let h = await Harness(status: GameStatus.notInstalled)
     try await h.begin(.install)
     await h.model.pause()
     #expect(h.jobFile == PendingJob(kind: .install, targetVersion: "5.0.0"))
   }
 
   @Test func INS_015_jobFileKeptAfterError() async throws {
-    let h = await Harness(status: Status.notInstalled)
+    let h = await Harness(status: GameStatus.notInstalled)
     let run = try await h.begin(.install)
     h.fake.finish(run: run, throwing: GameClientError.network)
     await h.model.waitUntilIdle()
@@ -485,17 +483,17 @@ private final class Queried: Sendable {
   }
 
   @Test func INS_015_jobFileKeptAfterShutdown() async throws {
-    let h = await Harness(status: Status.notInstalled)
+    let h = await Harness(status: GameStatus.notInstalled)
     try await h.begin(.install)
     await h.model.shutdown()
     #expect(h.jobFile == PendingJob(kind: .install, targetVersion: "5.0.0"))
   }
 
   @Test func INS_015_jobFileRemovedOnSuccess() async throws {
-    let h = await Harness(status: Status.notInstalled)
+    let h = await Harness(status: GameStatus.notInstalled)
     let run = try await h.begin(.install)
     #expect(h.jobFileExists)
-    h.fake.setStatus(Status.installed)
+    h.fake.setStatus(GameStatus.installed)
     h.fake.finish(run: run)
     await h.model.waitUntilIdle()
     #expect(h.jobFileExists == false)
@@ -503,12 +501,12 @@ private final class Queried: Sendable {
   }
 
   @Test func INS_015_failureToRemoveJobFileIsReportedNotHidden() async throws {
-    let h = await Harness(status: Status.notInstalled)
+    let h = await Harness(status: GameStatus.notInstalled)
     let run = try await h.begin(.install)
     let tmp = h.jobFileURL.deletingLastPathComponent()
     try FileManager.default.setAttributes([.posixPermissions: 0o555], ofItemAtPath: tmp.path)
     defer { try? FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: tmp.path) }
-    h.fake.setStatus(Status.installed)
+    h.fake.setStatus(GameStatus.installed)
     h.fake.finish(run: run)
     await h.model.waitUntilIdle()
     #expect(h.model.lastError == .unexpected("job.json could not be removed"))
@@ -517,7 +515,7 @@ private final class Queried: Sendable {
 
   @Test(arguments: ["not json at all {{", "", #"{"schemaVersion":1}"#, #"{"schemaVersion":1,"kind":"bogus"}"#])
   func INS_015_corruptJobFileIsIgnoredWithoutCrash(_ contents: String) async throws {
-    let h = await Harness(status: Status.installed, preexistingJobFile: contents)
+    let h = await Harness(status: GameStatus.installed, preexistingJobFile: contents)
     #expect(h.model.pendingJob == nil)
     // A corrupt file must not block launching.
     try await h.beginLaunch()
@@ -527,7 +525,7 @@ private final class Queried: Sendable {
   }
 
   @Test func INS_015_corruptJobFileIsOverwrittenByNextJob() async throws {
-    let h = await Harness(status: Status.notInstalled, preexistingJobFile: "garbage")
+    let h = await Harness(status: GameStatus.notInstalled, preexistingJobFile: "garbage")
     try await h.begin(.install)
     #expect(h.jobFile == PendingJob(kind: .install, targetVersion: "5.0.0"))
   }
@@ -541,17 +539,17 @@ private final class Queried: Sendable {
 
   @Test func INS_015_refreshLoadsPendingJobIntoModel() async {
     let h = await Harness(
-      status: Status.notInstalled, preexistingJobFile: jobJSON(kind: "install", target: "5.0.0"))
+      status: GameStatus.notInstalled, preexistingJobFile: jobJSON(kind: "install", target: "5.0.0"))
     #expect(h.model.pendingJob == PendingJob(kind: .install, targetVersion: "5.0.0"))
   }
 
   @Test func INS_015_refreshWithoutJobFileLeavesPendingJobNil() async {
-    let h = await Harness(status: Status.installed)
+    let h = await Harness(status: GameStatus.installed)
     #expect(h.model.pendingJob == nil)
   }
 
   @Test func INS_015_refreshPicksUpJobFileAppearingLater() async {
-    let h = await Harness(status: Status.installed)
+    let h = await Harness(status: GameStatus.installed)
     #expect(h.model.pendingJob == nil)
     h.writeJobFile(jobJSON(kind: "repair", target: "5.0.0"))
     await h.model.refresh()
@@ -574,7 +572,7 @@ private final class Queried: Sendable {
 
 @MainActor @Suite struct PRG_006_PauseTests {
   @Test func PRG_006_pauseCancelsAndWaitsForTermination() async throws {
-    let h = await Harness(status: Status.notInstalled)
+    let h = await Harness(status: GameStatus.notInstalled)
     let run = try await h.begin(.install)
     let statusCallsBefore = h.fake.statusCalls
 
@@ -604,7 +602,7 @@ private final class Queried: Sendable {
   }
 
   @Test func PRG_006_pauseWhileIdleIsANoOp() async {
-    let h = await Harness(status: Status.installed)
+    let h = await Harness(status: GameStatus.installed)
     await h.model.pause()
     #expect(h.model.phase == .idle)
     #expect(h.model.isPausing == false)
@@ -612,7 +610,7 @@ private final class Queried: Sendable {
   }
 
   @Test func PRG_006_pauseDoesNotBlockOnARunningGame() async throws {
-    let h = await Harness(status: Status.installed)
+    let h = await Harness(status: GameStatus.installed)
     try await h.beginLaunch()
     await h.model.pause()  // must return at once; the game keeps running
     #expect(h.model.phase == .launching)
@@ -621,7 +619,7 @@ private final class Queried: Sendable {
   }
 
   @Test func PRG_006_pauseDuringDiskPreflightStopsTheStartBeforeAnyRun() async throws {
-    let h = await Harness(status: Status.installed)
+    let h = await Harness(status: GameStatus.installed)
     h.fake.stallsDiskQuery.withLock { $0 = true }
     let starting = Task { try await h.model.start(.repair) }
     try await h.fake.diskQueries.pop("the disk query")
@@ -635,7 +633,7 @@ private final class Queried: Sendable {
   }
 
   @Test func PRG_006_shutdownDuringDiskPreflightStopsTheStartBeforeAnyRun() async throws {
-    let h = await Harness(status: Status.installed)
+    let h = await Harness(status: GameStatus.installed)
     h.fake.stallsDiskQuery.withLock { $0 = true }
     let starting = Task { try await h.model.start(.repair) }
     try await h.fake.diskQueries.pop("the disk query")
@@ -671,7 +669,7 @@ private final class Queried: Sendable {
   }
 
   @Test func INS_015_unwritableJobFileRefusesToStartTheJob() async throws {
-    let h = await Harness(status: Status.installed)
+    let h = await Harness(status: GameStatus.installed)
     let tmp = h.jobFileURL.deletingLastPathComponent()
     try FileManager.default.createDirectory(at: tmp, withIntermediateDirectories: true)
     try FileManager.default.setAttributes([.posixPermissions: 0o555], ofItemAtPath: tmp.path)
@@ -693,7 +691,7 @@ private final class Queried: Sendable {
   }
 
   @Test func PRG_006_shutdownCancelsJobAndWaitsKeepingJobFile() async throws {
-    let h = await Harness(status: Status.notInstalled)
+    let h = await Harness(status: GameStatus.notInstalled)
     let run = try await h.begin(.install)
     await h.model.shutdown()
     #expect(h.fake.isTerminated(run: run))
@@ -702,7 +700,7 @@ private final class Queried: Sendable {
   }
 
   @Test func PRG_006_shutdownCancelsLaunchAndWaitsForItToReturn() async throws {
-    let h = await Harness(status: Status.installed)
+    let h = await Harness(status: GameStatus.installed)
     try await h.beginLaunch()
     await h.model.shutdown()
     #expect(h.fake.events == ["launch", "launch:cancelled", "launch:ended"])
@@ -731,24 +729,24 @@ private final class Queried: Sendable {
     let run = try await h.begin(.update)
     h.fake.yield(.running(done: 1, total: 2), run: run)
     let statusCallsBefore = h.fake.statusCalls
-    h.fake.setStatus(Status.installed)
+    h.fake.setStatus(GameStatus.installed)
     h.fake.finish(run: run)
     await h.model.waitUntilIdle()
 
     #expect(try await h.log.next() == .finished(.update))
     #expect(h.jobFileExists == false)
     #expect(h.fake.statusCalls > statusCallsBefore)
-    #expect(h.model.status == Status.installed)
+    #expect(h.model.status == GameStatus.installed)
     #expect(h.model.primaryAction == .launch)
     #expect(h.model.phase == .idle)
     #expect(h.model.lastError == nil)
   }
 
   @Test func UPG_013_installSuccessSwitchesPrimaryActionToLaunch() async throws {
-    let h = await Harness(status: Status.notInstalled)
+    let h = await Harness(status: GameStatus.notInstalled)
     #expect(h.model.primaryAction == .install)
     let run = try await h.begin(.install)
-    h.fake.setStatus(Status.installed)
+    h.fake.setStatus(GameStatus.installed)
     h.fake.finish(run: run)
     await h.model.waitUntilIdle()
     #expect(try await h.log.next() == .finished(.install))
@@ -767,7 +765,7 @@ private final class Queried: Sendable {
   }
 
   @Test func UPG_013_repairSuccessEmitsFinished() async throws {
-    let h = await Harness(status: Status.installed)
+    let h = await Harness(status: GameStatus.installed)
     let run = try await h.begin(.repair)
     #expect(h.model.phase == .repairing)
     h.fake.finish(run: run)
@@ -790,7 +788,7 @@ private final class Queried: Sendable {
 
   @Test(arguments: [GameJob.update, .repair])
   func REP_002_updateAndRepairRejectedWithNotInstalledWhenNotInstalled(_ job: GameJob) async {
-    let h = await Harness(status: Status.notInstalled)
+    let h = await Harness(status: GameStatus.notInstalled)
     await #expect(throws: LauncherError.notInstalled) { try await h.model.start(job) }
     #expect(h.fake.runs.isEmpty)
     #expect(h.jobFileExists == false)
@@ -798,7 +796,7 @@ private final class Queried: Sendable {
   }
 
   @Test func REP_002_preDownloadRejectedWhenUnavailable() async {
-    let h = await Harness(status: Status.installed)
+    let h = await Harness(status: GameStatus.installed)
     await #expect(throws: LauncherError.preDownloadUnavailable) { try await h.model.start(.preDownload) }
     #expect(h.fake.runs.isEmpty)
     #expect(h.jobFileExists == false)
@@ -807,7 +805,7 @@ private final class Queried: Sendable {
   }
 
   @Test func REP_002_repairRunsWhenInstalledAndUpToDate() async throws {
-    let h = await Harness(status: Status.installed)
+    let h = await Harness(status: GameStatus.installed)
     try await h.begin(.repair)
     #expect(h.fake.runs == [.repair])
     #expect(h.model.phase == .repairing)
@@ -832,7 +830,7 @@ private final class Queried: Sendable {
 
 @MainActor @Suite struct LCH_036_LaunchTests {
   @Test func LCH_036_startupTimedOutOutcomeShowsLaunchTimeoutAndReturnsToIdle() async throws {
-    let h = await Harness(status: Status.installed)
+    let h = await Harness(status: GameStatus.installed)
     try await h.beginLaunch()
     #expect(h.model.phase == .launching)
 
@@ -846,7 +844,7 @@ private final class Queried: Sendable {
   }
 
   @Test func LCH_036_launchCanBeRetriedAfterTimeout() async throws {
-    let h = await Harness(status: Status.installed)
+    let h = await Harness(status: GameStatus.installed)
     try await h.beginLaunch()
     h.fake.finishLaunch(.startupTimedOut)
     await h.model.waitUntilIdle()
@@ -858,7 +856,7 @@ private final class Queried: Sendable {
   }
 
   @Test func LCH_036_startedInTimeMovesToRunningThenIdleAfterExit() async throws {
-    let h = await Harness(status: Status.installed)
+    let h = await Harness(status: GameStatus.installed)
     try await h.beginLaunch()
     #expect(h.model.phase == .launching)
     #expect(h.fake.launchOptions.map(\.gameDirectory) == [h.directory!])
@@ -874,7 +872,7 @@ private final class Queried: Sendable {
   }
 
   @Test func LCH_036_failedExitReportsGameExitedAndEmitsLaunchFailed() async throws {
-    let h = await Harness(status: Status.installed)
+    let h = await Harness(status: GameStatus.installed)
     let log = URL(filePath: "/tmp/fake-game-log.txt")
     try await h.beginLaunch()
     h.fake.fireStarted()
@@ -888,7 +886,7 @@ private final class Queried: Sendable {
   }
 
   @Test func LCH_036_failedToLaunchReportsErrorAndEmitsLaunchFailed() async throws {
-    let h = await Harness(status: Status.installed)
+    let h = await Harness(status: GameStatus.installed)
     try await h.beginLaunch()
     h.fake.finishLaunch(.failedToLaunch)
     await h.model.waitUntilIdle()
@@ -899,7 +897,7 @@ private final class Queried: Sendable {
   }
 
   @Test func LCH_036_cleanExitEmitsNoEvent() async throws {
-    let h = await Harness(status: Status.installed)
+    let h = await Harness(status: GameStatus.installed)
     try await h.beginLaunch()
     h.fake.fireStarted()
     h.fake.finishLaunch(.exited)
@@ -910,14 +908,14 @@ private final class Queried: Sendable {
   // Launch preconditions
 
   @Test func LCH_036_launchRejectedWithNoGameDirectory() async {
-    let h = await Harness(status: Status.installed, hasGameDirectory: false)
+    let h = await Harness(status: GameStatus.installed, hasGameDirectory: false)
     await #expect(throws: LauncherError.noGameDirectory) { try await h.model.launch() }
     #expect(h.model.phase == .idle)
     #expect(h.fake.launchOptions.isEmpty)
   }
 
   @Test func LCH_036_launchRejectedWithNotInstalled() async {
-    let h = await Harness(status: Status.notInstalled)
+    let h = await Harness(status: GameStatus.notInstalled)
     await #expect(throws: LauncherError.notInstalled) { try await h.model.launch() }
     #expect(h.fake.launchOptions.isEmpty)
   }
@@ -930,7 +928,7 @@ private final class Queried: Sendable {
 
   @Test(arguments: [GameJob.install, .update, .repair])
   func LCH_036_launchRejectedWithPendingJobOfKind(_ kind: GameJob) async {
-    let h = await Harness(status: Status.installed, preexistingJobFile: jobJSON(kind: kind.rawValue, target: "5.0.0"))
+    let h = await Harness(status: GameStatus.installed, preexistingJobFile: jobJSON(kind: kind.rawValue, target: "5.0.0"))
     await #expect(throws: LauncherError.pendingJob(kind)) { try await h.model.launch() }
     #expect(h.fake.launchOptions.isEmpty)
     #expect(h.model.phase == .idle)
@@ -944,7 +942,7 @@ private final class Queried: Sendable {
   }
 
   @Test func LCH_036_launchPassesGameDirectoryOption() async throws {
-    let h = await Harness(status: Status.installed)
+    let h = await Harness(status: GameStatus.installed)
     try await h.beginLaunch()
     #expect(h.fake.launchOptions == [LaunchOptions(gameDirectory: h.directory!)])
   }
@@ -957,13 +955,13 @@ private final class Queried: Sendable {
 @MainActor
 @Suite struct QuitPlanTests {
   @Test func APP_022_anIdleLauncherQuitsAtOnce() async {
-    let h = await Harness(status: Status.installed)
+    let h = await Harness(status: GameStatus.installed)
 
     #expect(h.model.quitPlan == .quitNow)
   }
 
   @Test func APP_022_aRunningJobIsShutDownFirstWithoutAsking() async throws {
-    let h = await Harness(status: Status.notInstalled)
+    let h = await Harness(status: GameStatus.notInstalled)
     try await h.begin(.install)
 
     #expect(h.model.quitPlan == .shutDownFirst)
@@ -980,7 +978,7 @@ private final class Queried: Sendable {
   }
 
   @Test func APP_022_aLaunchInProgressIsShutDownFirstWithoutAsking() async throws {
-    let h = await Harness(status: Status.installed)
+    let h = await Harness(status: GameStatus.installed)
     try await h.beginLaunch()
 
     #expect(h.model.quitPlan == .shutDownFirst)
@@ -988,7 +986,7 @@ private final class Queried: Sendable {
   }
 
   @Test func APP_022_aRunningGameIsConfirmedBeforeItIsClosed() async throws {
-    let h = await Harness(status: Status.installed)
+    let h = await Harness(status: GameStatus.installed)
     try await h.beginLaunch()
     h.fake.fireStarted()
     #expect(await h.waitForPhase(.running))
@@ -1000,7 +998,7 @@ private final class Queried: Sendable {
   }
 
   @Test func APP_022_askingTwiceGivesTheSameAnswer() async throws {
-    let h = await Harness(status: Status.notInstalled)
+    let h = await Harness(status: GameStatus.notInstalled)
     try await h.begin(.install)
 
     let plans = (0..<4).map { _ in h.model.quitPlan }

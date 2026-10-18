@@ -84,7 +84,7 @@ private func waitForLaunch(_ fake: FakeGameClient) async {
 
   @MainActor
   @Test func UPG_005_refreshSurfacesABrokenInstallationButNotAnOfflineClient() async {
-    let fake = FakeGameClient(status: GameStatus(localVersion: "5.0.0", remoteVersion: "5.0.0"))
+    let fake = FakeGameClient(status: GameStatus.installed)
     let model = LauncherModel(client: fake)
     fake.setStatusFailure(GameClientError.network)
     await model.refresh()
@@ -97,7 +97,7 @@ private func waitForLaunch(_ fake: FakeGameClient) async {
 
   @MainActor
   @Test func APP_010_aSlowRefreshDoesNotOverwriteANewerOne() async {
-    let fake = FakeGameClient(status: GameStatus(localVersion: "5.0.0", remoteVersion: "5.0.0"))
+    let fake = FakeGameClient(status: GameStatus.installed)
     let model = LauncherModel(client: fake)
     fake.stallsStatus.withLock { $0 = true }
     let slow = Task { await model.refresh() }
@@ -115,13 +115,13 @@ private func waitForLaunch(_ fake: FakeGameClient) async {
 
   @MainActor
   @Test func UPG_005_aSuccessfulRefreshClearsTheErrorTheLastRefreshLeft() async {
-    let fake = FakeGameClient(status: GameStatus(localVersion: "5.0.0", remoteVersion: "5.0.0"))
+    let fake = FakeGameClient(status: GameStatus.installed)
     let model = LauncherModel(client: fake)
     fake.setStatusFailure(GameClientError.brokenInstallation)
     await model.refresh()
     #expect(model.lastError == .client(.brokenInstallation))
 
-    fake.setStatus(GameStatus(localVersion: "5.0.0", remoteVersion: "5.0.0"))
+    fake.setStatus(GameStatus.installed)
     await model.refresh()
 
     #expect(model.lastError == nil)

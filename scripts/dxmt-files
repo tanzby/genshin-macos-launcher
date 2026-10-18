@@ -1,5 +1,5 @@
 # What build/dxmt (Contents/Resources/dxmt in the app) holds: the one list read by scripts/build-dxmt,
-# scripts/dev/check-bundle, .github/workflows/dxmt.yaml and checked against WineLayout.dxmtWindowsFiles by WineTests.
+# scripts/dev/check-dxmt and checked against WineLayout.dxmtWindowsFiles by WineTests.
 x86_64-windows/d3d10core.dll
 x86_64-windows/d3d11.dll
 x86_64-windows/dxgi.dll

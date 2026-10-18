@@ -10,7 +10,7 @@ import Wine
 /// install, update or repair first cancels it and waits for it to stop. Pause is cancel-and-await; resuming reruns the same idempotent job.
 ///
 /// Wine preparation is not a Pending Job: it writes no `job.json`. Its state is whatever the Wine runtime's
-/// version stamp says, so `wineStatus` is re-read from `WinePreparing.status()` and a paused or failed
+/// version stamp says, so `wineStatus` is re-read from `WinePreparing.status(for:)` and a paused or failed
 /// preparation simply leaves `wineStatus` at `.needsInstall` for the next attempt.
 @MainActor @Observable
 public final class LauncherModel {
@@ -366,52 +366,67 @@ public final class LauncherModel {
 
   /// Runs the job in this (the slot's) Task, so cancelling the slot cancels the work and awaiting the slot waits for it.
   private func drive(_ job: GameJob, store: PendingJobStore) async {
-    let activity = ProcessInfo.processInfo.beginActivity(
-      options: [.userInitiated, .idleSystemSleepDisabled], reason: "Genshin Launcher game job")
-    // Progress arrives on worker threads. One ordered stream brings it to the main actor, and it ends when the job
-    // returns, so no late update can land after the final state below.
-    let (updates, sink) = AsyncStream<JobProgress>.makeStream(bufferingPolicy: .bufferingNewest(1))
-    async let outcome = Self.run(
-      job, client: client, in: store.gameDirectory, backend: graphicsBackendSource(), progress: sink)
-    for await update in updates { progress = update }
-    let failure = await outcome
-    let paused = Task.isCancelled || failure?.isCancellation == true
-    if paused {
-      // Keep job.json: the job is resumable.
-    } else if let failure {
-      let error = LauncherError(failure)
-      lastError = error
-      eventSink.yield(.failed(job, error))
-    } else {
-      // A finished pre-download leaves an unfinished install/update/repair marker alone.
-      let foreign = Self.leavesMarkerAlone(job, store: store)
-      let cleared = foreign || store.clear()
-      if !foreign { pendingJob = nil }
-      await refresh()
-      if cleared {
-        eventSink.yield(.finished(job))
-      } else {
-        // The job is done, but the stale marker would keep blocking launch; surface it instead of hiding it.
-        let error = LauncherError.unexpected("job.json could not be removed")
+    await withJobActivity("Genshin Launcher game job") {
+      let client = client
+      let directory = store.gameDirectory
+      let backend = graphicsBackendSource()
+      let failure = await runReportingProgress(
+        work: { report in try await client.run(job, in: directory, backend: backend, progress: report) },
+        onProgress: { self.progress = $0 })
+      let paused = Task.isCancelled || failure?.isCancellation == true
+      if paused {
+        // Keep job.json: the job is resumable.
+      } else if let failure {
+        let error = LauncherError(failure)
         lastError = error
         eventSink.yield(.failed(job, error))
+      } else {
+        // A finished pre-download leaves an unfinished install/update/repair marker alone.
+        let foreign = Self.leavesMarkerAlone(job, store: store)
+        let cleared = foreign || store.clear()
+        if !foreign { pendingJob = nil }
+        await refresh()
+        if cleared {
+          eventSink.yield(.finished(job))
+        } else {
+          // The job is done, but the stale marker would keep blocking launch; surface it instead of hiding it.
+          let error = LauncherError.unexpected("job.json could not be removed")
+          lastError = error
+          eventSink.yield(.failed(job, error))
+        }
       }
     }
-    ProcessInfo.processInfo.endActivity(activity)
     progress = nil
   }
 
-  /// The job's error, `nil` when it finished. Ends `progress` either way.
-  private nonisolated static func run(
-    _ job: GameJob, client: any GameClient, in directory: URL, backend: GraphicsBackend,
-    progress: AsyncStream<JobProgress>.Continuation
+  /// Holds the activity assertion that keeps App Nap and idle sleep away while a long job runs.
+  private func withJobActivity(_ reason: String, _ body: () async -> Void) async {
+    let activity = ProcessInfo.processInfo.beginActivity(
+      options: [.userInitiated, .idleSystemSleepDisabled], reason: reason)
+    defer { ProcessInfo.processInfo.endActivity(activity) }
+    await body()
+  }
+
+  /// Runs `work` beside the main actor and hands its progress to `onProgress` here, in order. Only the newest
+  /// update matters, and the stream ends when `work` returns, so no late update lands after the caller's final
+  /// state. Cancelling the caller cancels `work`. Returns the error `work` threw, nil when it finished.
+  private func runReportingProgress<Update: Sendable>(
+    work: @escaping @Sendable (@escaping @Sendable (Update) -> Void) async throws -> Void,
+    onProgress: (Update) -> Void
   ) async -> (any Error)? {
-    defer { progress.finish() }
-    do {
-      try await client.run(job, in: directory, backend: backend) { progress.yield($0) }
-      return nil
-    } catch {
-      return error
+    let (updates, sink) = AsyncStream<Update>.makeStream(bufferingPolicy: .bufferingNewest(1))
+    return await withTaskGroup(of: (any Error)?.self) { group in
+      group.addTask {
+        defer { sink.finish() }
+        do {
+          try await work { sink.yield($0) }
+          return nil
+        } catch {
+          return error
+        }
+      }
+      for await update in updates { onProgress(update) }
+      return await group.next() ?? nil
     }
   }
 
@@ -440,7 +455,7 @@ public final class LauncherModel {
     // Only download jobs are pausable; cancelling a launch Task alone would leave `await` hanging until the game exits.
     let pausable: Set<LauncherPhase> = [.preparingWine, .installing, .updating, .repairing]
     let exclusivePause = pausable.contains(jobs.exclusive)
-    guard jobs.isHolding(exclusive: exclusivePause) else { return }
+    guard exclusivePause || jobs.isPreDownloading else { return }
     isPausing = true
     await jobs.cancelAndWait(exclusive: exclusivePause, preDownload: !exclusivePause)
     isPausing = false
@@ -505,50 +520,38 @@ public final class LauncherModel {
   }
 
   private func runWinePreparation(_ wine: any WinePreparing, backend: GraphicsBackend) async {
-    let activity = ProcessInfo.processInfo.beginActivity(
-      options: [.userInitiated, .idleSystemSleepDisabled], reason: "Genshin Launcher Wine preparation")
-    let (updates, sink) = AsyncStream<WineInstallProgress>.makeStream(bufferingPolicy: .bufferingNewest(1))  // only the latest progress matters
-    var failure: Error?
-    // A task group, so cancelling this Task cancels the install; `updates` ends when the install returns.
-    await withTaskGroup(of: (any Error)?.self) { group in
-      group.addTask {
-        defer { sink.finish() }
-        do {
+    await withJobActivity("Genshin Launcher Wine preparation") {
+      let failure = await runReportingProgress(
+        work: { report in
           try Task.checkCancellation()  // paused while waiting for a pre-download: do not begin the install
-          try await wine.ensureInstalled(for: backend) { sink.yield($0) }
-          return nil
-        } catch {
-          return error
+          try await wine.ensureInstalled(for: backend, progress: report)
+        },
+        onProgress: { self.progress = .wine($0) })
+      let error = failure.map(LauncherError.init)
+      let paused = Task.isCancelled || failure?.isCancellation == true
+      let preparedStatus = await wine.status(for: backend)
+      let selectedBackend = graphicsBackendSource()
+      wineStatus = selectedBackend == backend ? preparedStatus : await wine.status(for: selectedBackend)
+      if !paused {
+        let failed = error ?? (preparedStatus == .ready ? nil : .unexpected("Wine is still not ready after installation"))
+        if let failed {
+          lastError = failed
+          eventSink.yield(.wineFailed(failed))
+        } else {
+          progress = .preparing
+          await recoverOnce(backend: backend)
+          // The game status is only read once Wine is ready. Wine is installed by now, so a pause must not
+          // cancel this read (it would leave `status` nil and offer "install"); only shutdown does.
+          if !isShuttingDown {
+            let read = Task { await self.refresh() }
+            statusRead = read
+            await read.value
+            statusRead = nil
+          }
+          eventSink.yield(.wineReady)
         }
       }
-      for await update in updates { progress = .wine(update) }
-      failure = await group.next() ?? nil
     }
-    let error = failure.map(LauncherError.init)
-    let paused = Task.isCancelled || failure?.isCancellation == true
-    let preparedStatus = await wine.status(for: backend)
-    let selectedBackend = graphicsBackendSource()
-    wineStatus = selectedBackend == backend ? preparedStatus : await wine.status(for: selectedBackend)
-    if !paused {
-      let failed = error ?? (preparedStatus == .ready ? nil : .unexpected("Wine is still not ready after installation"))
-      if let failed {
-        lastError = failed
-        eventSink.yield(.wineFailed(failed))
-      } else {
-        progress = .preparing
-        await recoverOnce(backend: backend)
-        // The game status is only read once Wine is ready. Wine is installed by now, so a pause must not
-        // cancel this read (it would leave `status` nil and offer "install"); only shutdown does.
-        if !isShuttingDown {
-          let read = Task { await self.refresh() }
-          statusRead = read
-          await read.value
-          statusRead = nil
-        }
-        eventSink.yield(.wineReady)
-      }
-    }
-    ProcessInfo.processInfo.endActivity(activity)
     progress = nil
   }
 

@@ -19,11 +19,9 @@ final class FakeLauncher: GameLaunching {
     var recipes: [LaunchRecipe] = []
     var script: Script = .result(.exited)
     var cleanupFinished = false
-    var filesAtLaunch: [String: Bool] = [:]
   }
 
   private let state = Mutex(State())
-  let watchedFiles = Mutex<[URL]>([])
   let started = Mutex(0)
   let recoveries = Mutex(0)
   func recover() async { recoveries.withLock { $0 += 1 } }
@@ -36,14 +34,11 @@ final class FakeLauncher: GameLaunching {
 
   var recipes: [LaunchRecipe] { state.withLock { $0.recipes } }
   var cleanupFinished: Bool { state.withLock { $0.cleanupFinished } }
-  var filesAtLaunch: [String: Bool] { state.withLock { $0.filesAtLaunch } }
   func script(_ script: Script) { state.withLock { $0.script = script } }
 
   func launch(_ recipe: LaunchRecipe, onStarted: @escaping @Sendable () -> Void) async -> LaunchResult {
-    let files = watchedFiles.withLock { $0 }
     let script = state.withLock { s -> Script in
       s.recipes.append(recipe)
-      for file in files { s.filesAtLaunch[file.lastPathComponent] = FileManager.default.fileExists(atPath: file.path) }
       return s.script
     }
     switch script {
@@ -105,13 +100,9 @@ final class ClientRig: @unchecked Sendable {
       """.utf8)
   }
 
-  func url(_ path: String) -> URL { game.appending(path: path) }
-
   func write(_ path: String, _ data: Data) {
-    try! writeFile(data, to: url(path))
+    try! writeFile(data, to: game.appending(path: path))
   }
-
-  func exists(_ path: String) -> Bool { FileManager.default.fileExists(atPath: url(path).path) }
 
   /// Puts a finished install of `version` on disk: the executable, the version file, the three files the launch
   /// moves aside and `config.ini`.

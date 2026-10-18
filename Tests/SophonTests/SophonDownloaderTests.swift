@@ -1,4 +1,3 @@
-import CryptoKit
 import Foundation
 import Testing
 import TestSupport
@@ -19,20 +18,6 @@ import TestSupport
 // the test name says so.
 
 // MARK: - Fixture: zstd raw-block frames and synthetic files
-
-/// Deterministic pseudo-random bytes. Different seeds give different content.
-private func syntheticBytes(seed: Int, count: Int) -> Data {
-  var state = UInt64(truncatingIfNeeded: seed) &* 0x9E37_79B9_7F4A_7C15 | 1
-  var bytes = [UInt8]()
-  bytes.reserveCapacity(count)
-  for _ in 0..<count {
-    state ^= state << 13
-    state ^= state >> 7
-    state ^= state << 17
-    bytes.append(UInt8(truncatingIfNeeded: state >> 24))
-  }
-  return Data(bytes)
-}
 
 private func seedValue(_ label: String) -> Int {
   label.unicodeScalars.reduce(17) { ($0 &* 31 &+ Int($1.value)) & 0xFF_FFFF }
@@ -153,7 +138,7 @@ private final class FakeCDN: @unchecked Sendable {
 
   func reply(to request: URLRequest) -> StubReply {
     let chunkID = request.url?.lastPathComponent ?? ""
-    let rangeStart = Self.rangeStart(of: request)
+    let requestedStart = rangeStart(of: request)
     let (blob, attempt, script, ignoresRange, delay) = lock.withLock {
       let attempt = attempts[chunkID, default: 0]
       attempts[chunkID] = attempt + 1
@@ -162,28 +147,14 @@ private final class FakeCDN: @unchecked Sendable {
     }
     guard let blob else { return .response(status: 404, body: Data()) }
     let standard: StubReply
-    if let start = rangeStart, !ignoresRange {
-      if start >= blob.count {
-        standard = .response(
-          status: 416, body: Data(), headers: ["Content-Range": "bytes */\(blob.count)"])
-      } else {
-        standard = .response(
-          status: 206, body: Data(blob[start...]),
-          headers: ["Content-Range": "bytes \(start)-\(blob.count - 1)/\(blob.count)"], delay: delay)
-      }
+    if let start = requestedStart, !ignoresRange {
+      standard = rangedReply(blob: blob, start: start, delay: delay)
     } else {
       standard = .response(status: 200, body: blob, delay: delay)
     }
     let scripted = CDNRequest(
-      chunkID: chunkID, attempt: attempt, rangeStart: rangeStart, blob: blob, standard: standard)
+      chunkID: chunkID, attempt: attempt, rangeStart: requestedStart, blob: blob, standard: standard)
     return script?(scripted) ?? standard
-  }
-
-  static func rangeStart(of request: URLRequest) -> Int? {
-    guard let header = request.value(forHTTPHeaderField: "Range"), header.hasPrefix("bytes="),
-      header.hasSuffix("-"), !header.dropFirst(6).dropLast().contains(",")
-    else { return nil }
-    return Int(header.dropFirst(6).dropLast())
   }
 }
 
@@ -214,27 +185,11 @@ private struct Sandbox {
     try writeFile(data, to: game.appendingPathComponent(relativePath))
   }
 
-  /// Relative paths (and sizes) of every regular file below `directory`.
-  static func regularFiles(in directory: URL) -> [String: Int] {
-    var result: [String: Int] = [:]
-    let base = directory.standardizedFileURL.path
-    guard
-      let walker = FileManager.default.enumerator(
-        at: directory, includingPropertiesForKeys: [.isRegularFileKey, .fileSizeKey])
-    else { return result }
-    for case let url as URL in walker {
-      let values = try? url.resourceValues(forKeys: [.isRegularFileKey, .fileSizeKey])
-      guard values?.isRegularFile == true else { continue }
-      result[String(url.standardizedFileURL.path.dropFirst(base.count + 1))] = values?.fileSize ?? 0
-    }
-    return result
-  }
-
   /// Everything below the game and temp directories, for before/after comparisons.
   func snapshot() -> [String: Int] {
     var result: [String: Int] = [:]
-    for (path, size) in Self.regularFiles(in: game) { result["game/" + path] = size }
-    for (path, size) in Self.regularFiles(in: temp) { result["tmp/" + path] = size }
+    for (path, size) in regularFiles(in: game) { result["game/" + path] = size }
+    for (path, size) in regularFiles(in: temp) { result["tmp/" + path] = size }
     return result
   }
 }
@@ -358,7 +313,7 @@ private final class Rig: @unchecked Sendable {
 
   /// Regular files anywhere in the temp directory whose name mentions `chunk`.
   func cachedFiles(mentioning chunk: SophonChunk) -> [String] {
-    Sandbox.regularFiles(in: sandbox.temp).keys.filter { $0.contains(chunk.id) }
+    regularFiles(in: sandbox.temp).keys.filter { $0.contains(chunk.id) }
   }
 }
 
@@ -539,7 +494,7 @@ private final class Rig: @unchecked Sendable {
 
     #expect(rig.sandbox.read(first.file.path) == first.plain)
     #expect(rig.sandbox.read(second.file.path) == second.plain)
-    #expect(Sandbox.regularFiles(in: rig.sandbox.temp).isEmpty)
+    #expect(regularFiles(in: rig.sandbox.temp).isEmpty)
   }
 
   @Test func INS_008_chunksListedOutOfOffsetOrderStillAssembleAndVerify() async throws {
@@ -791,7 +746,7 @@ private final class Rig: @unchecked Sendable {
 
     #expect(rig.requests.count == 2)
     let range = rig.requests.last?.value(forHTTPHeaderField: "Range")
-    let resumedAt = rig.requests.last.flatMap(FakeCDN.rangeStart(of:))
+    let resumedAt = rig.requests.last.flatMap(rangeStart(of:))
     #expect(range != nil, "second install must resume, got no Range header")
     let offset = try #require(resumedAt)
     #expect(offset > 0 && offset <= frameSize / 2, "resumed at \(offset) of \(frameSize)")
@@ -811,7 +766,7 @@ private final class Rig: @unchecked Sendable {
     try await rig.install([file.file], downloader: rig.downloader(maxAttempts: 3))
 
     #expect(rig.requests.count == 2)
-    let offset = try #require(rig.requests.last.flatMap(FakeCDN.rangeStart(of:)))
+    let offset = try #require(rig.requests.last.flatMap(rangeStart(of:)))
     #expect(offset > 0 && offset <= frameSize / 2)
     #expect(rig.sandbox.read(file.file.path) == file.plain)
   }
@@ -1047,7 +1002,7 @@ private final class Rig: @unchecked Sendable {
     #expect(rig.requests.isEmpty)
     #expect(!rig.sandbox.exists("good.bin"))
     #expect(!FileManager.default.fileExists(atPath: rig.sandbox.root.appendingPathComponent("escape.bin").path))
-    #expect(Sandbox.regularFiles(in: rig.sandbox.root).isEmpty)
+    #expect(regularFiles(in: rig.sandbox.root).isEmpty)
   }
 
   @Test(arguments: ["../x", "a/b", "..", ""])

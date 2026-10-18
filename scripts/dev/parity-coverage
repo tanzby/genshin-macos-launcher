@@ -14,7 +14,7 @@
 #
 # Sources searched:
 #   Tests/**/*.swift         Swift Testing `@Test` declarations (helpers and comments excluded)
-#   Diag/, scripts/diag/     non-comment lines of non-markdown files, if present
+#   scripts/diag/            non-comment lines of non-markdown files, if present
 set -euo pipefail
 cd "$(dirname "$0")/../.."
 
@@ -60,7 +60,7 @@ grep -E '\|(照搬|改写)$' "$tmp/rows" | cut -d'|' -f1 | sort -u > "$tmp/requi
          att && /func / { if (!dis && !/\.disabled/) print; att = 0; next }
          att && /^[ \t]*(struct|class|extension|@Suite)/ { att = 0 }' "$f"
   done
-  for d in Diag scripts/diag; do
+  for d in scripts/diag; do
     [ -d "$d" ] && find "$d" -type f ! -name '*.md' -exec cat {} + || true
   done
 } | grep -vE '^[[:space:]]*(//|/\*|\*|#)' | awk '{

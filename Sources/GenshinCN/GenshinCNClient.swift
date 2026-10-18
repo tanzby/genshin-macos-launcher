@@ -42,7 +42,7 @@ public final class GenshinCNClient: GameClient {
   static func live(
     wine: WineRuntime, dataDirectory: DataDirectory, helpers: GameHostHelpers?, protonExtras: URL
   ) -> GenshinCNClient {
-    let runner = SystemProcessRunner(allowedRoots: GraphicsBackend.allCases.map { wine.layout(for: $0).runtimeDirectory })
+    let runner = wine.runner
     return GenshinCNClient(
       dataDirectory: dataDirectory.root, protonExtras: protonExtras,
       launcher: { backend in
@@ -82,14 +82,12 @@ public final class GenshinCNClient: GameClient {
   // MARK: - Status
 
   public func status(in directory: URL?) async throws -> GameStatus {
-    do { return try await loadStatus(in: directory) } catch { throw Self.map(error) }
-  }
-
-  private func loadStatus(in directory: URL?) async throws -> GameStatus {
-    let status = try await sophon.status(in: directory)
-    return GameStatus(
-      localVersion: status.installedVersion, remoteVersion: status.remoteVersion, canUpdate: status.canUpdate,
-      canPreDownload: status.canPreDownload, preDownloadVersion: status.preDownloadVersion)
+    try await Self.mapping {
+      let status = try await sophon.status(in: directory)
+      return GameStatus(
+        localVersion: status.installedVersion, remoteVersion: status.remoteVersion, canUpdate: status.canUpdate,
+        canPreDownload: status.canPreDownload, preDownloadVersion: status.preDownloadVersion)
+    }
   }
 
   // MARK: - Launch
@@ -130,6 +128,11 @@ public final class GenshinCNClient: GameClient {
   }
 
   // MARK: - Errors
+
+  /// Runs `body` and throws what `map` makes of its error.
+  static func mapping<Result>(_ body: () async throws -> Result) async throws -> Result {
+    do { return try await body() } catch { throw map(error) }
+  }
 
   /// Translates module errors into the ones the launcher knows (`GameClientError`).
   static func map(_ error: any Error) -> any Error {

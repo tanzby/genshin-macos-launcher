@@ -14,11 +14,7 @@ import TestSupport
 
   @Test func APP_021_clientServesTheProvidersImageAndItsFallback() async throws {
     let cache = temporaryURL("bg")
-    let (session, _) = BackgroundStub.session { url in
-      url.path.hasSuffix("getAllGameBasicInfo")
-        ? (200, BackgroundImageProviderTests.info([(BackgroundImageProviderTests.imageURL, false)]))
-        : (200, BackgroundImageProviderTests.png)
-    }
+    let (session, _) = BackgroundStub.session(BackgroundImageProviderTests.server())
     let rig = ClientRig()
     let client = GenshinCNClient(
       dataDirectory: rig.data, protonExtras: rig.protonExtras, launcher: { [launcher = rig.launcher] _ in launcher },

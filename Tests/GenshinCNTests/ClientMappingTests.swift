@@ -72,13 +72,6 @@ import Testing
     }
   }
 
-  @Test func UPG_005_updateOfAnEmptyDirectoryIsNotInstalled() async throws {
-    let rig = ClientRig()
-    var failure: (any Error)?
-    do { try await rig.client.run(.update, in: rig.game, backend: .gptk4) { _ in } } catch { failure = error }
-    #expect(failure as? SophonError == .notInstalled)
-  }
-
   @Test func PRG_001_aJobThatFailsBeforeAnyProgressStillDeliversItsError() async throws {
     let rig = ClientRig()
     await #expect(throws: SophonError.notInstalled) {  // nothing is installed, so there is nothing to update

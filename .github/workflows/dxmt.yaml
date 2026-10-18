@@ -70,13 +70,8 @@ jobs:
       - name: Check the output
         run: |
           set -eu
-          out=build/dxmt
-          for f in $(grep -v '^#' scripts/dxmt-files); do
-            test -s "$out/$f" || { echo "::error::missing $out/$f"; exit 1; }
-          done
-          test "$(lipo -archs "$out/x86_64-unix/winemetal.so")" = x86_64
-          test "$(cat "$out/VERSION")" = "${{ steps.pin.outputs.commit }}"
-          ls -lR "$out"
+          scripts/dev/check-dxmt build/dxmt "${{ steps.pin.outputs.commit }}"
+          ls -lR build/dxmt
 
       - name: Upload
         uses: actions/upload-artifact@v4

@@ -15,6 +15,14 @@ settings:
     CODE_SIGN_STYLE: Manual
     CODE_SIGN_IDENTITY: "-"
     DEVELOPMENT_TEAM: ""
+# The x86_64 helpers injected into Wine (Rosetta).
+settingGroups:
+  X86Helper:
+    ARCHS: x86_64
+    ONLY_ACTIVE_ARCH: NO
+    GCC_OPTIMIZATION_LEVEL: "2"
+    OTHER_CFLAGS: -Wall -Wextra
+    SKIP_INSTALL: YES
 packages:
   GenshinLauncherKit:
     path: .
@@ -28,26 +36,21 @@ targets:
       - path: Resources/protonextras
         type: folder
         buildPhase: resources
-    # DXMT built by scripts/build-dxmt (docs/adr/0003) goes into Contents/Resources/dxmt. A folder source would
+    # DXMT built by scripts/build-dxmt (docs/adr/0003) goes into Contents/Resources/dxmt, GPTK4 staged by
+    # scripts/prepare-gptk4 into Contents/Resources/gptk4. A folder source would
     # fail the build when the folder is absent, which it is in builds that did not run the script. Xcode does not
     # re-sign for a change made here, so after the first scripts/build-dxmt delete the built app once.
     postCompileScripts:
-      - name: Bundle DXMT
+      - name: Bundle DXMT and GPTK4
         basedOnDependencyAnalysis: false
         script: |
-          dest="$TARGET_BUILD_DIR/$UNLOCALIZED_RESOURCES_FOLDER_PATH/dxmt"
-          rm -rf "$dest"
-          if [ -d "$SRCROOT/build/dxmt" ]; then
-            ditto "$SRCROOT/build/dxmt" "$dest"
-          fi
-      - name: Bundle GPTK4
-        basedOnDependencyAnalysis: false
-        script: |
-          dest="$TARGET_BUILD_DIR/$UNLOCALIZED_RESOURCES_FOLDER_PATH/gptk4"
-          rm -rf "$dest"
-          if [ -d "$SRCROOT/build/gptk4" ]; then
-            ditto "$SRCROOT/build/gptk4" "$dest"
-          fi
+          for name in dxmt gptk4; do
+            dest="$TARGET_BUILD_DIR/$UNLOCALIZED_RESOURCES_FOLDER_PATH/$name"
+            rm -rf "$dest"
+            if [ -d "$SRCROOT/build/$name" ]; then
+              ditto "$SRCROOT/build/$name" "$dest"
+            fi
+          done
     info:
       path: build/Info.plist
       properties:
@@ -110,13 +113,9 @@ targets:
     sources:
       - path: Helpers/wine-shim.c
     settings:
+      groups: [X86Helper]
       base:
         PRODUCT_NAME: genshin-launcher-wine-shim
-        ARCHS: x86_64
-        ONLY_ACTIVE_ARCH: NO
-        GCC_OPTIMIZATION_LEVEL: "2"
-        OTHER_CFLAGS: -Wall -Wextra
-        SKIP_INSTALL: YES
 
   GenshinLauncherGameHost:
     type: library.dynamic
@@ -125,14 +124,10 @@ targets:
       - path: Helpers/gamehost.c
       - path: Helpers/fps-unlock.c
     settings:
+      groups: [X86Helper]
       base:
         PRODUCT_NAME: genshin-launcher-gamehost
         EXECUTABLE_PREFIX: ""
-        ARCHS: x86_64
-        ONLY_ACTIVE_ARCH: NO
-        GCC_OPTIMIZATION_LEVEL: "2"
-        OTHER_CFLAGS: -Wall -Wextra
-        SKIP_INSTALL: YES
 
 schemes:
   GenshinLauncher:

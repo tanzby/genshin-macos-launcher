@@ -23,6 +23,9 @@ package struct SophonFile: Sendable, Equatable {
   package let size: Int64
   package let md5: String
   package let chunks: [SophonChunk]
+
+  /// Bytes to download for this file: the sum of its chunks' compressed sizes.
+  var compressedSize: Int64 { chunks.reduce(Int64(0)) { $0 + Int64($1.compressedSize) } }
 }
 
 /// A decoded chunk manifest.
@@ -31,9 +34,7 @@ package struct SophonManifest: Sendable, Equatable {
 
   /// Total download size: the sum of every chunk's compressed size.
   package var totalCompressedSize: Int64 {
-    files.reduce(Int64(0)) { sum, file in
-      file.chunks.reduce(sum) { $0 + Int64($1.compressedSize) }
-    }
+    files.reduce(Int64(0)) { $0 + $1.compressedSize }
   }
 
   init(files: [SophonFile]) { self.files = files }

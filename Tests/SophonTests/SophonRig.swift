@@ -4,6 +4,11 @@ import TestSupport
 
 @testable import Sophon
 
+/// A `config.ini` as the install template writes it, with `version` in the `game_version` line.
+func iniWith(_ version: String) -> String {
+  "[General]\r\nchannel=1\r\ncps=mihoyo\r\ngame_version=\(version)\r\nsdk_version=\r\nsub_channel=1\r\n"
+}
+
 /// A temporary game directory and a fake CDN wired into a `SophonClient`.
 final class SophonRig: @unchecked Sendable {
   let root: URL
@@ -37,19 +42,18 @@ final class SophonRig: @unchecked Sendable {
 
   var configText: String? { read("config.ini").map { String(decoding: $0, as: UTF8.self) } }
 
+  /// Whether `config.ini` says `version`.
+  func configSays(version: String) -> Bool { configText?.contains("game_version=\(version)") == true }
+
   /// Polls until `config.ini` says `version`, so a test does not depend on how fast a loaded runner gets there.
   func waitForConfig(version: String) async -> Bool {
-    await pollUntil { configText?.contains("game_version=\(version)") == true }
+    await pollUntil { configSays(version: version) }
   }
 
   /// Puts `release` on disk as a finished install, with `config.ini` saying `version` (default: its tag).
   func install(_ release: FakeRelease, configVersion: String? = nil) {
     for (path, content) in release.files { write(path, content) }
-    write(
-      "config.ini",
-      Data(
-        "[General]\r\nchannel=1\r\ncps=mihoyo\r\ngame_version=\(configVersion ?? release.tag)\r\nsdk_version=\r\nsub_channel=1\r\n"
-          .utf8))
+    write("config.ini", Data(iniWith(configVersion ?? release.tag).utf8))
   }
 
   func status() async throws -> SophonStatus { try await client.status(in: directory) }

@@ -112,7 +112,7 @@ protocol GameClient: Sendable {
 
 ## x86_64 helper 的源码位置
 
-`GenshinLauncherWineShim` 与 `GenshinLauncherGameHost` 的 C 源码放在 `Helpers/`（来自旧仓库 tanzby/yet-another-anime-game-launcher 的 `native/gamehost/`，经骨架票 #25 移入，原生版迁到本仓库时随之迁入）。开发专用的 `gamehost-dev.m`、`turner.c` 继续用 `build.sh --dev`，不进 `project.yml`。
+`GenshinLauncherWineShim` 与 `GenshinLauncherGameHost` 的 C 源码放在 `Helpers/`（来自旧仓库 tanzby/yet-another-anime-game-launcher 的 `native/gamehost/`，经骨架票 #25 移入，原生版迁到本仓库时随之迁入）。开发专用的 `gamehost-dev.m`、`turner.c` 继续用 `build.sh`，不进 `project.yml`。
 
 ## Considered Options
 

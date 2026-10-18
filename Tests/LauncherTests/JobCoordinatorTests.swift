@@ -16,10 +16,10 @@ import Testing
     jobs.startExclusive(.installing) {}
     #expect(jobs.phase == .installing)  // claimed synchronously, the body has not run yet
     #expect(!jobs.allowsPreDownload)
-    #expect(jobs.isHolding(exclusive: true))
+    #expect(jobs.exclusive != .idle)
     await jobs.waitUntilIdle()
     #expect(jobs.phase == .idle)
-    #expect(!jobs.isHolding(exclusive: true))
+    #expect(jobs.exclusive == .idle)
   }
 
   @Test func preDownloadMayOverlapLaunchingAndRunning() async {
@@ -72,8 +72,8 @@ import Testing
     jobs.startPreDownload(body: untilCancelled())
     await jobs.cancelAndWait(exclusive: true, preDownload: true)
     #expect(jobs.phase == .idle)
-    #expect(!jobs.isHolding(exclusive: true))
-    #expect(!jobs.isHolding(exclusive: false))
+    #expect(jobs.exclusive == .idle)
+    #expect(!jobs.isPreDownloading)
   }
 
   @Test func theSlotIsFreedWhenTheBodyEndsEarlyAfterAnAwait() async {

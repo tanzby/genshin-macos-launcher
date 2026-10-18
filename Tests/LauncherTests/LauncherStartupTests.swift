@@ -10,7 +10,6 @@ import Wine
 // `GameSession.recover()` once Wine is ready and before the game status is read. The hosts check lives in
 // `OnboardingModel`. Also the "launch says Wine is broken" path back to Wine preparation.
 
-private let installed = GameStatus(localVersion: "5.0.0", remoteVersion: "5.0.0")
 private let missing = WineStatus.needsInstall(.notInstalled)
 
 /// Scriptable `StartupSteps`; records what the game client and Wine had seen when `recover` ran.
@@ -67,7 +66,7 @@ private struct Harness {
 
   init(wine wineStatus: WineStatus, rosetta: Bool = true) {
     wine = FakeWinePreparer(status: wineStatus)
-    fake = FakeGameClient(status: installed)
+    fake = FakeGameClient(status: .installed)
     probe = StepsProbe(fake: fake, rosetta: rosetta)
     let directory = makeTemporaryDirectory("LauncherStartupTests")
     model = LauncherModel(
@@ -171,7 +170,7 @@ private struct Harness {
     #expect(!h.model.isRosettaMissing)
     #expect(h.model.hasBootstrapped)
     #expect(h.model.lastError == nil)
-    #expect(h.model.status == installed)
+    #expect(h.model.status == GameStatus.installed)
     #expect(h.probe.recoveries == [0])
   }
 
@@ -215,7 +214,7 @@ private struct Harness {
   }
 
   @Test func APP_001_launcherWithoutStartupStepsSkipsThem() async throws {
-    let model = LauncherModel(client: FakeGameClient(status: installed), wine: FakeWinePreparer(status: .ready))
+    let model = LauncherModel(client: FakeGameClient(status: .installed), wine: FakeWinePreparer(status: .ready))
     await model.bootstrap()
     #expect(model.hasBootstrapped)
     #expect(!model.isRosettaMissing)

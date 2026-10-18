@@ -41,7 +41,7 @@ public enum LauncherError: Error, Sendable, Equatable {
 }
 
 /// What a caller wants to do. `LauncherModel.refusal(for:)` answers whether it may run now.
-package enum LauncherAction: Sendable, Equatable {
+package enum LauncherAction: Sendable, Hashable {
   case prepareWine
   case start(GameJob)
   /// Continue the unfinished job, or prepare Wine when that is what is missing.

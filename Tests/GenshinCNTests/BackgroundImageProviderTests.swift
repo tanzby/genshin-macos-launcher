@@ -40,6 +40,22 @@ enum BackgroundStub {
       """.utf8)
   }
 
+  /// Answers the info request with `info` (read on every request) and every other URL with `image`.
+  static func server(
+    info: @autoclosure @escaping @Sendable () -> Data = BackgroundImageProviderTests.info([(imageURL, false)]),
+    image: (status: Int, body: Data) = (200, png)
+  ) -> @Sendable (URL) -> (status: Int, body: Data)? {
+    { url in url.path.hasSuffix("getAllGameBasicInfo") ? (200, info()) : image }
+  }
+
+  /// Makes every cached file older than any retention, without waiting for the clock to move.
+  func ageCache(_ cache: URL) throws {
+    let past = Date().addingTimeInterval(-60)
+    for name in try FileManager.default.contentsOfDirectory(atPath: cache.path) {
+      try FileManager.default.setAttributes([.modificationDate: past], ofItemAtPath: cache.appending(path: name).path)
+    }
+  }
+
   func makeCache() -> URL {
     temporaryURL("bg")
   }
@@ -50,10 +66,7 @@ enum BackgroundStub {
 
   @Test func APP_021_downloadsOfficialImageIntoCacheAndReturnsFileURL() async throws {
     let cache = makeCache()
-    let (session, id) = BackgroundStub.session { url in
-      url.path.hasSuffix("getAllGameBasicInfo")
-        ? (200, Self.info([(Self.imageURL, false)])) : (200, Self.png)
-    }
+    let (session, id) = BackgroundStub.session(Self.server())
     let result = await provider(cache, session).backgroundImage()
     guard case .remote(let file) = result else { Issue.record("expected remote, got \(result)"); return }
     #expect(file.isFileURL)
@@ -66,10 +79,7 @@ enum BackgroundStub {
 
   @Test func APP_021_prefersVideoTypeEntryStaticImage() async throws {
     let cache = makeCache()
-    let (session, id) = BackgroundStub.session { url in
-      url.path.hasSuffix("getAllGameBasicInfo")
-        ? (200, Self.info([(Self.otherURL, false), (Self.imageURL, true)])) : (200, Self.png)
-    }
+    let (session, id) = BackgroundStub.session(Self.server(info: Self.info([(Self.otherURL, false), (Self.imageURL, true)])))
     _ = await provider(cache, session).backgroundImage()
     #expect(BackgroundStub.seen(id).map(\.absoluteString).contains(Self.imageURL))
     #expect(!BackgroundStub.seen(id).map(\.absoluteString).contains(Self.otherURL))
@@ -77,10 +87,7 @@ enum BackgroundStub {
 
   @Test func APP_021_cacheHitSkipsImageDownload() async throws {
     let cache = makeCache()
-    let (session, id) = BackgroundStub.session { url in
-      url.path.hasSuffix("getAllGameBasicInfo")
-        ? (200, Self.info([(Self.imageURL, false)])) : (200, Self.png)
-    }
+    let (session, id) = BackgroundStub.session(Self.server())
     let first = await provider(cache, session).backgroundImage()
     let second = await provider(cache, session).backgroundImage()
     #expect(first == second)
@@ -89,13 +96,10 @@ enum BackgroundStub {
 
   @Test func APP_021_supersededImageIsPrunedAfterRetention() async throws {
     let cache = makeCache()
-    let current = LockedBox(Self.imageURL)
-    let (session, _) = BackgroundStub.session { url in
-      url.path.hasSuffix("getAllGameBasicInfo")
-        ? (200, Self.info([(current.value, false)])) : (200, Self.png)
-    }
+    let current = Locked(Self.imageURL)
+    let (session, _) = BackgroundStub.session(Self.server(info: Self.info([(current.value, false)])))
     _ = await BackgroundImageProvider(cacheDirectory: cache, session: session, retention: 0).backgroundImage()
-    try await Task.sleep(for: .milliseconds(20))
+    try ageCache(cache)
     current.value = Self.otherURL
     _ = await BackgroundImageProvider(cacheDirectory: cache, session: session, retention: 0).backgroundImage()
     #expect(try FileManager.default.contentsOfDirectory(atPath: cache.path).count == 1)
@@ -103,11 +107,8 @@ enum BackgroundStub {
 
   @Test func APP_021_recentImagesSurviveRapidRotation() async throws {
     let cache = makeCache()
-    let current = LockedBox(Self.imageURL)
-    let (session, _) = BackgroundStub.session { url in
-      url.path.hasSuffix("getAllGameBasicInfo")
-        ? (200, Self.info([(current.value, false)])) : (200, Self.png)
-    }
+    let current = Locked(Self.imageURL)
+    let (session, _) = BackgroundStub.session(Self.server(info: Self.info([(current.value, false)])))
     var handedOut: [BackgroundImage] = []
     for version in [Self.imageURL, Self.otherURL, Self.imageURL + "?v=3"] {
       current.value = version
@@ -120,11 +121,15 @@ enum BackgroundStub {
 
   @Test func APP_021_concurrentUpdatesNeverReturnADeletedFile() async throws {
     let cache = makeCache()
-    let calls = LockedBox(0)
+    let calls = Locked(0)
     let (session, _) = BackgroundStub.session { url in
       guard url.path.hasSuffix("getAllGameBasicInfo") else { return (200, Self.png) }
-      calls.value += 1  // old and new URL interleave, as when upstream rotates the image mid-launch
-      return (200, Self.info([(calls.value.isMultiple(of: 2) ? Self.imageURL : Self.otherURL, false)]))
+      // old and new URL interleave, as when upstream rotates the image mid-launch
+      let call = calls.mutate { count -> Int in
+        count += 1
+        return count
+      }
+      return (200, Self.info([(call.isMultiple(of: 2) ? Self.imageURL : Self.otherURL, false)]))
     }
     let results = await withTaskGroup(of: BackgroundImage.self) { group in
       for _ in 0..<8 { group.addTask { await provider(cache, session).backgroundImage() } }
@@ -140,10 +145,7 @@ enum BackgroundStub {
     let cache = makeCache()
     // Signature and IHDR intact, no pixel data: counts as an image container but has no decodable frame.
     let corrupt = Self.png.prefix(40)
-    let (session, _) = BackgroundStub.session { url in
-      url.path.hasSuffix("getAllGameBasicInfo")
-        ? (200, Self.info([(Self.imageURL, false)])) : (200, Data(corrupt))
-    }
+    let (session, _) = BackgroundStub.session(Self.server(image: (200, Data(corrupt))))
     #expect(await provider(cache, session).backgroundImage() == .bundledDefault)
     #expect(((try? FileManager.default.contentsOfDirectory(atPath: cache.path)) ?? []).isEmpty)
   }
@@ -152,13 +154,10 @@ enum BackgroundStub {
     let cache = makeCache()
     // Writable again, so TestSupport can remove it.
     defer { try? FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: cache.path) }
-    let current = LockedBox(Self.imageURL)
-    let (session, _) = BackgroundStub.session { url in
-      url.path.hasSuffix("getAllGameBasicInfo")
-        ? (200, Self.info([(current.value, false)])) : (200, Self.png)
-    }
+    let current = Locked(Self.imageURL)
+    let (session, _) = BackgroundStub.session(Self.server(info: Self.info([(current.value, false)])))
     let old = await BackgroundImageProvider(cacheDirectory: cache, session: session, retention: 0).backgroundImage()
-    try await Task.sleep(for: .milliseconds(20))
+    try ageCache(cache)
     try FileManager.default.setAttributes([.posixPermissions: 0o555], ofItemAtPath: cache.path)
     current.value = Self.otherURL
     let result = await BackgroundImageProvider(cacheDirectory: cache, session: session, retention: 0).backgroundImage()
@@ -175,12 +174,9 @@ enum BackgroundStub {
 
   @Test func APP_021_apiFailureReusesLastCachedImage() async throws {
     let cache = makeCache()
-    let online = LockedBox(true)
-    let (session, _) = BackgroundStub.session { url in
-      guard online.value else { return nil }
-      return url.path.hasSuffix("getAllGameBasicInfo")
-        ? (200, Self.info([(Self.imageURL, false)])) : (200, Self.png)
-    }
+    let online = Locked(true)
+    let serve = Self.server()
+    let (session, _) = BackgroundStub.session { online.value ? serve($0) : nil }
     let first = await provider(cache, session).backgroundImage()
     online.value = false
     #expect(await provider(cache, session).backgroundImage() == first)
@@ -205,23 +201,10 @@ enum BackgroundStub {
   @Test func APP_021_nonImageOrHTTPErrorDownloadIsNotCached() async throws {
     for image in [(200, Data("not an image".utf8)), (404, Self.png)] {
       let cache = makeCache()
-      let (session, _) = BackgroundStub.session { url in
-        url.path.hasSuffix("getAllGameBasicInfo")
-          ? (200, Self.info([(Self.imageURL, false)])) : image
-      }
+      let (session, _) = BackgroundStub.session(Self.server(image: image))
       #expect(await provider(cache, session).backgroundImage() == .bundledDefault)
       let leftovers = (try? FileManager.default.contentsOfDirectory(atPath: cache.path)) ?? []
       #expect(leftovers.isEmpty)
     }
-  }
-}
-
-final class LockedBox<Value: Sendable>: @unchecked Sendable {
-  private let lock = NSLock()
-  private var stored: Value
-  init(_ value: Value) { stored = value }
-  var value: Value {
-    get { lock.withLock { stored } }
-    set { lock.withLock { stored = newValue } }
   }
 }

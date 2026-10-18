@@ -1,4 +1,3 @@
-import CryptoKit
 import Foundation
 import Platform
 import Testing
@@ -25,14 +24,6 @@ func wineRelativePaths(under root: URL) -> [String] {
 
 func wineExists(_ url: URL) -> Bool {
   FileManager.default.fileExists(atPath: url.path)
-}
-
-func wineSHA256(_ data: Data) -> String {
-  SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
-}
-
-func wineSHA256(ofFile url: URL) throws -> String {
-  wineSHA256(try Data(contentsOf: url))
 }
 
 func winePathsEqual(_ a: String, _ b: URL) -> Bool {
@@ -117,7 +108,7 @@ func makeWineFixtures(in directory: URL, options: WineFixtureOptions = .init()) 
   } else {
     try wineRunFixtureTool("/usr/bin/tar", ["-cJf", wineArchive.path, "-C", wineStage.path, "."])
   }
-  let wineSHA = try wineSHA256(ofFile: wineArchive)
+  let wineSHA = try Downloader.sha256Hex(of: wineArchive)
   if options.corruptWine {
     let handle = try FileHandle(forWritingTo: wineArchive)
     try handle.seekToEnd()
@@ -173,18 +164,15 @@ func makeWineFixtures(in directory: URL, options: WineFixtureOptions = .init()) 
 
 struct WineStubDownloadFailure: Error, Equatable {}
 
-final class WineStubDownloader: Downloading, @unchecked Sendable {
+final class WineStubDownloader: Downloading, Sendable {
   struct Request: Sendable, Equatable {
     var url: URL
     var destination: URL
     var sha256: String?
   }
 
-  private let lock = NSLock()
-  private var _requests: [Request] = []
-  private var _failing: Set<URL>
-  private var _active = 0
-  private var _maxActive = 0
+  private let recorded = Locked<[Request]>([])
+  private let failing: Locked<Set<URL>>
   private let sources: [URL: URL]
   private let delay: Duration?
   private let chunks: Int
@@ -193,37 +181,30 @@ final class WineStubDownloader: Downloading, @unchecked Sendable {
   /// downloads interleave.
   init(fixtures: WineFixtures, failing: Set<URL> = [], delay: Duration? = nil, chunks: Int = 4) {
     sources = [fixtures.distribution.url: fixtures.wineArchive]
-    _failing = failing
+    self.failing = Locked(failing)
     self.delay = delay
     self.chunks = chunks
   }
 
-  var requests: [Request] { lock.withLock { _requests } }
+  var requests: [Request] { recorded.value }
   func count(of url: URL) -> Int { requests.filter { $0.url == url }.count }
-  /// The highest number of downloads that were in flight at the same time.
-  var maxConcurrentDownloads: Int { lock.withLock { _maxActive } }
-  func setFailing(_ urls: Set<URL>) { lock.withLock { _failing = urls } }
+  func setFailing(_ urls: Set<URL>) { failing.value = urls }
 
   func download(
     from url: URL, to destination: URL, sha256: String?,
     progress: @escaping @Sendable (DownloadProgress) -> Void
   ) async throws {
-    if let sha256, wineExists(destination), try wineSHA256(ofFile: destination) == sha256 {
+    if let sha256, wineExists(destination), try Downloader.sha256Hex(of: destination) == sha256 {
       let size = Downloader.fileSize(destination)
       progress(DownloadProgress(completed: size, total: size))
       return
     }
-    lock.withLock {
-      _requests.append(Request(url: url, destination: destination, sha256: sha256))
-      _active += 1
-      _maxActive = max(_maxActive, _active)
-    }
-    defer { lock.withLock { _active -= 1 } }
+    recorded.mutate { $0.append(Request(url: url, destination: destination, sha256: sha256)) }
     if let delay { try await Task.sleep(for: delay) }
-    if lock.withLock({ _failing.contains(url) }) { throw WineStubDownloadFailure() }
+    if failing.value.contains(url) { throw WineStubDownloadFailure() }
     guard let source = sources[url] else { throw WineStubDownloadFailure() }
     let data = try Data(contentsOf: source)
-    let actual = wineSHA256(data)
+    let actual = sha256Hex(data)
     if let sha256, sha256.lowercased() != actual {
       throw DownloadError.checksumMismatch(expected: sha256, actual: actual)
     }
@@ -248,15 +229,13 @@ struct WineRecordedCall: Sendable, Equatable {
   var workingDirectory: String?
 }
 
-final class WineRecordingRunner: ProcessRunning, @unchecked Sendable {
-  private let lock = NSLock()
-  private var _calls: [WineRecordedCall] = []
-  private var _infAtBoot: String?
-  private var _d3d11AtBoot: Data?
-  private var _dxmtDllAtBoot: Bool?
-  private var _dittoExitCode: Int32?
+final class WineRecordingRunner: ProcessRunning, Sendable {
+  private let recorded = Locked<[WineRecordedCall]>([])
+  private let _infAtBoot = Locked<String?>(nil)
+  private let _d3d11AtBoot = Locked<Data?>(nil)
+  private let dittoExitCode = Locked<Int32?>(nil)
   private let root: URL
-  private var bootExitCode: Int32
+  private let bootExitCode: Locked<Int32>
   private let winecfgExitCode: Int32
   private let tarExitCode: Int32?
   private let tarOutput: String
@@ -267,20 +246,19 @@ final class WineRecordingRunner: ProcessRunning, @unchecked Sendable {
     tarOutput: String = "tar: stub failure"
   ) {
     self.root = root
-    self.bootExitCode = bootExitCode
+    self.bootExitCode = Locked(bootExitCode)
     self.winecfgExitCode = winecfgExitCode
     self.tarExitCode = tarExitCode
     self.tarOutput = tarOutput
   }
 
-  var calls: [WineRecordedCall] { lock.withLock { _calls } }
+  var calls: [WineRecordedCall] { recorded.value }
   /// Contents of `wine/share/wine/wine.inf` at the moment `wineboot` was called.
-  var infAtBoot: String? { lock.withLock { _infAtBoot } }
-  var d3d11AtBoot: Data? { lock.withLock { _d3d11AtBoot } }
-  var systemDxmtDllAtBoot: Bool? { lock.withLock { _dxmtDllAtBoot } }
+  var infAtBoot: String? { _infAtBoot.value }
+  var d3d11AtBoot: Data? { _d3d11AtBoot.value }
   var wineCalls: [WineRecordedCall] { calls.filter { Self.isLoader($0.executable) } }
-  func setBootExitCode(_ exitCode: Int32) { lock.withLock { bootExitCode = exitCode } }
-  func setDittoExitCode(_ exitCode: Int32?) { lock.withLock { _dittoExitCode = exitCode } }
+  func setBootExitCode(_ exitCode: Int32) { bootExitCode.value = exitCode }
+  func setDittoExitCode(_ exitCode: Int32?) { dittoExitCode.value = exitCode }
 
   static func isLoader(_ path: String) -> Bool {
     let url = URL(filePath: path)
@@ -291,8 +269,8 @@ final class WineRecordingRunner: ProcessRunning, @unchecked Sendable {
   func run(
     _ executable: URL, arguments: [String], environment: [String: String], workingDirectory: URL?
   ) async throws -> ProcessResult {
-    lock.withLock {
-      _calls.append(
+    recorded.mutate {
+      $0.append(
         WineRecordedCall(
           executable: executable.path, arguments: arguments, environment: environment,
           workingDirectory: workingDirectory?.path))
@@ -303,7 +281,7 @@ final class WineRecordingRunner: ProcessRunning, @unchecked Sendable {
       return try await real.run(
         executable, arguments: arguments, environment: environment, workingDirectory: workingDirectory)
     case "/usr/bin/ditto":
-      if let exitCode = lock.withLock({ _dittoExitCode }) {
+      if let exitCode = dittoExitCode.value {
         return ProcessResult(exitCode: exitCode, output: "ditto: stub failure")
       }
       return try await real.run(
@@ -316,11 +294,9 @@ final class WineRecordingRunner: ProcessRunning, @unchecked Sendable {
         let d3d11 = try? Data(contentsOf: runtime.appending(path: "lib/wine/x86_64-windows/d3d11.dll"))
         let prefix = URL(filePath: environment["WINEPREFIX"] ?? root.appending(path: "wineprefix").path)
         let system32 = prefix.appending(path: "drive_c/windows/system32", directoryHint: .isDirectory)
-        let bootExitCode = lock.withLock { self.bootExitCode }
-        lock.withLock {
-          _infAtBoot = inf
-          _d3d11AtBoot = d3d11
-        }
+        let bootExitCode = self.bootExitCode.value
+        _infAtBoot.value = inf
+        _d3d11AtBoot.value = d3d11
         if bootExitCode == 0 {
           try FileManager.default.createDirectory(at: system32, withIntermediateDirectories: true)
           try Data("system".utf8).write(to: prefix.appending(path: "system.reg"))
@@ -335,16 +311,15 @@ final class WineRecordingRunner: ProcessRunning, @unchecked Sendable {
 
 // MARK: - Progress collector
 
-final class WineProgressCollector: @unchecked Sendable {
-  private let lock = NSLock()
-  private var labels: [String] = []
-  private var _wine: [DownloadProgress] = []
+final class WineProgressCollector: Sendable {
+  private let labels = Locked<[String]>([])
+  private let wine = Locked<[DownloadProgress]>([])
 
-  var wineDownloads: [DownloadProgress] { lock.withLock { _wine } }
+  var wineDownloads: [DownloadProgress] { wine.value }
 
   func record(_ progress: WineInstallProgress) {
     switch progress {
-    case .downloadingWine(let value): lock.withLock { _wine.append(value) }
+    case .downloadingWine(let value): wine.mutate { $0.append(value) }
     default: break
     }
     let label: String
@@ -357,16 +332,14 @@ final class WineProgressCollector: @unchecked Sendable {
     case .installingGPTK4: label = "installingGPTK4"
     case .finalizing: label = "finalizing"
     }
-    lock.withLock { labels.append(label) }
+    labels.mutate { $0.append(label) }
   }
 
   /// Labels in arrival order with consecutive repeats collapsed.
   var collapsed: [String] {
-    lock.withLock {
-      var out: [String] = []
-      for label in labels where out.last != label { out.append(label) }
-      return out
-    }
+    var out: [String] = []
+    for label in labels.value where out.last != label { out.append(label) }
+    return out
   }
 
   var callback: @Sendable (WineInstallProgress) -> Void { { [self] in record($0) } }
@@ -383,7 +356,7 @@ struct WineHarness {
   var runtime: WineRuntime
   var layout: WineLayout { WineLayout(root: root) }
 
-  func install() async throws { try await runtime.ensureInstalled() }
+  func install() async throws { try await runtime.ensureInstalled(for: .dxmt) }
 
   func writeFile(_ relative: String, _ text: String = "sentinel") throws {
     try TestSupport.writeFile(text, to: root.appending(path: relative))
@@ -428,7 +401,6 @@ func makeInstalledWineHarness(in directory: URL) async throws -> WineHarness {
   return harness
 }
 
-/// Fixture directories are created below `fixtures/`; this crashes the test early if a helper broke.
 extension WineHarness {
   func readStamp() throws -> WineStamp {
     try JSONDecoder().decode(WineStamp.self, from: Data(contentsOf: layout.stampFile))

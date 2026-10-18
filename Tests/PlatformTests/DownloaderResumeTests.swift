@@ -1,4 +1,3 @@
-import CryptoKit
 import Foundation
 import Testing
 import TestSupport
@@ -39,7 +38,7 @@ private final class RangeStubProtocol: URLProtocol, @unchecked Sendable {
   override class func canInit(with request: URLRequest) -> Bool { true }
   override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
 
-  private let stopped = LockedFlag()
+  private let stopped = Locked(false)
 
   override func startLoading() {
     guard let url = request.url, let server = Self.lock.withLock({ Self.servers[url] }) else {
@@ -76,7 +75,7 @@ private final class RangeStubProtocol: URLProtocol, @unchecked Sendable {
       var offset = start
       var sent = 0
       while offset < total {
-        if stopped.isSet { return }
+        if stopped.value { return }
         if server.chunkDelay > 0 { Thread.sleep(forTimeInterval: server.chunkDelay) }
         if let failAfter = server.failAfter, sent >= failAfter {
           client?.urlProtocol(self, didFailWithError: URLError(.networkConnectionLost))
@@ -91,28 +90,11 @@ private final class RangeStubProtocol: URLProtocol, @unchecked Sendable {
     client?.urlProtocolDidFinishLoading(self)
   }
 
-  override func stopLoading() { stopped.set() }
-}
-
-private final class LockedFlag: @unchecked Sendable {
-  private let lock = NSLock()
-  private var value = false
-  var isSet: Bool { lock.withLock { value } }
-  func set() { lock.withLock { value = true } }
-}
-
-private final class ResumeProgressBox: @unchecked Sendable {
-  private let lock = NSLock()
-  private var items: [DownloadProgress] = []
-  func add(_ p: DownloadProgress) { lock.withLock { items.append(p) } }
-  var all: [DownloadProgress] { lock.withLock { items } }
-}
-
-private func sha(_ data: Data) -> String {
-  SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
+  override func stopLoading() { stopped.value = true }
 }
 
 private let body = Data((0..<300_000).map { UInt8($0 % 251) })
+private let bodySHA = sha256Hex(body)
 
 private func withResumeFixture(
   server: RangeStubProtocol.Server = .init(body: body),
@@ -127,8 +109,6 @@ private func withResumeFixture(
   try await test(Downloader(configuration: configuration), url, dir.appending(path: "archive.bin"), dir)
 }
 
-private func partFile(of destination: URL) -> URL { URL(filePath: destination.path + ".part") }
-
 @Suite("WIN-007 resumable download") struct DownloaderResumeTests {
   @Test("WIN-007 a dropped connection keeps the partial file and the next attempt sends Range from its size")
   func resumesAfterDroppedConnection() async throws {
@@ -137,24 +117,24 @@ private func partFile(of destination: URL) -> URL { URL(filePath: destination.pa
     server.chunkDelay = 0.02  // let the delegate see the bytes before the connection drops
     try await withResumeFixture(server: server) { downloader, url, destination, _ in
       await #expect(throws: (any Error).self) {
-        try await downloader.download(from: url, to: destination, sha256: sha(body)) { _ in }
+        try await downloader.download(from: url, to: destination, sha256: bodySHA) { _ in }
       }
       #expect(!FileManager.default.fileExists(atPath: destination.path))
-      let partial = try Data(contentsOf: partFile(of: destination))
+      let partial = try Data(contentsOf: Downloader.partialURL(for: destination))
       #expect(partial == body.prefix(100_000))
 
       RangeStubProtocol.update(url) { $0.failAfter = nil }
-      let box = ResumeProgressBox()
-      try await downloader.download(from: url, to: destination, sha256: sha(body)) { box.add($0) }
+      let progress = Locked<[DownloadProgress]>([])
+      try await downloader.download(from: url, to: destination, sha256: bodySHA) { report in progress.mutate { $0.append(report) } }
 
       #expect(RangeStubProtocol.requests(for: url) == [nil, "bytes=100000-"])
       #expect(try Data(contentsOf: destination) == body)
-      #expect(!FileManager.default.fileExists(atPath: partFile(of: destination).path))
+      #expect(!FileManager.default.fileExists(atPath: Downloader.partialURL(for: destination).path))
       // progress continues from the resumed offset and reports the full size
-      #expect(box.all.first.map { $0.completed >= 100_000 } == true)
-      #expect(box.all.allSatisfy { $0.total == Int64(body.count) })
-      #expect(zip(box.all, box.all.dropFirst()).allSatisfy { $0.completed <= $1.completed })
-      #expect(box.all.last?.completed == Int64(body.count))
+      #expect(progress.value.first.map { $0.completed >= 100_000 } == true)
+      #expect(progress.value.allSatisfy { $0.total == Int64(body.count) })
+      #expect(zip(progress.value, progress.value.dropFirst()).allSatisfy { $0.completed <= $1.completed })
+      #expect(progress.value.last?.completed == Int64(body.count))
     }
   }
 
@@ -163,8 +143,8 @@ private func partFile(of destination: URL) -> URL { URL(filePath: destination.pa
     var server = RangeStubProtocol.Server(body: body)
     server.supportsRange = false
     try await withResumeFixture(server: server) { downloader, url, destination, _ in
-      try Data(repeating: 0xAB, count: 100_000).write(to: partFile(of: destination))
-      try await downloader.download(from: url, to: destination, sha256: sha(body)) { _ in }
+      try Data(repeating: 0xAB, count: 100_000).write(to: Downloader.partialURL(for: destination))
+      try await downloader.download(from: url, to: destination, sha256: bodySHA) { _ in }
       #expect(try Data(contentsOf: destination) == body)
     }
   }
@@ -172,8 +152,8 @@ private func partFile(of destination: URL) -> URL { URL(filePath: destination.pa
   @Test("WIN-007 a complete partial file and a 416 answer finish without downloading again")
   func completePartialWith416() async throws {
     try await withResumeFixture { downloader, url, destination, _ in
-      try body.write(to: partFile(of: destination))
-      try await downloader.download(from: url, to: destination, sha256: sha(body)) { _ in }
+      try body.write(to: Downloader.partialURL(for: destination))
+      try await downloader.download(from: url, to: destination, sha256: bodySHA) { _ in }
       #expect(try Data(contentsOf: destination) == body)
       #expect(RangeStubProtocol.requests(for: url) == [("bytes=\(body.count)-")])
     }
@@ -182,8 +162,8 @@ private func partFile(of destination: URL) -> URL { URL(filePath: destination.pa
   @Test("WIN-007 a stale partial file that no longer matches the checksum is dropped and fetched fresh once")
   func stalePartialRetriedFromScratch() async throws {
     try await withResumeFixture { downloader, url, destination, _ in
-      try Data(repeating: 0xCD, count: 100_000).write(to: partFile(of: destination))
-      try await downloader.download(from: url, to: destination, sha256: sha(body)) { _ in }
+      try Data(repeating: 0xCD, count: 100_000).write(to: Downloader.partialURL(for: destination))
+      try await downloader.download(from: url, to: destination, sha256: bodySHA) { _ in }
       #expect(try Data(contentsOf: destination) == body)
       #expect(RangeStubProtocol.requests(for: url) == ["bytes=100000-", nil])
     }
@@ -193,11 +173,11 @@ private func partFile(of destination: URL) -> URL { URL(filePath: destination.pa
   func freshMismatchLeavesNothing() async throws {
     try await withResumeFixture { downloader, url, destination, _ in
       let wrong = String(repeating: "0", count: 64)
-      await #expect(throws: DownloadError.checksumMismatch(expected: wrong, actual: sha(body))) {
+      await #expect(throws: DownloadError.checksumMismatch(expected: wrong, actual: bodySHA)) {
         try await downloader.download(from: url, to: destination, sha256: wrong) { _ in }
       }
       #expect(RangeStubProtocol.requests(for: url) == [nil])
-      #expect(!FileManager.default.fileExists(atPath: partFile(of: destination).path))
+      #expect(!FileManager.default.fileExists(atPath: Downloader.partialURL(for: destination).path))
       #expect(!FileManager.default.fileExists(atPath: destination.path))
     }
   }
@@ -206,10 +186,10 @@ private func partFile(of destination: URL) -> URL { URL(filePath: destination.pa
   func cachedArchiveIsReused() async throws {
     try await withResumeFixture { downloader, url, destination, _ in
       try body.write(to: destination)
-      let box = ResumeProgressBox()
-      try await downloader.download(from: url, to: destination, sha256: sha(body)) { box.add($0) }
+      let progress = Locked<[DownloadProgress]>([])
+      try await downloader.download(from: url, to: destination, sha256: bodySHA) { report in progress.mutate { $0.append(report) } }
       #expect(RangeStubProtocol.requests(for: url).isEmpty)
-      #expect(box.all.last == DownloadProgress(completed: Int64(body.count), total: Int64(body.count)))
+      #expect(progress.value.last == DownloadProgress(completed: Int64(body.count), total: Int64(body.count)))
     }
   }
 
@@ -230,7 +210,7 @@ private func partFile(of destination: URL) -> URL { URL(filePath: destination.pa
     server.chunkDelay = 0.01
     try await withResumeFixture(server: server) { downloader, url, destination, _ in
       let task = Task { try await downloader.download(from: url, to: destination, sha256: nil) { _ in } }
-      let part = partFile(of: destination)
+      let part = Downloader.partialURL(for: destination)
       func partSize() -> Int { (try? FileManager.default.attributesOfItem(atPath: part.path)[.size] as? Int) ?? 0 }
       _ = await pollUntil { partSize() >= 30_000 }  // some bytes are on disk
       task.cancel()

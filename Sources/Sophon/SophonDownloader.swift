@@ -51,7 +51,7 @@ package struct SophonDownloader: Sendable {
       try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
     }
 
-    let total = targets.reduce(Int64(0)) { $0 + SophonManifestValidator.compressedSize(of: $1.file) }
+    let total = targets.reduce(Int64(0)) { $0 + $1.file.compressedSize }
     let reporter = ProgressReporter(.downloading, total: total, interval: configuration.progressInterval, report: progress)
     progress(.preparing)
 
@@ -90,7 +90,7 @@ package struct SophonDownloader: Sendable {
     progress(.verifying(done: 0, total: total))
     let pairs = Array(zip(candidates, destinations))
     let flags = try await mapBounded(pairs, limit: SophonDownloaderLayout.verifyWorkers) { file, destination in
-      let intact = try await Offload.run { try Self.isIntact(file, at: destination, cancelled: $0) }
+      let intact = try await Offload.run { try MD5Hasher.matches(destination, size: file.size, md5: file.md5, cancelled: $0) }
       counter.add(file.size)
       return intact
     }
@@ -107,17 +107,12 @@ package struct SophonDownloader: Sendable {
     return key
   }
 
-  /// Size and MD5 both match. A size-only check lets corrupted files of the right size survive.
-  static func isIntact(_ file: SophonFile, at url: URL, cancelled: CancelFlag) throws -> Bool {
-    try SophonUpdater.matches(url, size: file.size, md5: file.md5, cancelled: cancelled)
-  }
-
   private static func process(
     _ file: SophonFile, to destination: URL, worker: FileWorker, reporter: ProgressReporter,
     config: SophonDownloadConfiguration
   ) async throws {
-    if try await Offload.run({ try isIntact(file, at: destination, cancelled: $0) }) {
-      reporter.add(SophonManifestValidator.compressedSize(of: file))
+    if try await Offload.run({ try MD5Hasher.matches(destination, size: file.size, md5: file.md5, cancelled: $0) }) {
+      reporter.add(file.compressedSize)
       // Chunks a pre-download left for this file are not needed any more.
       try? FileManager.default.removeItem(
         at: SophonDownloaderLayout.chunkDirectory(for: file.path, in: worker.tempDirectory))

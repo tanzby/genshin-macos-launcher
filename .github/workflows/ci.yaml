@@ -5,6 +5,11 @@ on:
   push:
     branches: [main]
 
+# A newer push to a PR supersedes its running check; runs on main are never cancelled.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   swift:
     runs-on: macos-26

@@ -2,11 +2,7 @@ import Foundation
 import Platform
 
 extension WineRuntime {
-  /// Whether the pinned Wine and DXMT are installed and intact. Kept for existing callers and tests.
-  public func status() -> WineStatus {
-    status(for: .dxmt)
-  }
-
+  /// Whether the pinned Wine and `backend`'s runtime are installed and intact.
   public func status(for backend: GraphicsBackend) -> WineStatus {
     let layout = layout(for: backend)
     if backend == .gptk4, gptk4 == nil { return .needsInstall(.backendUnavailable) }
@@ -73,8 +69,11 @@ extension WineRuntime {
       path: "wine-\(distribution.sha256.prefix(16)).archive", directoryHint: .notDirectory)
 
     // 0. Validate all app resources before touching the installed runtime.
-    let dxmtBundle = backend == .dxmt ? try validatedDXMT() : nil
-    let gptk4Bundle = backend == .gptk4 ? try validatedGPTK4() : nil
+    let payload: BackendPayload
+    switch backend {
+    case .dxmt: payload = .dxmt(try validatedDXMT())
+    case .gptk4: payload = .gptk4(try validatedGPTK4())
+    }
 
     // 1. Free space, before anything is downloaded or deleted (WIN-006). An unreadable volume does not block.
     //    On the data volume at the same time: the archive, the unpacked runtime and the new prefix `wineboot`
@@ -124,14 +123,14 @@ extension WineRuntime {
     progress(.initializingPrefix)
     try await initializePrefixIfNeeded(layout)
 
-    switch backend {
-    case .dxmt:
+    switch payload {
+    case .dxmt(let bundle):
       progress(.installingDXMT)
-      try installDXMTRuntime(from: dxmtBundle!, layout: layout)
-      try installDXMTPrefix(from: dxmtBundle!, layout: layout)
-    case .gptk4:
+      try installDXMTRuntime(from: bundle, layout: layout)
+      try installDXMTPrefix(from: bundle, layout: layout)
+    case .gptk4(let bundle):
       progress(.installingGPTK4)
-      try await installGPTK4(from: gptk4Bundle!, layout: layout)
+      try await installGPTK4(from: bundle, layout: layout)
     }
 
     // Stamp last; a missing/mismatched stamp never authorizes deleting the shared prefix.
@@ -145,6 +144,12 @@ extension WineRuntime {
     if stamps.allSatisfy(fileManager.fileExists(atPath:)) {
       try? fileManager.removeItem(at: layout.downloadsDirectory)
     }
+  }
+
+  /// The app-bundled files of the backend being installed, validated before anything is deleted.
+  private enum BackendPayload {
+    case dxmt(DXMTBundle)
+    case gptk4(GPTK4Bundle)
   }
 
   private func runTool(_ path: String, _ arguments: [String], layout: WineLayout) async throws {

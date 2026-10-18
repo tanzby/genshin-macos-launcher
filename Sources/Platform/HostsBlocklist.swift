@@ -47,7 +47,11 @@ public struct HostsBlocklist: Sendable {
   }
 
   public func status() throws -> Status {
-    let lines = Self.lines(of: try currentContents())
+    Self.status(of: try currentContents(), domains: domains)
+  }
+
+  static func status(of contents: String, domains: [String]) -> Status {
+    let lines = Self.lines(of: contents)
     let sections = Self.sections(in: lines)
     guard let first = sections.first else { return .missing }
     let expected = Self.lines(of: Self.section(for: domains))
@@ -61,8 +65,8 @@ public struct HostsBlocklist: Sendable {
   /// else edited it while the password dialog was open, the whole step is redone on fresh content.
   public func apply() async throws {
     for attempt in 1...Self.maxAttempts {
-      guard try status() != .current else { return }
       let snapshot = try currentContents()
+      guard Self.status(of: snapshot, domains: domains) != .current else { return }
       let updated = Self.merged(section: Self.section(for: domains), into: snapshot)
       let id = UUID().uuidString
       let stagedNew = scratchDirectory.appending(path: "genshin-launcher-hosts-\(id)")

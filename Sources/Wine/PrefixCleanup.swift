@@ -3,9 +3,10 @@ import Platform
 
 /// Closes a prefix: `wineserver -k`, then SIGKILL for what is left.
 struct PrefixCleanup: Sendable {
-  let layout: WineLayout
   let commands: WinePrefixCommands
   let processes: any ProcessTable
+
+  private var layout: WineLayout { commands.layout }
 
   /// `wineserver -k`, then SIGKILL for what is left: processes holding the prefix's server directory, and
   /// orphans whose Windows command line starts at `C:\` or `Z:\` with the prefix as working directory.
