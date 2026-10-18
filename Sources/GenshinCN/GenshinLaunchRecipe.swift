@@ -13,6 +13,8 @@ public enum GenshinLaunchRecipe {
   static let widthValue = "Screenmanager Resolution Width_h182942802"
   static let heightValue = "Screenmanager Resolution Height_h2627697771"
   static let displayName = "原神"
+  /// What Debug mode adds to the default `WINEDEBUG` (`WineLayout.wineDebug`): timestamps.
+  static let debugWineChannels = "fixme-all,err-unwind,+timestamp"
   /// The frame-rate cap: the game's own, and the one forced by "Unlock 120 FPS" (CFG-019, LCH-033).
   static let defaultFrameRate = 60
   static let unlockedFrameRate = 120
@@ -66,6 +68,16 @@ public enum GenshinLaunchRecipe {
       environment["DXMT_LOG_PATH"] = dataDirectory.path
       environment["DXMT_CONFIG"] = "d3d11.preferredMaxFrameRate=\(maxFrameRate);"
       environment["DXMT_CONFIG_FILE"] = dataDirectory.appending(path: "dxmt.conf").path
+    }
+    if options.debugMode {
+      // Read by gamehost.dylib; the Wine channels are the ones the default adds `+timestamp` to.
+      environment["GENSHIN_LAUNCHER_DEBUG"] = "1"
+      environment["WINEDEBUG"] = Self.debugWineChannels
+    }
+    if options.graphicsBackend == .gptk4 {
+      // Without a target D3DMetal presents as soon as a frame is done, so on a 120 Hz screen the intervals
+      // alternate 8.3/25 ms at 60 fps; with it they are an even 16.7 ms like DXMT's (docs/gptk4-beta3-integration.md).
+      environment["D3DM_MAX_FPS"] = String(maxFrameRate)
     }
     if options.metalHUD {
       // Default layout only: MTL_HUD_ELEMENTS would hide the "Game Porting Toolkit" section D3DMetal adds.

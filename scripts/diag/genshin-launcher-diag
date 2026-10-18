@@ -315,7 +315,7 @@ def seed(data):
 
 
 def launch(app, data, a):
-    env = ["GENSHIN_LAUNCHER_AUTOLAUNCH=1", f"GENSHIN_LAUNCHER_DATA_DIR={data.root}"]
+    env = ["GENSHIN_LAUNCHER_DEBUG=1", "GENSHIN_LAUNCHER_AUTOLAUNCH=1", f"GENSHIN_LAUNCHER_DATA_DIR={data.root}"]
     if a.game_dir:
         env.append(f"GENSHIN_LAUNCHER_GAME_DIR={a.game_dir}")
     if a.allow_download:
@@ -618,7 +618,7 @@ def hostname_probe(dylib, work):
     own = os.uname().nodename
     # The host also answers to its name without ".local", but only when the host name has that suffix.
     spellings = {own, own.upper()} | ({own[:-6]} if own.lower().endswith(".local") else set())
-    env = {**os.environ, "DYLD_INSERT_LIBRARIES": str(dylib), "GENSHIN_LAUNCHER_GAMEHOST_LOG": str(log)}
+    env = {**os.environ, "DYLD_INSERT_LIBRARIES": str(dylib), "GENSHIN_LAUNCHER_GAMEHOST_LOG": str(log), "GENSHIN_LAUNCHER_DEBUG": "1"}
 
     def resolve(name):
         out = run([str(exe), name], env=env, timeout=60)  # Rosetta runs it; `arch` would drop DYLD_INSERT_LIBRARIES

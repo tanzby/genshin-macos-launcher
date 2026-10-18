@@ -71,6 +71,18 @@ __attribute__((visibility("default"))) void gamehost_say(const char *fmt, ...) {
 }
 #define say gamehost_say
 
+/* Debug mode (GENSHIN_LAUNCHER_DEBUG=1, set by the launcher's Debug mode switch and by the dev tools):
+ * only then do the diagnostic lines below get written. Errors and the install result always are. */
+__attribute__((visibility("default"))) bool gamehost_debug(void) {
+  static int on = -1;
+  if (on < 0) {
+    const char *v = getenv("GENSHIN_LAUNCHER_DEBUG");
+    on = (v && *v && *v != '0') || getenv("GENSHIN_LAUNCHER_GAMEHOST_DEV") != NULL;
+  }
+  return on;
+}
+#define trace(...) do { if (gamehost_debug()) say(__VA_ARGS__); } while (0)
+
 void gamehost_fps_start(void); /* fps-unlock.c */
 
 /* GENSHIN_LAUNCHER_GAMEHOST_DEV: load the development companion (frame statistics,
@@ -116,9 +128,10 @@ static Class wineWindowClass;
 static id policyMonitor;
 static bool policyWatched;
 static void logPolicy(const char *what, id info, const char *key) {
+  if (!gamehost_debug()) return;
   SEL sel = selName(key);
   if (!((signed char (*)(id, SEL, SEL))msgSend)(info, selName("respondsToSelector:"), sel)) return;
-  say("gamepolicy: %s %s=%d", what, key, (int)((signed char (*)(id, SEL))msgSend)(info, sel));
+  trace("gamepolicy: %s %s=%d", what, key, (int)((signed char (*)(id, SEL))msgSend)(info, sel));
 }
 static void watchGamePolicy(void) {
   policyWatched = true;
@@ -216,7 +229,7 @@ static void updateLevel(id app) {
   if (!origMinLevel) return;
   bool want = sendBool(app, "isActive") && aboveMenuBar(fullscreenTarget);
   bool above = (long)sendUL(fullscreenTarget, "level") > MAIN_MENU_LEVEL;
-  if (want != wantAbove) say("gamehost: full-screen window %s the menu bar", want ? "goes above" : "goes back below");
+  if (want != wantAbove) trace("gamehost: full-screen window %s the menu bar", want ? "goes above" : "goes back below");
   if (want != wantAbove || above) levelRetries = 0;
   bool retry = want && !above && (levelRetries++ < LEVEL_RETRIES || levelRetries % LEVEL_BACKOFF == 0);
   if (retry || (!want && wantAbove)) {
@@ -287,7 +300,7 @@ static void tick(void *ctx) {
     IMP toggle = classImpl(getClass("NSWindow"), selName("toggleFullScreen:"));
     ((void (*)(id, SEL, id))toggle)(win, selName("toggleFullScreen:"), NULL);
     Rect f = sendRect(win, "frame");
-    say("gamehost: toggled native full screen for window %p (%.0fx%.0f)", win, f.w, f.h);
+    trace("gamehost: toggled native full screen for window %p (%.0fx%.0f)", win, f.w, f.h);
     startDev(win);
     return;
   }
@@ -329,7 +342,7 @@ static int gamehost_getaddrinfo(const char *node, const char *service, const str
     numeric.ai_family = AF_INET;
     numeric.ai_flags = (numeric.ai_flags | AI_NUMERICHOST) & ~AI_CANONNAME;
     int ret = getaddrinfo(addr, service, &numeric, res);
-    say("gamehost: answered own host name %s with %s (%d)", node, addr, ret);
+    trace("gamehost: answered own host name %s with %s (%d)", node, addr, ret);
     return ret;
   }
   return getaddrinfo(node, service, hints, res);

@@ -12,6 +12,8 @@
 # after it) saw the cache grow is `cause=shader-cache`; one with GPU utilization >= 90% is `cause=gpu`; the rest are
 # `cause=unknown`. The summary line is `HITCH backend=… cache=cold|warm cause=… count=…`. FPS_MEASURE_COLD=1 moves the
 # backend cache aside for the run and puts it back afterwards (a cold-cache run).
+# Also: `proc-cpu` polls the CPU time of the Metal compiler service every 50 ms; a hitch whose window saw >= 20 ms of it
+# is `cause=compile`, and `stall-report` classifies the stacks the companion captured during each stall.
 # Not done: xctrace "Metal System Trace" on the Wine process (see docs/gptk4-beta3-integration.md) and hitch-triggered
 # `sample`: hitch lines only exist after the phase ends, too late to sample the stall.
 # Apple's GPTK payload in the copy is not re-signed (only the outer bundle).
@@ -22,6 +24,7 @@ app=${FPS_MEASURE_APP:-"/Applications/Genshin Launcher.app"}
 data="$HOME/Library/Application Support/Genshin Launcher"
 log="$data/logs/gamehost.log"
 work=$(mktemp -d -t fps-measure)
+out=${FPS_MEASURE_OUT:-${TMPDIR:-/tmp}/fps-measure-out}
 domain=io.github.tanzby.genshin-launcher
 previous=$(defaults read $domain graphicsBackend 2>/dev/null || echo gptk4)
 # Closes the game in the shared prefix (whichever runtime runs it) and the launcher copy.
@@ -49,10 +52,19 @@ pgrep -f 'YuanShen.exe|wineserver|Contents/MacOS/Genshin Launcher' >/dev/null &&
 
 ditto "$app" "$work/Genshin Launcher.app"
 sh "$repo/Helpers/build.sh" "$work/Genshin Launcher.app/Contents/Helpers" >/dev/null
+# The copy runs this checkout's game host too (Debug mode lines), not the installed app's.
+clang -arch x86_64 -O2 -Wall -dynamiclib -undefined dynamic_lookup -install_name /usr/local/lib/genshin-launcher-gamehost.dylib \
+  -o "$work/Genshin Launcher.app/Contents/Helpers/genshin-launcher-gamehost.dylib" "$repo/Helpers/gamehost.c" "$repo/Helpers/fps-unlock.c"
+codesign -f -s - "$work/Genshin Launcher.app/Contents/Helpers/genshin-launcher-gamehost.dylib" 2>/dev/null
 codesign -f -s - "$work/Genshin Launcher.app" 2>/dev/null
 "$repo/scripts/dev/check-gptk4" "$work/Genshin Launcher.app/Contents/Resources/gptk4" >/dev/null
 swiftc -O -o "$work/holdkey" "$repo/scripts/diag/holdkey.swift"
+swiftc -O -o "$work/proc-cpu" "$repo/scripts/diag/proc-cpu.swift"
 game_dir=$(defaults read $domain gameDirectory)
+
+# FPS_MEASURE_ENV="NAME=value NAME2=value" adds environment variables to the launcher (and so the game).
+extra_env=()
+for e in ${=FPS_MEASURE_ENV:-}; do extra_env+=(--env "$e"); done
 
 for backend in "$@"; do
   defaults write $domain graphicsBackend -string "$backend"
@@ -62,10 +74,14 @@ for backend in "$@"; do
     cache_state=cold
     [ -e "$cache" ] && { mv "$cache" "$cache.fps-measure-aside"; aside="$cache.fps-measure-aside"; }
   fi
+  # D3DMetal flushes its cache files (bytecode/stage/pipeline_cache.bin) at exit, not while running, so the cache
+  # poller below cannot see them grow; compare their sizes before and after the run instead.
+  cache_files() { find "$cache" -name '*_cache.bin' -exec stat -f '%N %z' {} + 2>/dev/null | sed "s|.*/||" | sort | tr '\n' ' '; }
+  cache_before=$(cache_files)
   start=$(wc -l < "$log" 2>/dev/null || echo 0)
   # A clean environment: the game inherits the launcher's.
   env -i HOME=$HOME USER=$USER LOGNAME=$USER TMPDIR=$TMPDIR PATH=/usr/bin:/bin:/usr/sbin:/sbin \
-    open -n --env GENSHIN_LAUNCHER_GAMEHOST_DEV=measure --env GENSHIN_LAUNCHER_AUTOLAUNCH=1 \
+    open -n --env GENSHIN_LAUNCHER_DEBUG=1 "${extra_env[@]}" --env GENSHIN_LAUNCHER_GAMEHOST_STALLS="$work/stalls.$backend" --env GENSHIN_LAUNCHER_GAMEHOST_DEV=measure --env GENSHIN_LAUNCHER_AUTOLAUNCH=1 \
     --env GENSHIN_LAUNCHER_GAME_DIR="$game_dir" "$work/Genshin Launcher.app" --args --autolaunch
   newlog() { tail -n +$((start + 1)) "$log" 2>/dev/null; }
   deadline=$((SECONDS + 300))
@@ -73,11 +89,25 @@ for backend in "$@"; do
   pid=$(pgrep -f '^Z:.*YuanShen.exe' | tail -1 || true)
   if newlog | grep -q 'measure: ready' && [ -n "$pid" ]; then
     sleep 10
+    # FPS_MEASURE_XCTRACE=<template> records the game process with xctrace for the two key phases (limit 40 s).
+    xctrace_pid=""
+    if [ -n "${FPS_MEASURE_XCTRACE:-}" ]; then
+      mkdir -p "$out"
+      rm -rf "$out/xctrace.$backend.trace"
+      xcrun xctrace record --template "$FPS_MEASURE_XCTRACE" --attach $pid --time-limit 40s --no-prompt \
+        --output "$out/xctrace.$backend.trace" > "$work/xctrace.log" 2>&1 &
+      xctrace_pid=$!
+      sleep 5
+      cat "$work/xctrace.log"
+    fi
     # Cache size in KiB every 0.25 s: "epoch kib".
     ( while :; do print -r -- "$EPOCHREALTIME $(du -sk "$cache" 2>/dev/null | cut -f1)"; sleep 0.25; done ) \
       > "$work/cache" &
     cache_sampler=$!
     : > "$work/gpu"
+    # CPU time of the Metal compiler service(s) every 50 ms: run-time pipeline compiles happen there.
+    "$work/proc-cpu" MTLCompilerService 0.05 > "$work/compile" &
+    compile_sampler=$!
     for key in W S; do
       "$repo/scripts/diag/genshin-launcher-diag" activate "$pid" --timeout 10 >/dev/null || echo "activate failed"
       # GPU utilization while walking (IOAccelerator "Device Utilization %", sampled every 0.5 s): headroom under
@@ -91,29 +121,43 @@ for backend in "$@"; do
       awk -v k=$key '{s+=$2; if ($2>m) m=$2; n++} END {printf "gpu: phase=%s samples=%d mean=%.0f%% max=%d%%\n", k, n, s/n, m}' "$work/gpu"
       sleep 3
     done
-    kill $cache_sampler
+    kill $cache_sampler $compile_sampler
+    [ -z "$xctrace_pid" ] || { wait $xctrace_pid || true; tail -5 "$work/xctrace.log"; }
   else
     echo "timed out before the world"
   fi
   close_game
   echo "== $backend $(date +%H:%M:%S)"
-  newlog | grep -E 'present:|dev companion unavailable' || echo "no present lines"
+  echo "cache-files before: ${cache_before:-none}"
+  echo "cache-files after:  $(cache_files)"
+  newlog | grep -E 'present:|pacing:|dev companion unavailable' || echo "no present lines"
   newlog | grep 'hitch:' | sed 's/^.*hitch:/hitch:/' > "$work/hitches"
   cat "$work/hitches"
-  touch "$work/cache" "$work/gpu"
+  # Stall sampler output (stall:/stack:/nd: lines, Helpers/gamehost-dev.m), kept for analysis.
+  mkdir -p "$out"
+  if [ -s "$work/stalls.$backend" ]; then
+    cp "$work/stalls.$backend" "$out/stalls.$backend.$cache_state.$(date +%H%M%S).log"
+    echo "stalls: $(grep -c '^stall:' "$work/stalls.$backend") captured, nextDrawable>10ms: $(grep -c '^nd:' "$work/stalls.$backend"), saved in $out"
+    "$repo/scripts/diag/stall-report" --hitches "$work/hitches" "$work/stalls.$backend" | grep -E '^(hitch|HITCH-STALL|STALLS)'
+  fi
+  touch "$work/cache" "$work/gpu" "$work/compile"
   # Attribute each hitch. Hitch wall time w = late frame; the stall began dur ms earlier.
   awk -v backend=$backend -v state=$cache_state '
     FILENAME ~ /cache$/ { if (NF == 2) { ct[nc] = $1; ck[nc++] = $2 }; next }
+    FILENAME ~ /compile$/ { if (NF == 3) { kt[nk] = $1; kc[nk++] = $2 / 1e6 }; next }
     FILENAME ~ /gpu$/   { if (NF == 2 && $2 != "") { gt[ng] = $1; gu[ng++] = $2 }; next }
     { for (i = 1; i <= NF; i++) { if ($i ~ /^wall=/) w = substr($i, 6) + 0; if ($i ~ /^dur=/) d = substr($i, 5) + 0 }
       lo = w - d / 1000 - 0.2; hi = w + 0.2; cause = "unknown"
       for (i = 1; i < nc; i++) if (ct[i] >= lo && ct[i - 1] <= hi && ck[i] > ck[i - 1]) cause = "shader-cache"
+      cpu = 0
+      for (i = 1; i < nk; i++) if (kt[i] >= lo && kt[i - 1] <= hi && kc[i] > kc[i - 1]) cpu += kc[i] - kc[i - 1]
+      if (cause == "unknown" && cpu >= 20) cause = "compile"
       if (cause == "unknown") for (i = 0; i < ng; i++) if (gt[i] >= lo && gt[i] <= hi && gu[i] >= 90) cause = "gpu"
       n[cause]++; total++
-      printf "hitch-cause: wall=%.3f dur=%.1fms cause=%s\n", w, d, cause }
+      printf "hitch-cause: wall=%.3f dur=%.1fms compiler-cpu=%.0fms cause=%s\n", w, d, cpu, cause }
     END { for (c in n) printf "HITCH backend=%s cache=%s cause=%s count=%d\n", backend, state, c, n[c]
           if (!total) printf "HITCH backend=%s cache=%s cause=none count=0\n", backend, state }
-  ' "$work/cache" "$work/gpu" "$work/hitches"
+  ' "$work/cache" "$work/compile" "$work/gpu" "$work/hitches"
   restore_cache
   sleep 5
 done

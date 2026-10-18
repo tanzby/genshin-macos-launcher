@@ -392,6 +392,23 @@
         }
       }
     },
+    "Debug mode": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Debug mode"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "调试模式"
+          }
+        }
+      }
+    },
     "Display & Input": {
       "extractionState": "manual",
       "localizations": {
@@ -2479,6 +2496,23 @@
           "stringUnit": {
             "state": "translated",
             "value": "Wine 设置失败"
+          }
+        }
+      }
+    },
+    "Writes detailed Wine, DXMT and game host logs. Leave off unless you are chasing a problem.": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Writes detailed Wine, DXMT and game host logs. Leave off unless you are chasing a problem."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "写入详细的 Wine、DXMT 和游戏宿主日志。除非在排查问题，请保持关闭。"
           }
         }
       }

@@ -24,12 +24,12 @@ private func settings(
   graphicsBackend: GraphicsBackend = .dxmt,
   retina: Bool = false, leftCommandIsControl: Bool = false, metalHUD: Bool = false, hdr: Bool = false,
   metalFX: Bool = false, unlockFrameRate: Bool = false, customResolution: LaunchOptions.Resolution? = nil,
-  proxyHost: String? = nil
+  proxyHost: String? = nil, debugMode: Bool = false
 ) -> LaunchOptions {
   LaunchOptions(
     gameDirectory: defaultGameDirectory, graphicsBackend: graphicsBackend, retina: retina, leftCommandIsControl: leftCommandIsControl,
     metalHUD: metalHUD, hdr: hdr, metalFX: metalFX, unlockFrameRate: unlockFrameRate, customResolution: customResolution,
-    proxyHost: proxyHost)
+    proxyHost: proxyHost, debugMode: debugMode)
 }
 
 private func make(_ options: LaunchOptions = settings(), gameDirectory: URL = defaultGameDirectory) -> LaunchRecipe {
@@ -86,6 +86,22 @@ private func edits(_ recipe: LaunchRecipe, key: String) -> [RegistryEdit] {
     #expect(on.environment["MTL_HUD_ELEMENTS"] == nil)  // a custom list hides D3DMetal's GPTK section
     #expect(off.environment["MTL_HUD_ENABLED"] == nil)
     #expect(on.environment["WINEESYNC"] == "1")  // positive: the rest is still there
+  }
+
+  @Test func gptk4PacesPresentsAtTheFrameRateCap() {
+    #expect(make(settings(graphicsBackend: .gptk4)).environment["D3DM_MAX_FPS"] == "60")
+    #expect(make(settings(graphicsBackend: .gptk4, unlockFrameRate: true)).environment["D3DM_MAX_FPS"] == "120")
+    #expect(make(settings(graphicsBackend: .dxmt)).environment["D3DM_MAX_FPS"] == nil)
+  }
+
+  @Test func debugModeAddsTheDiagnosticLoggingOnly() {
+    let on = make(settings(debugMode: true))
+    let off = make(settings())
+
+    #expect(on.environment["GENSHIN_LAUNCHER_DEBUG"] == "1")
+    #expect(on.environment["WINEDEBUG"] == "fixme-all,err-unwind,+timestamp")
+    #expect(off.environment["GENSHIN_LAUNCHER_DEBUG"] == nil)
+    #expect(off.environment["WINEDEBUG"] == nil)
   }
 
   @Test func LCH_034_proxyHostIsPassedRawToBothProxyVariables() {
@@ -319,7 +335,7 @@ private func edits(_ recipe: LaunchRecipe, key: String) -> [RegistryEdit] {
 
   @Test func CFG_024_CFG_027_CFG_028_CFG_019_theLaunchSettingsOnlyCarryTheSwitchesThatRemain() {
     let expected = [
-      "graphicsBackend", "retina", "leftCommandIsControl", "metalHUD", "hdr", "metalFX", "unlockFrameRate",
+      "graphicsBackend", "retina", "leftCommandIsControl", "metalHUD", "debugMode", "hdr", "metalFX", "unlockFrameRate",
       "customResolution", "proxyHost",
     ]
     #expect(labels(LaunchOptions(gameDirectory: defaultGameDirectory)) == ["gameDirectory"] + expected)
