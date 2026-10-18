@@ -132,28 +132,32 @@ private func freshDefaults() -> UserDefaults {
 
   private let supported: @Sendable (URL) -> Bool = { !$0.path.contains("\"") }
 
+  private func validate(_ dir: URL) throws -> GameDirectoryKind {
+    try GameDirectoryValidator.validate(dir, gameExecutable: "YuanShen.exe", isSupportedPath: supported)
+  }
+
   @Test func CFG_010_emptyDirectoryIsAnInstallTarget() throws {
     let dir = makeTemporaryDirectory("genshin-launcher-dir")
-    #expect(try GameDirectoryValidator.validate(dir, gameExecutable: "YuanShen.exe", isSupportedPath: supported) == .empty)
+    #expect(try validate(dir) == .empty)
   }
 
   @Test func CFG_010_interruptedInstallLeftoversStillCount() throws {
     let dir = makeTemporaryDirectory("genshin-launcher-dir")
     try FileManager.default.createDirectory(at: dir.appending(path: ".genshin-launcher-tmp"), withIntermediateDirectories: true)
-    #expect(try GameDirectoryValidator.validate(dir, gameExecutable: "YuanShen.exe", isSupportedPath: supported) == .empty)
+    #expect(try validate(dir) == .empty)
   }
 
   @Test func CFG_010_existingGameIsRecognised() throws {
     let dir = makeTemporaryDirectory("genshin-launcher-dir")
     try Data().write(to: dir.appending(path: "YuanShen.exe"))
-    #expect(try GameDirectoryValidator.validate(dir, gameExecutable: "YuanShen.exe", isSupportedPath: supported) == .existingGame)
+    #expect(try validate(dir) == .existingGame)
   }
 
   @Test func CFG_010_otherContentIsRefused() throws {
     let dir = makeTemporaryDirectory("genshin-launcher-dir")
     try Data().write(to: dir.appending(path: "photos.zip"))
     #expect(throws: GameDirectoryProblem.notEmpty) {
-      try GameDirectoryValidator.validate(dir, gameExecutable: "YuanShen.exe", isSupportedPath: supported)
+      try validate(dir)
     }
   }
 
@@ -162,11 +166,11 @@ private func freshDefaults() -> UserDefaults {
     let tmp = dir.appending(path: PendingJobStore.directoryName)
     try Data().write(to: tmp)
     #expect(throws: GameDirectoryProblem.notEmpty) {
-      try GameDirectoryValidator.validate(dir, gameExecutable: "YuanShen.exe", isSupportedPath: supported)
+      try validate(dir)
     }
     try FileManager.default.removeItem(at: tmp)
     try FileManager.default.createDirectory(at: tmp, withIntermediateDirectories: false)
-    #expect(try GameDirectoryValidator.validate(dir, gameExecutable: "YuanShen.exe", isSupportedPath: supported) == .empty)
+    #expect(try validate(dir) == .empty)
   }
 
   @Test func CFG_010_aFolderThatCannotBeListedIsNotTreatedAsEmpty() throws {
@@ -175,7 +179,7 @@ private func freshDefaults() -> UserDefaults {
     defer { try? FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: dir.path) }
     try FileManager.default.setAttributes([.posixPermissions: 0o000], ofItemAtPath: dir.path)
     #expect(throws: GameDirectoryProblem.unreadable) {
-      try GameDirectoryValidator.validate(dir, gameExecutable: "YuanShen.exe", isSupportedPath: supported)
+      try validate(dir)
     }
   }
 

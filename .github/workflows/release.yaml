@@ -20,10 +20,6 @@ concurrency:
   group: release
   cancel-in-progress: false
 
-env:
-  SPARKLE_VERSION: 2.10.0
-  SPARKLE_SHA256: c2bf58aa8387266ac179357b1415d6f2635f044da8be41042af32425dae6da0c
-
 jobs:
   dxmt:
     uses: ./.github/workflows/dxmt.yaml
@@ -148,24 +144,10 @@ jobs:
           SPARKLE_ED_PRIVATE_KEY: ${{ secrets.SPARKLE_ED_PRIVATE_KEY }}
         run: |
           set -eu
-          curl -fsSL -o "$RUNNER_TEMP/sparkle.tar.xz" \
-            "https://github.com/sparkle-project/Sparkle/releases/download/$SPARKLE_VERSION/Sparkle-$SPARKLE_VERSION.tar.xz"
-          echo "$SPARKLE_SHA256  $RUNNER_TEMP/sparkle.tar.xz" | shasum -a 256 -c -
-          mkdir "$RUNNER_TEMP/sparkle"
-          tar -xJf "$RUNNER_TEMP/sparkle.tar.xz" -C "$RUNNER_TEMP/sparkle" ./bin
-          # The private key goes in through stdin only, never to disk or argv.
-          printf '%s' "$SPARKLE_ED_PRIVATE_KEY" | "$RUNNER_TEMP/sparkle/bin/generate_appcast" --ed-key-file - \
-            --download-url-prefix "https://github.com/$GITHUB_REPOSITORY/releases/download/$VERSION/" \
-            -o dist/appcast.xml dist
-          grep -q 'sparkle:edSignature' dist/appcast.xml \
-            || { echo "::error::appcast has no EdDSA signature"; exit 1; }
-          grep -q "<sparkle:shortVersionString>$VERSION<" dist/appcast.xml \
-            || { echo "::error::appcast does not list $VERSION"; exit 1; }
-          # The secret must pair with the SUPublicEDKey built into the app, or every
-          # client would reject this update. Check before anything is published.
-          sig=$(grep -o 'sparkle:edSignature="[^"]*"' dist/appcast.xml | head -1 | cut -d'"' -f2)
-          swift scripts/release/verify-ed-signature.swift "$ED_PUBLIC_KEY" "$sig" "dist/GenshinLauncher-$VERSION.dmg" \
-            || { echo "::error::SPARKLE_ED_PRIVATE_KEY does not match SUPublicEDKey"; exit 1; }
+          # The secret must pair with the SUPublicEDKey built into the app; make-appcast checks that before
+          # anything is published.
+          printf '%s' "$SPARKLE_ED_PRIVATE_KEY" | scripts/release/make-appcast dist \
+            "https://github.com/$GITHUB_REPOSITORY/releases/download/$VERSION/" "$VERSION" "$ED_PUBLIC_KEY"
           cat dist/appcast.xml
 
       - name: Upload build artifacts (dry run)

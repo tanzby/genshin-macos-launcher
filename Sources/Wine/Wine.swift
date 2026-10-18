@@ -11,7 +11,7 @@ public actor WineRuntime {
   let dxmt: DXMTBundle?
   let gptk4: GPTK4Bundle?
   let downloader: any Downloading
-  let runner: any ProcessRunning
+  package nonisolated let runner: any ProcessRunning
   let availableSpace: @Sendable (URL) -> Int64?
   private var installation: Task<Void, any Error>?
 
@@ -35,10 +35,8 @@ public actor WineRuntime {
     self.dxmt = dxmt
     self.gptk4 = gptk4
     self.downloader = downloader
-    self.runner = runner ?? SystemProcessRunner(allowedRoots: [
-      WineLayout(root: dataDirectory.root, backend: .dxmt).runtimeDirectory,
-      WineLayout(root: dataDirectory.root, backend: .gptk4).runtimeDirectory,
-    ])
+    self.runner = runner ?? SystemProcessRunner(
+      allowedRoots: GraphicsBackend.allCases.map { WineLayout(root: dataDirectory.root, backend: $0).runtimeDirectory })
     self.availableSpace = availableSpace
   }
 
@@ -48,17 +46,11 @@ public actor WineRuntime {
       .volumeAvailableCapacityForImportantUsage
   }
 
-  public nonisolated var runtimeDirectory: URL { layout.runtimeDirectory }
-  public nonisolated var prefixDirectory: URL { layout.prefixDirectory }
   public nonisolated func layout(for backend: GraphicsBackend) -> WineLayout {
     WineLayout(root: layout.root, backend: backend)
   }
 
   /// Installs the selected backend's runtime and initializes the shared prefix only when it does not exist.
-  public func ensureInstalled(progress: @escaping @Sendable (WineInstallProgress) -> Void = { _ in }) async throws {
-    try await ensureInstalled(for: .dxmt, progress: progress)
-  }
-
   public func ensureInstalled(
     for backend: GraphicsBackend, progress: @escaping @Sendable (WineInstallProgress) -> Void = { _ in }
   ) async throws {
@@ -67,8 +59,8 @@ public actor WineRuntime {
     switch status(for: backend) {
     case .ready: return
     case .needsInstall(.backendUnavailable): throw WineInstallError.gptk4BundleInvalid
-    case .needsInstall(.prefixUnrecognized): throw WineInstallError.prefixUnrecognized(prefixDirectory)
-    case .needsInstall(.dxmtOutdated) where backend == .dxmt:
+    case .needsInstall(.prefixUnrecognized): throw WineInstallError.prefixUnrecognized(layout.prefixDirectory)
+    case .needsInstall(.dxmtOutdated):
       try await runRefresh(progress: progress)
     case .needsInstall:
       try await runInstall(for: backend, progress: progress)
@@ -76,10 +68,6 @@ public actor WineRuntime {
   }
 
   /// Reinstalls only the selected runtime. The shared prefix is preserved.
-  public func reinstall(progress: @escaping @Sendable (WineInstallProgress) -> Void = { _ in }) async throws {
-    try await reinstall(.dxmt, progress: progress)
-  }
-
   public func reinstall(
     _ backend: GraphicsBackend, progress: @escaping @Sendable (WineInstallProgress) -> Void = { _ in }
   ) async throws {

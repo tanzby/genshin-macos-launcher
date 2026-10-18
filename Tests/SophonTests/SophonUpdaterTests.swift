@@ -1,4 +1,3 @@
-import CryptoKit
 import Foundation
 import Testing
 import TestSupport
@@ -12,19 +11,6 @@ import TestSupport
 // vendored tag; the tests never run hdiffz. The CDN is a URLProtocol stub.
 
 // MARK: - Fixture data
-
-private func bytes(seed: UInt64, count: Int) -> Data {
-  var state = seed &* 0x9E37_79B9_7F4A_7C15 | 1
-  var result = [UInt8]()
-  result.reserveCapacity(count)
-  for _ in 0..<count {
-    state ^= state << 13
-    state ^= state >> 7
-    state ^= state << 17
-    result.append(UInt8(truncatingIfNeeded: state >> 24))
-  }
-  return Data(result)
-}
 
 private struct LdiffMeta: Decodable {
   struct Entry: Decodable {
@@ -89,7 +75,7 @@ private struct World {
               buildID: "build")
           ]))
     }
-    let d = bytes(seed: 40, count: 3000)
+    let d = syntheticBytes(seed: 40, count: 3000)
     addFile("data/d.bin", new: d)
     diffFiles.append(
       SophonDiffFile(
@@ -99,10 +85,10 @@ private struct World {
             patchID: Self.ldiffID, patchSize: meta.ldiffSize, offset: 0, length: 10, originalPath: "data/d.bin",
             originalSize: 1, originalMD5: "00", buildID: "build")
         ]))
-    let e = bytes(seed: 50, count: 70_000)
+    let e = syntheticBytes(seed: 50, count: 70_000)
     addFile("new/e.bin", new: e)
     diffFiles.append(SophonDiffFile(path: "new/e.bin", size: Int64(e.count), md5: md5Hex(e), patches: [:]))
-    let gone = bytes(seed: 60, count: 500)
+    let gone = syntheticBytes(seed: 60, count: 500)
     deletions = [SophonDeletedFile(path: "old/gone.bin", size: Int64(gone.count), md5: md5Hex(gone))]
   }
 
@@ -170,12 +156,8 @@ private final class FakeCDN: @unchecked Sendable {
     guard var blob, !isFailing else { return .response(status: 404, body: Data()) }
     if lock.withLock({ corrupted.contains(name) }) { blob = Data(repeating: 0x42, count: blob.count) }
     var answer: StubReply = .response(status: 200, body: blob)
-    if let header = request.value(forHTTPHeaderField: "Range"), header.hasPrefix("bytes="), header.hasSuffix("-"),
-      let start = Int(header.dropFirst(6).dropLast()), start < blob.count
-    {
-      answer = .response(
-        status: 206, body: Data(blob[start...]),
-        headers: ["Content-Range": "bytes \(start)-\(blob.count - 1)/\(blob.count)"])
+    if let start = rangeStart(of: request), start < blob.count {
+      answer = rangedReply(blob: blob, start: start)
     }
     if let held { return .held(held, then: answer) }
     return answer
@@ -206,7 +188,7 @@ private struct Rig {
   func installOldVersion() throws {
     for name in ["a", "b", "c"] { try write("data/\(name).bin", ldiffFixture("\(name).old")) }
     try write("data/d.bin", world.contents["data/d.bin"]!)
-    try write("old/gone.bin", bytes(seed: 60, count: 500))
+    try write("old/gone.bin", syntheticBytes(seed: 60, count: 500))
   }
 
   func write(_ path: String, _ data: Data) throws {
@@ -244,21 +226,6 @@ private struct Rig {
   var requests: [URLRequest] { StubURLProtocol.seen(id) }
   var ldiffRequests: [URLRequest] { requests.filter { $0.url?.path.hasPrefix("/diffs/") == true } }
   var chunkRequests: [URLRequest] { requests.filter { $0.url?.path.hasPrefix("/chunks/") == true } }
-
-  /// Regular files below `directory` with their sizes.
-  func files(in directory: URL) -> [String: Int] {
-    var result: [String: Int] = [:]
-    let base = directory.standardizedFileURL.path
-    guard let walker = FileManager.default.enumerator(at: directory, includingPropertiesForKeys: [.isRegularFileKey, .fileSizeKey])
-    else { return result }
-    for case let url as URL in walker {
-      let values = try? url.resourceValues(forKeys: [.isRegularFileKey, .fileSizeKey])
-      if values?.isRegularFile == true {
-        result[String(url.standardizedFileURL.path.dropFirst(base.count + 1))] = values?.fileSize ?? 0
-      }
-    }
-    return result
-  }
 }
 
 private func withRig(_ body: (Rig) async throws -> Void) async throws {
@@ -417,7 +384,7 @@ private func withRig(_ body: (Rig) async throws -> Void) async throws {
     try await withRig { rig in
       try rig.installOldVersion()
       // Same size as the old a.bin, different content: the patch would give garbage.
-      try rig.write("data/a.bin", bytes(seed: 999, count: Int(rig.world.meta.entry("a").oldSize)))
+      try rig.write("data/a.bin", syntheticBytes(seed: 999, count: Int(rig.world.meta.entry("a").oldSize)))
       let plan = try await rig.plan()
       #expect(!plan.patches.map(\.file.path).contains("data/a.bin"))
       #expect(plan.downloads.map(\.path).contains("data/a.bin"))
@@ -532,7 +499,7 @@ private func withRig(_ body: (Rig) async throws -> Void) async throws {
       // The new file came as chunks; the patched ones did not.
       #expect(rig.chunkRequests.map { $0.url!.lastPathComponent }.allSatisfy { $0.contains("new_e.bin") })
       // UPG-012
-      let leftovers = rig.files(in: rig.temp)
+      let leftovers = regularFiles(in: rig.temp)
       #expect(leftovers.keys.allSatisfy { !$0.contains(World.ldiffID) }, "\(leftovers.keys)")
       #expect(!leftovers.keys.contains { $0.hasSuffix(".patched") })
     }
@@ -704,7 +671,7 @@ private func withRig(_ body: (Rig) async throws -> Void) async throws {
           progress: { _ in })
       }
       #expect(rig.read("data/a.bin") == (try ldiffFixture("a.old")), "the original must survive")
-      #expect(!rig.files(in: rig.temp).keys.contains { $0.hasSuffix(".patched") })
+      #expect(!regularFiles(in: rig.temp).keys.contains { $0.hasSuffix(".patched") })
     }
   }
 
@@ -713,7 +680,7 @@ private func withRig(_ body: (Rig) async throws -> Void) async throws {
       try rig.installOldVersion()
       let plan = try await rig.plan()
       // Between planning and patching the file changes (same size): it must not be patched.
-      try rig.write("data/b.bin", bytes(seed: 77, count: Int(rig.world.meta.entry("b").oldSize)))
+      try rig.write("data/b.bin", syntheticBytes(seed: 77, count: Int(rig.world.meta.entry("b").oldSize)))
       try await rig.update(plan)
       #expect(rig.read("data/b.bin") == rig.world.contents["data/b.bin"])
       #expect(rig.chunkRequests.contains { $0.url!.lastPathComponent.contains("data_b.bin") })
@@ -841,8 +808,8 @@ private func withRig(_ body: (Rig) async throws -> Void) async throws {
 
   private func snapshot(_ rig: Rig) throws -> [String: Int] {
     var result: [String: Int] = [:]
-    for (path, size) in rig.files(in: rig.game) { result["game/" + path] = size }
-    for (path, size) in rig.files(in: rig.temp) { result["tmp/" + path] = size }
+    for (path, size) in regularFiles(in: rig.game) { result["game/" + path] = size }
+    for (path, size) in regularFiles(in: rig.temp) { result["tmp/" + path] = size }
     return result
   }
 }
@@ -852,7 +819,7 @@ private func withRig(_ body: (Rig) async throws -> Void) async throws {
 @Suite(.timeLimit(.minutes(1))) struct SophonPredownloadTests {
   private func snapshotGame(_ rig: Rig) -> [String: Data] {
     var result: [String: Data] = [:]
-    for path in rig.files(in: rig.game).keys { result[path] = rig.read(path) }
+    for path in regularFiles(in: rig.game).keys { result[path] = rig.read(path) }
     return result
   }
 
@@ -863,7 +830,7 @@ private func withRig(_ body: (Rig) async throws -> Void) async throws {
       let plan = try await rig.plan()
       try await rig.predownload(plan)
       #expect(snapshotGame(rig) == before, "the game directory must not change")
-      let cached = rig.files(in: rig.temp)
+      let cached = regularFiles(in: rig.temp)
       #expect(cached["ldiff/\(World.ldiffID)"] == Int(rig.world.meta.ldiffSize))
       let newChunks = rig.world.chunkFiles.first { $0.path == "new/e.bin" }!.chunks
       for chunk in newChunks {

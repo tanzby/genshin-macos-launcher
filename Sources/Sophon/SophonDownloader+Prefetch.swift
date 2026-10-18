@@ -24,8 +24,8 @@ extension SophonDownloader {
     let fetcher = ResourceFetcher(session: session)
     let config = configuration
     try await runBounded(targets, limit: configuration.concurrency) { item in
-      if try await Offload.run({ try Self.isIntact(item.file, at: item.destination, cancelled: $0) }) {
-        reporter.add(SophonManifestValidator.compressedSize(of: item.file))
+      if try await Offload.run({ try MD5Hasher.matches(item.destination, size: item.file.size, md5: item.file.md5, cancelled: $0) }) {
+        reporter.add(item.file.compressedSize)
         return
       }
       let directory = SophonDownloaderLayout.chunkDirectory(for: item.file.path, in: worker.tempDirectory)
@@ -43,8 +43,7 @@ extension SophonDownloader {
           // the right length but the wrong content must be caught here, not during the real update.
           guard !chunk.compressedMD5.isEmpty else { return }
           let intact = try await Offload.run {
-            try MD5Hasher.hex(ofFileAt: cached, cancelled: $0).caseInsensitiveCompare(chunk.compressedMD5)
-              == .orderedSame
+            try MD5Hasher.hex(ofFileAt: cached, cancelled: $0).isSameDigest(as: chunk.compressedMD5)
           }
           if !intact {
             try? FileManager.default.removeItem(at: cached)

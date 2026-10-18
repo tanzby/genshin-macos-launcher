@@ -176,9 +176,10 @@ private func writeScript(_ body: String, named name: String = "tool.sh", in dir:
 }
 
 @Suite("WIN-018 SystemProcessRunner cancellation", .timeLimit(.minutes(1))) struct SystemProcessRunnerCancellationTests {
-  /// A loader that ignores SIGTERM, like a stuck Wine.
+  /// A loader that ignores SIGTERM, like a stuck Wine. It creates the file named by its first argument, if any,
+  /// once the trap is set.
   private func stubbornScript(in dir: URL) throws -> URL {
-    try writeScript("trap '' TERM\nexec sleep 30", in: dir)
+    try writeScript("trap '' TERM\n[ -n \"$1\" ] && : > \"$1\"\nexec sleep 30", in: dir)
   }
 
   @Test func WIN_018_aTaskCancelledBeforeTheProcessStartsStillKillsATermIgnoringProcess() async throws {
@@ -216,11 +217,12 @@ private func writeScript(_ body: String, named name: String = "tool.sh", in dir:
     let runner = SystemProcessRunner(allowedRoots: [dir], terminationGrace: 0.3)
     let started = Date()
 
+    let ready = dir.appending(path: "ready")
     let task = Task {
       try await runner.runLogging(
-        script, arguments: [], environment: [:], workingDirectory: nil, logFile: dir.appending(path: "g.log"))
+        script, arguments: [ready.path], environment: [:], workingDirectory: nil, logFile: dir.appending(path: "g.log"))
     }
-    try await Task.sleep(for: .milliseconds(300))
+    #expect(await pollUntil { FileManager.default.fileExists(atPath: ready.path) })
     task.cancel()
     let code = try await task.value
 

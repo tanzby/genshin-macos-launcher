@@ -34,13 +34,7 @@ private let noop: @Sendable () -> Void = {}
     #expect(rig.launcher.recipes.isEmpty, "opening a prompt must not launch the game")
   }
 
-  private func installedRig() -> ClientRig {
-    let rig = ClientRig()
-    rig.install("5.6.0")
-    return rig
-  }
-
-  private func installedRig(distinctBackendLaunchers: Bool) -> ClientRig {
+  private func installedRig(distinctBackendLaunchers: Bool = false) -> ClientRig {
     let rig = ClientRig(distinctBackendLaunchers: distinctBackendLaunchers)
     rig.install("5.6.0")
     return rig
@@ -156,9 +150,9 @@ private let noop: @Sendable () -> Void = {}
   @Test func LCH_036_onStartedIsForwardedFromTheSession() async throws {
     let rig = installedRig()
     rig.launcher.script(.runUntilCancelled)
-    let calls = Counter()
+    let calls = Locked(0)
 
-    let task = Task { try await rig.client.launch(.init(gameDirectory: rig.game), onStarted: { calls.increment() }) }
+    let task = Task { try await rig.client.launch(.init(gameDirectory: rig.game), onStarted: { calls.mutate { $0 += 1 } }) }
     #expect(await pollUntil { rig.launcher.started.withLock { $0 } > 0 })
     task.cancel()
     _ = await task.result
@@ -179,13 +173,6 @@ private let noop: @Sendable () -> Void = {}
     #expect(rig.launcher.cleanupFinished)
     #expect(throws: CancellationError.self) { try result.get() }
   }
-}
-
-final class Counter: @unchecked Sendable {
-  private let lock = NSLock()
-  private var count = 0
-  func increment() { lock.withLock { count += 1 } }
-  var value: Int { lock.withLock { count } }
 }
 
 @Suite struct ClientErrorMappingTests {

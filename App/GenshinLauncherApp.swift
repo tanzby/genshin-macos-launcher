@@ -133,7 +133,7 @@ struct GenshinLauncherApp: App {
 
     Settings {
       if let runtime {
-        SettingsView(dataDirectory: runtime.dataDirectory.root, updater: updater)
+        SettingsView(dataDirectory: runtime.dataDirectory, updater: updater)
           .environment(runtime.controller)
       }
     }

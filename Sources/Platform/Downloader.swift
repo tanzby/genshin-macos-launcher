@@ -231,13 +231,13 @@ private final class StreamingDelegate: NSObject, URLSessionDataDelegate, @unchec
   func urlSession(_ session: URLSession, dataTask: URLSessionDataTask, didReceive data: Data) {
     do {
       try handle?.write(contentsOf: data)
-      lock.withLock { hasher?.update(data: data) }
     } catch {
       lock.withLock { failure = failure ?? error }
       dataTask.cancel()
       return
     }
     let due = lock.withLock { () -> DownloadProgress? in
+      hasher?.update(data: data)
       completed += Int64(data.count)
       let now = ContinuousClock.now
       if let lastReport, now - lastReport < Self.reportInterval { return nil }

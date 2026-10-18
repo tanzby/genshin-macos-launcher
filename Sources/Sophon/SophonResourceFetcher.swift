@@ -55,9 +55,7 @@ struct ResourceFetcher: Sendable {
           // A body longer than the manifest says is not this chunk: stop before it fills the disk.
           written += Int64(block.count)
           guard written <= expected else {
-            try? handle?.close()
-            handle = nil
-            try? fileManager.removeItem(at: cached)
+            // The catch below closes and removes the file.
             reporter.set(name, 0)
             throw SophonError.checksumMismatch(path: name)
           }
@@ -101,14 +99,12 @@ final class ChunkStream: NSObject, URLSessionDataDelegate, @unchecked Sendable {
   private let task: URLSessionDataTask
 
   private let expected: Int64
-  private let have: Int64
   private var byteLimit: Int64
   private let name: String
   private var received: Int64 = 0
 
   init(session: URLSession, request: URLRequest, expected: Int64, have: Int64, name: String) {
     self.expected = expected
-    self.have = have
     byteLimit = expected - have
     self.name = name
     (events, continuation) = AsyncThrowingStream.makeStream()

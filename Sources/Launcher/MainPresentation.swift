@@ -10,14 +10,9 @@ package struct MainSnapshot: Sendable, Equatable {
   public var lastError: LauncherError?
   public var status: GameStatus?
   package var isOnline: Bool
-  /// Why the launcher would refuse each action right now (`LauncherModel.refusal(for:)`); nil = allowed.
-  /// The presentation only renders these; it decides nothing itself.
-  package var launchRefusal: LauncherError?
-  package var installRefusal: LauncherError?
-  package var updateRefusal: LauncherError?
-  package var resumeRefusal: LauncherError?
-  package var repairRefusal: LauncherError?
-  package var preDownloadRefusal: LauncherError?
+  /// Why the launcher would refuse an action right now (`LauncherModel.refusal(for:)`); an action it would
+  /// allow has no entry. The presentation only renders these; it decides nothing itself.
+  package var refusals: [LauncherAction: LauncherError]
   /// The first status query has finished (successfully or not). Before that "offline" is not yet known.
   package var hasLoaded: Bool
   /// Wine is known to need (re)installing; nothing else can run until it is prepared.
@@ -26,9 +21,7 @@ package struct MainSnapshot: Sendable, Equatable {
   public init(
     phase: LauncherPhase, isPreDownloading: Bool, isPausing: Bool, progress: JobProgress?,
     pendingJob: PendingJob?, lastError: LauncherError?, status: GameStatus?, isOnline: Bool,
-    launchRefusal: LauncherError? = nil, installRefusal: LauncherError? = nil, updateRefusal: LauncherError? = nil,
-    resumeRefusal: LauncherError? = nil, repairRefusal: LauncherError? = nil,
-    preDownloadRefusal: LauncherError? = nil, hasLoaded: Bool = true, wineNotReady: Bool = false
+    refusals: [LauncherAction: LauncherError] = [:], hasLoaded: Bool = true, wineNotReady: Bool = false
   ) {
     self.phase = phase
     self.isPreDownloading = isPreDownloading
@@ -38,12 +31,7 @@ package struct MainSnapshot: Sendable, Equatable {
     self.lastError = lastError
     self.status = status
     self.isOnline = isOnline
-    self.launchRefusal = launchRefusal
-    self.installRefusal = installRefusal
-    self.updateRefusal = updateRefusal
-    self.resumeRefusal = resumeRefusal
-    self.repairRefusal = repairRefusal
-    self.preDownloadRefusal = preDownloadRefusal
+    self.refusals = refusals
     self.hasLoaded = hasLoaded
     self.wineNotReady = wineNotReady
   }
@@ -92,13 +80,13 @@ public struct MainPresentation: Sendable, Equatable {
 
   package static func derive(_ s: MainSnapshot) -> MainPresentation {
     let noBlockingJob = s.pendingJob?.blocksLaunch != true
-    let repairable = s.repairRefusal == nil && noBlockingJob
+    let repairable = s.refusals[.start(.repair)] == nil && noBlockingJob
 
     let offline = s.hasLoaded && !s.isOnline
     func make(_ button: PrimaryButton, _ enabled: Bool, _ status: StatusLine) -> MainPresentation {
       MainPresentation(
         button: button, buttonEnabled: enabled, status: status, canRepair: repairable,
-        canPreDownload: s.preDownloadRefusal == nil,
+        canPreDownload: s.refusals[.start(.preDownload)] == nil,
         activePreDownload: s.isPreDownloading ? ActivePreDownload(progress: s.progress, isPausing: s.isPausing) : nil)
     }
     // Download jobs and Wine preparation are paused by the same button.
@@ -122,7 +110,7 @@ public struct MainPresentation: Sendable, Equatable {
     }
 
     if let pending = s.pendingJob, pending.blocksLaunch {
-      let enabled = s.resumeRefusal == nil
+      let enabled = s.refusals[.resume] == nil
       if let error = s.lastError { return make(.retry, enabled, .error(error)) }
       if offline { return make(.resume, enabled, .offline) }
       return make(.resume, enabled, .job(pending.kind, nil, paused: true))
@@ -138,15 +126,15 @@ public struct MainPresentation: Sendable, Equatable {
     let enabled =
       switch button {
       // No folder yet is answered by the picker the button opens (`MainController.needsGameDirectory`).
-      case .install: s.installRefusal == nil || s.installRefusal == .noGameDirectory
-      case .update: s.updateRefusal == nil
-      default: s.launchRefusal == nil
+      case .install: s.refusals[.start(.install)] == nil || s.refusals[.start(.install)] == .noGameDirectory
+      case .update: s.refusals[.start(.update)] == nil
+      default: s.refusals[.launch] == nil
       }
 
     let status: StatusLine
     if let error = s.lastError {
       status = .error(error)
-    } else if base == .launch && s.launchRefusal == .hostsRequired {
+    } else if base == .launch && s.refusals[.launch] == .hostsRequired {
       status = .hostsRequired
     } else if offline {
       status = .offline

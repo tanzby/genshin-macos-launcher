@@ -32,7 +32,7 @@ enum SophonManifestValidator {
       // macOS volumes are case-insensitive by default, so `A.bin` and `a.bin` are one file too.
       let key = destination.standardizedFileURL.path.lowercased()
       if let existing = seen[key] {
-        guard existing.caseInsensitiveCompare(file.md5) == .orderedSame else {
+        guard existing.isSameDigest(as: file.md5) else {
           throw SophonError.invalidManifest("conflicting entries for \(file.path)")
         }
       } else {
@@ -54,9 +54,5 @@ enum SophonManifestValidator {
 
   static func chunkBase(of ref: SophonManifestRef) throws -> String {
     try SophonDownloaderLayout.httpsBase(ref.chunkURLPrefix)
-  }
-
-  static func compressedSize(of file: SophonFile) -> Int64 {
-    file.chunks.reduce(Int64(0)) { $0 + Int64($1.compressedSize) }
   }
 }

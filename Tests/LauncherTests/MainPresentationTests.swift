@@ -9,7 +9,7 @@ import Wine
 private func snapshot(
   phase: LauncherPhase = .idle, preDownloading: Bool = false, pausing: Bool = false,
   progress: JobProgress? = nil, pending: PendingJob? = nil, error: LauncherError? = nil,
-  status: GameStatus? = GameStatus(localVersion: "5.0.0", remoteVersion: "5.0.0"),
+  status: GameStatus? = GameStatus.installed,
   online: Bool = true, launchRefusal: LauncherError? = nil, repairRefusal: LauncherError? = nil,
   preDownloadRefusal: LauncherError? = nil
 ) -> MainSnapshot {
@@ -18,8 +18,10 @@ private func snapshot(
   return MainSnapshot(
     phase: phase, isPreDownloading: preDownloading, isPausing: pausing, progress: progress,
     pendingJob: pending, lastError: error, status: status, isOnline: online,
-    launchRefusal: launchRefusal, installRefusal: downloadRefusal, updateRefusal: downloadRefusal,
-    resumeRefusal: downloadRefusal, repairRefusal: repairRefusal, preDownloadRefusal: preDownloadRefusal)
+    refusals: [
+      .launch: launchRefusal, .start(.install): downloadRefusal, .start(.update): downloadRefusal,
+      .resume: downloadRefusal, .start(.repair): repairRefusal, .start(.preDownload): preDownloadRefusal,
+    ].compactMapValues { $0 })
 }
 
 @Suite struct APP_017_MainButtonTests {

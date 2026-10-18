@@ -13,12 +13,11 @@ package struct GameSession: Sendable {
   let layout: WineLayout
   let runner: any ProcessRunning
   let processes: any ProcessTable
-  let launchServices: any LaunchServicesRegistering
-  let helpers: GameHostHelpers?
   let timing: LaunchTiming
   let commands: WinePrefixCommands
   let cleanup: PrefixCleanup
   let mutations: LaunchMutations
+  let hostInstaller: GameHostInstaller
 
   package init(
     layout: WineLayout,
@@ -31,12 +30,11 @@ package struct GameSession: Sendable {
     self.layout = layout
     self.runner = runner
     self.processes = processes
-    self.launchServices = launchServices
-    self.helpers = helpers
     self.timing = timing
     commands = WinePrefixCommands(layout: layout, runner: runner)
-    cleanup = PrefixCleanup(layout: layout, commands: commands, processes: processes)
-    mutations = LaunchMutations(layout: layout, commands: commands)
+    cleanup = PrefixCleanup(commands: commands, processes: processes)
+    mutations = LaunchMutations(commands: commands)
+    hostInstaller = GameHostInstaller(layout: layout, runner: runner, launchServices: launchServices, helpers: helpers)
   }
 
   /// Runs the game and restores everything afterwards. Never throws: the outcome is the result.
@@ -97,9 +95,7 @@ package struct GameSession: Sendable {
       // Run it uncancellable: a half-done restore in a cancelled task would still delete the journal.
       await Task { await recover() }.value
       try Task.checkCancellation()
-      let hostEnvironment = await GameHostInstaller(
-        layout: layout, runner: runner, launchServices: launchServices, helpers: helpers
-      ).prepare(for: recipe)
+      let hostEnvironment = await hostInstaller.prepare(for: recipe)
       try Task.checkCancellation()
 
       try await mutations.apply(recipe)

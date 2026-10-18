@@ -1,5 +1,6 @@
 import Foundation
 import Testing
+import TestSupport
 
 @testable import Sophon
 
@@ -18,7 +19,7 @@ private func isError(_ error: (any Error)?, _ expected: SophonError) -> Bool {
 
     #expect(result.error == nil)
     for (path, content) in release.files { #expect(rig.read(path) == content) }
-    #expect(rig.configText?.contains("game_version=5.6.0") == true)
+    #expect(rig.configSays(version: "5.6.0"))
     #expect(try await rig.status().installedVersion == "5.6.0")
     #expect(result.progress.first == .preparing)
     #expect(result.progress.last == .finalizing)
@@ -35,7 +36,7 @@ private func isError(_ error: (any Error)?, _ expected: SophonError) -> Bool {
     #expect(try await rig.status().installedVersion == nil)
     task.cancel()
     _ = await task.value
-    #expect(rig.configText?.contains("game_version=0.0.0") == true)
+    #expect(rig.configSays(version: "0.0.0"))
   }
 
   @Test func INS_015_aCancelledInstallContinuesWhereItStoppedAndFinishes() async throws {
@@ -43,7 +44,7 @@ private func isError(_ error: (any Error)?, _ expected: SophonError) -> Bool {
     let rig = SophonRig(main: release)
     rig.cdn.chunkDelay = .milliseconds(150)
     let first = Task { await rig.run(.install) }
-    try await Task.sleep(for: .milliseconds(200))
+    #expect(await pollUntil { !rig.cdn.chunkRequests().isEmpty })
     first.cancel()
     _ = await first.value
     rig.cdn.chunkDelay = .zero
@@ -52,7 +53,7 @@ private func isError(_ error: (any Error)?, _ expected: SophonError) -> Bool {
 
     #expect(second.error == nil)
     for (path, content) in release.files { #expect(rig.read(path) == content) }
-    #expect(rig.configText?.contains("game_version=5.6.0") == true)
+    #expect(rig.configSays(version: "5.6.0"))
   }
 
   @Test func INS_005_installRefusesADirectoryThatHoldsAnotherInstallAndChangesNothing() async throws {
@@ -170,13 +171,13 @@ private func isError(_ error: (any Error)?, _ expected: SophonError) -> Bool {
     rig.cdn.chunkDelay = .milliseconds(300)
 
     let task = Task { await rig.run(.update) }
-    try await Task.sleep(for: .milliseconds(100))
-    #expect(rig.configText?.contains("game_version=5.5.0") == true)
+    #expect(await pollUntil { !rig.cdn.chunkRequests().isEmpty })
+    #expect(rig.configSays(version: "5.5.0"))
     rig.cdn.chunkDelay = .zero
     let result = await task.value
 
     #expect(result.error == nil)
-    #expect(rig.configText?.contains("game_version=5.6.0") == true)
+    #expect(rig.configSays(version: "5.6.0"))
   }
 
   @Test func UPG_011_aConfigIniThatCannotBeRewrittenDoesNotFailTheUpdate() async throws {
@@ -217,7 +218,7 @@ private func isError(_ error: (any Error)?, _ expected: SophonError) -> Bool {
 
     #expect(result.error == nil)
     for (path, content) in new.files { #expect(rig.read(path) == content) }
-    #expect(rig.configText?.contains("game_version=5.6.0") == true)
+    #expect(rig.configSays(version: "5.6.0"))
     #expect(!rig.cdn.requests.contains { $0.contains("getPatchBuild") })
   }
 
@@ -288,7 +289,7 @@ private func isError(_ error: (any Error)?, _ expected: SophonError) -> Bool {
     #expect(result.error == nil)
     #expect(rig.read("fresh.bin") == pre.files["fresh.bin"])
     #expect(rig.cdn.chunkRequests().count == fetchedByPreDownload)
-    #expect(rig.configText?.contains("game_version=5.7.0") == true)
+    #expect(rig.configSays(version: "5.7.0"))
   }
 
   @Test func PRE_002_preDownloadWithoutAPreDownloadBranchIsAnError() async throws {

@@ -68,30 +68,16 @@ final class FakeWinePreparer: WinePreparing, Sendable {
 
   /// Completes the install successfully; `status()` reports `.ready` afterwards.
   func finish(install index: Int) {
-    let continuation = state.withLock { s -> CheckedContinuation<Void, Error>? in
-      s.status = .ready
-      s.backendStatuses[s.installs[index].backend] = .ready
-      s.log.append("stopped:\(index)")
-      return s.installs[index].continuation.take()
-    }
-    continuation?.resume()
+    stop(index, with: .success(()), becomesReady: true)
   }
 
   func fail(install index: Int, throwing error: any Error) {
-    let continuation = state.withLock { s -> CheckedContinuation<Void, Error>? in
-      s.log.append("stopped:\(index)")
-      return s.installs[index].continuation.take()
-    }
-    continuation?.resume(throwing: error)
+    stop(index, with: .failure(error))
   }
 
   /// Lets a held, cancelled install finish stopping.
   func releaseCancelled(install index: Int) {
-    let continuation = state.withLock { s -> CheckedContinuation<Void, Error>? in
-      s.log.append("stopped:\(index)")
-      return s.installs[index].continuation.take()
-    }
-    continuation?.resume(throwing: CancellationError())
+    stop(index, with: .failure(CancellationError()))
   }
 
   // MARK: WinePreparing
@@ -153,13 +139,26 @@ final class FakeWinePreparer: WinePreparing, Sendable {
     }
   }
 
+  /// Cancellation path: ends the install only if it is still suspended.
   private func stop(_ index: Int) {
+    stop(index, with: .failure(CancellationError()), onlyIfSuspended: true)
+  }
+
+  /// Ends install `index` the way a real one would: logs "stopped:N" and resumes its suspended call once.
+  private func stop(
+    _ index: Int, with result: Result<Void, any Error>, becomesReady: Bool = false, onlyIfSuspended: Bool = false
+  ) {
     let continuation = state.withLock { s -> CheckedContinuation<Void, Error>? in
-      guard let continuation = s.installs[index].continuation.take() else { return nil }
+      let continuation = s.installs[index].continuation.take()
+      if continuation == nil && onlyIfSuspended { return nil }
+      if becomesReady {
+        s.status = .ready
+        s.backendStatuses[s.installs[index].backend] = .ready
+      }
       s.log.append("stopped:\(index)")
       return continuation
     }
-    continuation?.resume(throwing: CancellationError())
+    continuation?.resume(with: result)
   }
 }
 

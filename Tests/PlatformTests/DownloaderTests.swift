@@ -1,4 +1,3 @@
-import CryptoKit
 import Foundation
 import Testing
 import TestSupport
@@ -42,17 +41,6 @@ private final class DownloaderStubProtocol: URLProtocol, @unchecked Sendable {
   }
 
   override func stopLoading() {}
-}
-
-private final class DownloaderProgressBox: @unchecked Sendable {
-  private let lock = NSLock()
-  private var items: [DownloadProgress] = []
-  func add(_ p: DownloadProgress) { lock.withLock { items.append(p) } }
-  var all: [DownloadProgress] { lock.withLock { items } }
-}
-
-private func downloaderSHA(_ data: Data) -> String {
-  SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
 }
 
 private func makeDownloader() -> Downloader {
@@ -105,9 +93,9 @@ private func withDownloaderFixture(
   @Test("WIN-007 reports growing progress with total from Content-Length")
   func reportsProgress() async throws {
     try await withDownloaderFixture { downloader, url, body, dir in
-      let box = DownloaderProgressBox()
-      try await downloader.download(from: url, to: dir.appending(path: "out.bin"), sha256: nil) { box.add($0) }
-      let all = box.all
+      let progress = Locked<[DownloadProgress]>([])
+      try await downloader.download(from: url, to: dir.appending(path: "out.bin"), sha256: nil) { report in progress.mutate { $0.append(report) } }
+      let all = progress.value
       #expect(!all.isEmpty)
       #expect(all.allSatisfy { $0.total == Int64(body.count) })
       #expect(zip(all, all.dropFirst()).allSatisfy { $0.completed <= $1.completed })
@@ -118,10 +106,10 @@ private func withDownloaderFixture(
   @Test("WIN-007 reports total -1 when the server announces no length")
   func unknownLength() async throws {
     try await withDownloaderFixture(includeLength: false) { downloader, url, _, dir in
-      let box = DownloaderProgressBox()
-      try await downloader.download(from: url, to: dir.appending(path: "out.bin"), sha256: nil) { box.add($0) }
-      #expect(!box.all.isEmpty)
-      #expect(box.all.allSatisfy { $0.total == -1 })
+      let progress = Locked<[DownloadProgress]>([])
+      try await downloader.download(from: url, to: dir.appending(path: "out.bin"), sha256: nil) { report in progress.mutate { $0.append(report) } }
+      #expect(!progress.value.isEmpty)
+      #expect(progress.value.allSatisfy { $0.total == -1 })
     }
   }
 
@@ -140,7 +128,7 @@ private func withDownloaderFixture(
   func checksumPasses() async throws {
     try await withDownloaderFixture { downloader, url, body, dir in
       let destination = dir.appending(path: "out.bin")
-      try await downloader.download(from: url, to: destination, sha256: downloaderSHA(body)) { _ in }
+      try await downloader.download(from: url, to: destination, sha256: sha256Hex(body)) { _ in }
       #expect(try Data(contentsOf: destination) == body)
     }
   }
@@ -150,7 +138,7 @@ private func withDownloaderFixture(
     try await withDownloaderFixture { downloader, url, body, dir in
       let destination = dir.appending(path: "sub/out.bin")
       let wrong = String(repeating: "0", count: 64)
-      await #expect(throws: DownloadError.checksumMismatch(expected: wrong, actual: downloaderSHA(body))) {
+      await #expect(throws: DownloadError.checksumMismatch(expected: wrong, actual: sha256Hex(body))) {
         try await downloader.download(from: url, to: destination, sha256: wrong) { _ in }
       }
       #expect(!FileManager.default.fileExists(atPath: destination.path))

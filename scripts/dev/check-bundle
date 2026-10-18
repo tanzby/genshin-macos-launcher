@@ -17,9 +17,7 @@ done
 # DXMT (scripts/build-dxmt) is checked when it was built into the bundle or REQUIRE_DXMT=1 (the release build).
 dxmt="$app/Contents/Resources/dxmt"
 if [ -d "$dxmt" ] || [ "${REQUIRE_DXMT:-0}" = 1 ]; then
-  for f in $(grep -v '^#' scripts/dxmt-files); do
-    [ -s "$dxmt/$f" ] || { echo "missing: dxmt/$f"; fail=1; }
-  done
+  scripts/dev/check-dxmt "$dxmt" || fail=1
 fi
 # GPTK4 is copied from build/gptk4 by project.yml when present. Release builds set REQUIRE_GPTK4=1.
 gptk4="$app/Contents/Resources/gptk4"

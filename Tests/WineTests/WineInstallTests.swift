@@ -47,7 +47,7 @@ private let thumbprint = "F09065E2D57F005BBD975DDCF9EB63F570764F17"
       await #expect(throws: DownloadError.self) { try await h.install() }
       #expect(!wineExists(h.layout.runtimeDirectory))
       #expect(!wineExists(h.layout.prefixDirectory))
-      #expect(await h.runtime.status() == .needsInstall(.notInstalled))
+      #expect(await h.runtime.status(for: .dxmt) == .needsInstall(.notInstalled))
       #expect(h.runner.wineCalls.isEmpty)
       // The corrupt archive is removed and nothing else was written.
       #expect(try FileManager.default.contentsOfDirectory(atPath: h.root.path).isEmpty)
@@ -60,10 +60,10 @@ private let thumbprint = "F09065E2D57F005BBD975DDCF9EB63F570764F17"
       let h = try await makeInstalledWineHarness(in: dir)
       try h.writeFile("wine/old-sentinel.txt")
       try h.writeFile("wineprefix/login-sentinel.txt")
-      try await h.runtime.reinstall()
+      try await h.runtime.reinstall(.dxmt)
       #expect(!wineExists(h.root.appending(path: "wine/old-sentinel.txt")))
       #expect(wineExists(h.root.appending(path: "wineprefix/login-sentinel.txt")))
-      #expect(await h.runtime.status() == .ready)
+      #expect(await h.runtime.status(for: .dxmt) == .ready)
       #expect(h.downloader.requests.count == 1)  // the verified archive is reused
     }
   }
@@ -78,7 +78,7 @@ private let thumbprint = "F09065E2D57F005BBD975DDCF9EB63F570764F17"
       try await h.install()
       #expect(!wineExists(h.root.appending(path: "wine/stale.txt")))
       #expect(wineExists(h.root.appending(path: "wineprefix/login-sentinel.txt")))
-      #expect(await h.runtime.status() == .ready)
+      #expect(await h.runtime.status(for: .dxmt) == .ready)
     }
   }
 
@@ -108,7 +108,7 @@ private let thumbprint = "F09065E2D57F005BBD975DDCF9EB63F570764F17"
       let h = try await makeInstalledWineHarness(in: dir)
       let downloads = h.downloader.requests.count
       let calls = h.runner.calls.count
-      try await h.runtime.ensureInstalled()
+      try await h.runtime.ensureInstalled(for: .dxmt)
       #expect(h.downloader.requests.count == downloads)
       #expect(h.runner.calls.count == calls)
     }
@@ -123,13 +123,13 @@ private let thumbprint = "F09065E2D57F005BBD975DDCF9EB63F570764F17"
       // Plain Tasks, not `async let`: Xcode 26.6's runtime intermittently traps ("freed pointer was not the
       // last allocation") on the stack-allocated child tasks of an `async let`.
       let runtime = h.runtime
-      let a = Task { try await runtime.ensureInstalled() }
-      let b = Task { try await runtime.ensureInstalled() }
+      let a = Task { try await runtime.ensureInstalled(for: .dxmt) }
+      let b = Task { try await runtime.ensureInstalled(for: .dxmt) }
       try await a.value
       try await b.value
       #expect(h.downloader.count(of: h.fixtures.distribution.url) == 1)
       #expect(h.runner.wineCalls.filter { $0.arguments.first == "wineboot" }.count == 1)
-      #expect(await h.runtime.status() == .ready)
+      #expect(await h.runtime.status(for: .dxmt) == .ready)
     }
   }
 }
@@ -263,7 +263,7 @@ private let thumbprint = "F09065E2D57F005BBD975DDCF9EB63F570764F17"
         Issue.record("unexpected error \(error)")
       }
       #expect(!wineExists(h.layout.stampFile))
-      #expect(await h.runtime.status() == .needsInstall(.interrupted))
+      #expect(await h.runtime.status(for: .dxmt) == .needsInstall(.interrupted))
       #expect(h.runner.wineCalls.map(\.arguments) == [["wineboot", "-u"]])
     }
   }
@@ -368,8 +368,8 @@ private let thumbprint = "F09065E2D57F005BBD975DDCF9EB63F570764F17"
       let h = try await makeInstalledWineHarness(in: dir)
       let before = h.runner.calls
       let filesBefore = wineRelativePaths(under: h.root)
-      _ = await h.runtime.status()
-      try await h.runtime.ensureInstalled()
+      _ = await h.runtime.status(for: .dxmt)
+      try await h.runtime.ensureInstalled(for: .dxmt)
       #expect(h.runner.calls == before)
       #expect(wineRelativePaths(under: h.root) == filesBefore)
     }
@@ -396,7 +396,7 @@ private let thumbprint = "F09065E2D57F005BBD975DDCF9EB63F570764F17"
       let bare = WineRuntime(
         dataDirectory: DataDirectory(root: h.root), distribution: h.fixtures.distribution, dxmt: nil,
         downloader: h.downloader, runner: h.runner)
-      await #expect(throws: WineInstallError.dxmtBundleInvalid) { try await bare.ensureInstalled() }
+      await #expect(throws: WineInstallError.dxmtBundleInvalid) { try await bare.ensureInstalled(for: .dxmt) }
       #expect(h.downloader.requests.isEmpty)
     }
   }
@@ -421,13 +421,13 @@ private let thumbprint = "F09065E2D57F005BBD975DDCF9EB63F570764F17"
       let updated = WineRuntime(
         dataDirectory: DataDirectory(root: h.root), distribution: h.fixtures.distribution, dxmt: bundle,
         downloader: h.downloader, runner: h.runner)
-      #expect(await updated.status() == .needsInstall(.dxmtOutdated))
+      #expect(await updated.status(for: .dxmt) == .needsInstall(.dxmtOutdated))
 
       let collector = WineProgressCollector()
-      try await updated.ensureInstalled(progress: collector.callback)
+      try await updated.ensureInstalled(for: .dxmt, progress: collector.callback)
 
       #expect(collector.collapsed == ["installingDXMT", "finalizing"])
-      #expect(await updated.status() == .ready)
+      #expect(await updated.status(for: .dxmt) == .ready)
       #expect(try h.readStamp() == WineStamp(wineVersion: "test-wine-1", dxmtVersion: "newer123"))
       #expect(try Data(contentsOf: h.layout.windowsLibraryDirectory.appending(path: "d3d11.dll")) == Data("NEWER-d3d11.dll".utf8))
       #expect(try Data(contentsOf: h.layout.unixLibraryDirectory.appending(path: "winemetal.so")) == Data("NEWER-winemetal.so".utf8))
@@ -502,7 +502,7 @@ private let thumbprint = "F09065E2D57F005BBD975DDCF9EB63F570764F17"
     try await withWineTempDirectory { dir in
       let h = try makeWineHarness(in: dir)
       let collector = WineProgressCollector()
-      try await h.runtime.ensureInstalled(progress: collector.callback)
+      try await h.runtime.ensureInstalled(for: .dxmt, progress: collector.callback)
       #expect(
         collector.collapsed == [
           "downloadingWine", "extracting", "configuring", "initializingPrefix", "installingDXMT", "finalizing",

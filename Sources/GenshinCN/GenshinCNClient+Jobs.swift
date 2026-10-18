@@ -10,13 +10,11 @@ extension GenshinCNClient {
     _ job: GameJob, in directory: URL, backend: GraphicsBackend,
     progress: @escaping @Sendable (JobProgress) -> Void
   ) async throws {
-    do {
+    try await Self.mapping {
       // Paused before it began: do not touch the disk at all.
       try Task.checkCancellation()
       try await recoverIfGameFilesAreTouched(by: job, backend: backend)
       try await sophon.run(Self.sophonJob(job), in: directory) { progress(Self.jobProgress($0)) }
-    } catch {
-      throw Self.map(error)
     }
   }
 
@@ -35,11 +33,7 @@ extension GenshinCNClient {
   }
 
   public func requiredDiskSpace(for job: GameJob, in directory: URL) async throws -> Int64 {
-    do {
-      return try await sophon.requiredDiskSpace(for: Self.sophonJob(job), in: directory)
-    } catch {
-      throw Self.map(error)
-    }
+    try await Self.mapping { try await sophon.requiredDiskSpace(for: Self.sophonJob(job), in: directory) }
   }
 
   static func sophonJob(_ job: GameJob) -> SophonJob {

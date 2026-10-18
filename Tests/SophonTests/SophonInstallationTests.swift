@@ -22,10 +22,6 @@ private func makeGame(
   return root
 }
 
-private func iniWith(_ version: String) -> String {
-  "[General]\r\nchannel=1\r\ncps=mihoyo\r\ngame_version=\(version)\r\nsdk_version=\r\nsub_channel=1\r\n"
-}
-
 @Suite struct SophonInstallationVersionTests {
   @Test func UPG_005_versionComesFromGlobalGameManagersWhenConfigIsMissing() throws {
     let game = try makeGame()

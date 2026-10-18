@@ -33,7 +33,7 @@ check_link lib/external/D3DMetal.framework/D3DMetal Versions/Current/D3DMetal
 check_link lib/external/D3DMetal.framework/Resources Versions/Current/Resources
 check_link lib/external/D3DMetal.framework/Versions/Current A
 # Every Unix bridge in the manifest is a link to libd3dshared.
-for path in $(grep '^lib/wine/x86_64-unix/.*\.so$' "$(dirname "$0")/../gptk4-files"); do
+for path in $(grep '^lib/wine/x86_64-unix/.*\.so$' "$manifest"); do
   check_link "$path" ../../external/libd3dshared.dylib
 done
 

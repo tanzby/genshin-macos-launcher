@@ -20,7 +20,7 @@ private final class Harness {
   let hosts: FakeHosts
 
   init(
-    wine wineStatus: WineStatus = .ready, game: GameStatus = GameStatus(localVersion: "5.0.0", remoteVersion: "5.0.0"),
+    wine wineStatus: WineStatus = .ready, game: GameStatus = GameStatus.installed,
     hosts: FakeHosts = FakeHosts(.current)
   ) {
     self.hosts = hosts
@@ -43,7 +43,20 @@ private final class Harness {
 
   func autoLaunch(allowDownload: Bool = true) -> AutoLaunch {
     AutoLaunch(
-      model: model, hosts: hosts, log: log, pollInterval: .milliseconds(5), progressInterval: .milliseconds(5), allowDownload: allowDownload)
+      model: model, hosts: hosts, log: log, progressInterval: .milliseconds(5), allowDownload: allowDownload)
+  }
+
+  /// Starts a run in the background.
+  func startRun(allowDownload: Bool = true) -> Task<AutoLaunch.Result, Never> {
+    let driver = autoLaunch(allowDownload: allowDownload)
+    return Task { @MainActor in await driver.run() }
+  }
+
+  /// Waits until the fake is inside `launch`, reports the game as started, then ends it with `outcome`.
+  func completeLaunch(_ outcome: LaunchOutcome = .exited) async throws {
+    try await fake.nextLaunch()
+    fake.fireStarted()
+    fake.finishLaunch(outcome)
   }
 }
 
@@ -114,8 +127,7 @@ private final class Harness {
 
   @Test func APP_020_launchesAndReportsOkWhenTheGameExits() async throws {
     let h = Harness()
-    let driver = h.autoLaunch()
-    let run = Task { @MainActor in await driver.run() }
+    let run = h.startRun()
     try await h.fake.nextLaunch()
     h.fake.fireStarted()
     #expect(await h.waitForLine("autolaunch: phase=running"))
@@ -127,10 +139,8 @@ private final class Harness {
 
   @Test func APP_020_aMissingHostsBlocklistIsAppliedBeforeLaunching() async throws {
     let h = Harness(hosts: FakeHosts(.missing))
-    let run = Task { @MainActor in await h.autoLaunch().run() }
-    try await h.fake.nextLaunch()
-    h.fake.fireStarted()
-    h.fake.finishLaunch(.exited)
+    let run = h.startRun()
+    try await h.completeLaunch()
     #expect(await run.value == .ok)
     #expect(h.hosts.applyCalls == 1)
     #expect(h.lines.contains { $0.hasPrefix("autolaunch: hosts blocklist missing") })
@@ -138,10 +148,8 @@ private final class Harness {
 
   @Test func APP_020_aBlocklistThatIsInPlaceIsNotAppliedAgain() async throws {
     let h = Harness()
-    let run = Task { @MainActor in await h.autoLaunch().run() }
-    try await h.fake.nextLaunch()
-    h.fake.fireStarted()
-    h.fake.finishLaunch(.exited)
+    let run = h.startRun()
+    try await h.completeLaunch()
     #expect(await run.value == .ok)
     #expect(h.hosts.applyCalls == 0)
   }
@@ -157,11 +165,8 @@ private final class Harness {
 
   @Test func APP_020_failedLaunchReportsTheReason() async throws {
     let h = Harness()
-    let driver = h.autoLaunch()
-    let run = Task { @MainActor in await driver.run() }
-    try await h.fake.nextLaunch()
-    h.fake.fireStarted()
-    h.fake.finishLaunch(.failedToLaunch)
+    let run = h.startRun()
+    try await h.completeLaunch(.failedToLaunch)
     let result = await run.value
     #expect(result == .failed("game failedToLaunch"))
     #expect(h.lines.last == "autolaunch: result=failed reason=game failedToLaunch")
@@ -169,21 +174,17 @@ private final class Harness {
 
   @Test func APP_020_preparesWineBeforeLaunching() async throws {
     let h = Harness(wine: .needsInstall(.notInstalled))
-    let driver = h.autoLaunch()
-    let run = Task { @MainActor in await driver.run() }
+    let run = h.startRun()
     let install = try await h.wine.nextInstall()
     #expect(await h.waitForLine("autolaunch: phase=preparingWine"))
     h.wine.finish(install: install)
-    try await h.fake.nextLaunch()
-    h.fake.fireStarted()
-    h.fake.finishLaunch(.exited)
+    try await h.completeLaunch()
     #expect(await run.value == .ok)
   }
 
   @Test func APP_020_wineInstallFailureEndsWithAVerdict() async throws {
     let h = Harness(wine: .needsInstall(.notInstalled))
-    let driver = h.autoLaunch()
-    let run = Task { @MainActor in await driver.run() }
+    let run = h.startRun()
     let install = try await h.wine.nextInstall()
     h.wine.fail(install: install, throwing: WineInstallError.extractionFailed(tool: "tar", exitCode: 1, output: ""))
     let result = await run.value
@@ -193,22 +194,19 @@ private final class Harness {
   }
 
   @Test func APP_020_withoutAllowDownloadAMissingGameFailsInsteadOfDownloading() async {
-    let h = Harness(game: GameStatus(localVersion: nil, remoteVersion: "5.0.0"))
+    let h = Harness(game: GameStatus.notInstalled)
     let result = await h.autoLaunch(allowDownload: false).run()
     #expect(result == .failed("needs install (pass --allow-download)"))
     #expect(h.fake.runs.isEmpty)
   }
 
   @Test func APP_020_installsAMissingGameFirst() async throws {
-    let h = Harness(game: GameStatus(localVersion: nil, remoteVersion: "5.0.0"))
-    let driver = h.autoLaunch()
-    let run = Task { @MainActor in await driver.run() }
+    let h = Harness(game: GameStatus.notInstalled)
+    let run = h.startRun()
     let index = try await h.fake.nextRun()
-    h.fake.setStatus(GameStatus(localVersion: "5.0.0", remoteVersion: "5.0.0"))
+    h.fake.setStatus(GameStatus.installed)
     h.fake.finish(run: index)
-    try await h.fake.nextLaunch()
-    h.fake.fireStarted()
-    h.fake.finishLaunch(.exited)
+    try await h.completeLaunch()
     #expect(await run.value == .ok)
     #expect(h.fake.runs == [.install])
   }

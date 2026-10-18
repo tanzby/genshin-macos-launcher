@@ -29,7 +29,7 @@ trap cleanup EXIT
 pgrep -f 'YuanShen.exe|wineserver|Contents/MacOS/Genshin Launcher' >/dev/null && { echo "quit the launcher and the game first"; exit 1; }
 
 ditto "$app" "$work/Genshin Launcher.app"
-sh "$repo/Helpers/build.sh" --dev "$work/Genshin Launcher.app/Contents/Helpers" >/dev/null
+sh "$repo/Helpers/build.sh" "$work/Genshin Launcher.app/Contents/Helpers" >/dev/null
 codesign -f -s - "$work/Genshin Launcher.app" 2>/dev/null
 "$repo/scripts/dev/check-gptk4" "$work/Genshin Launcher.app/Contents/Resources/gptk4" >/dev/null
 swiftc -O -o "$work/holdkey" "$repo/scripts/diag/holdkey.swift"

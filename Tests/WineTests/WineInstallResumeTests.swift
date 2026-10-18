@@ -36,7 +36,7 @@ import Testing
         + wineFixturePrefixSize
       let h = try makeWineHarness(in: dir, options: options)
       try await h.install()
-      #expect(await h.runtime.status() == .ready)
+      #expect(await h.runtime.status(for: .dxmt) == .ready)
     }
   }
 
@@ -57,7 +57,7 @@ import Testing
       try Data(count: 600).write(to: h.layout.downloadsDirectory.appending(path: name))
       try Data(count: 400).write(to: h.layout.downloadsDirectory.appending(path: name + ".part"))
       try await h.install()
-      #expect(await h.runtime.status() == .ready)
+      #expect(await h.runtime.status(for: .dxmt) == .ready)
     }
   }
 
@@ -68,7 +68,7 @@ import Testing
       options.availableBytes = nil
       let h = try makeWineHarness(in: dir, options: options)
       try await h.install()
-      #expect(await h.runtime.status() == .ready)
+      #expect(await h.runtime.status(for: .dxmt) == .ready)
     }
   }
 
@@ -79,7 +79,7 @@ import Testing
       let tight = WineRuntime(
         dataDirectory: DataDirectory(root: h.root), distribution: h.fixtures.distribution, dxmt: h.fixtures.dxmt,
         downloader: h.downloader, runner: h.runner, availableSpace: { _ in 0 })
-      try await tight.ensureInstalled()
+      try await tight.ensureInstalled(for: .dxmt)
     }
   }
 
@@ -131,7 +131,7 @@ import Testing
     try await withWineTempDirectory { dir in
       let h = try makeWineHarness(in: dir)
       let collector = WineProgressCollector()
-      try await h.runtime.ensureInstalled(progress: collector.callback)
+      try await h.runtime.ensureInstalled(for: .dxmt, progress: collector.callback)
 
       let reports = collector.wineDownloads
       #expect(reports.count >= 3)

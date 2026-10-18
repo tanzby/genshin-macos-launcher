@@ -33,7 +33,7 @@ package struct SophonUpdatePlan: Sendable, Equatable {
 
   /// Compressed bytes of every chunk of the files in `downloads`.
   package var chunkSize: Int64 {
-    downloads.reduce(Int64(0)) { $0 + SophonManifestValidator.compressedSize(of: $1) }
+    downloads.reduce(Int64(0)) { $0 + $1.compressedSize }
   }
 
   /// Nothing to download or patch (deletions may still be left).
@@ -133,7 +133,7 @@ package struct SophonUpdater: Sendable {
       guard let chunks = chunkFiles[file.path], !chunks.isDirectory else {
         throw SophonError.invalidManifest("\(file.path) is not in the chunk manifest")
       }
-      guard chunks.size == file.size, chunks.md5.caseInsensitiveCompare(file.md5) == .orderedSame else {
+      guard chunks.size == file.size, chunks.md5.isSameDigest(as: file.md5) else {
         throw SophonError.invalidManifest("\(file.path) differs between the chunk and the ldiff manifest")
       }
     }
@@ -185,15 +185,15 @@ package struct SophonUpdater: Sendable {
         let size = candidate.destination.fileSize
         let digest = (size == newFile.size || (inPlace && size == patch.originalSize))
           ? try MD5Hasher.hex(ofFileAt: candidate.destination, cancelled: cancelled) : nil
-        if size == newFile.size, digest?.caseInsensitiveCompare(newFile.md5) == .orderedSame {
+        if size == newFile.size, digest?.isSameDigest(as: newFile.md5) == true {
           return .untouched
         }
         let originalMatches: Bool
         if inPlace {
           originalMatches =
-            size == patch.originalSize && digest?.caseInsensitiveCompare(patch.originalMD5) == .orderedSame
+            size == patch.originalSize && digest?.isSameDigest(as: patch.originalMD5) == true
         } else if let original = candidate.original {
-          originalMatches = try Self.matches(
+          originalMatches = try MD5Hasher.matches(
             original, size: patch.originalSize, md5: patch.originalMD5, cancelled: cancelled)
         } else {
           originalMatches = false
@@ -225,7 +225,7 @@ package struct SophonUpdater: Sendable {
       item -> SophonFile? in
       let (file, url) = item
       return try await Offload.run { cancelled in
-        try Self.matches(url, size: file.size, md5: file.md5, cancelled: cancelled) ? nil : file
+        try MD5Hasher.matches(url, size: file.size, md5: file.md5, cancelled: cancelled) ? nil : file
       }
     }.compactMap { $0 }
     try Self.validate(patches: patches)
@@ -394,12 +394,6 @@ package struct SophonUpdater: Sendable {
       .volumeSupportsCaseSensitiveNames ?? false
   }
 
-  /// Size and MD5 both match. A missing file does not match.
-  static func matches(_ url: URL, size: Int64, md5: String, cancelled: CancelFlag) throws -> Bool {
-    guard url.fileSize == size else { return false }
-    return try MD5Hasher.hex(ofFileAt: url, cancelled: cancelled).caseInsensitiveCompare(md5) == .orderedSame
-  }
-
   /// Also true for a dangling symlink.
   static func exists(_ url: URL) -> Bool {
     (try? FileManager.default.attributesOfItem(atPath: url.path)) != nil
@@ -421,8 +415,8 @@ package struct SophonUpdater: Sendable {
         originalPath == file.path && patch.originalSize == file.size && destination.fileSize == file.size
         ? try MD5Hasher.hex(ofFileAt: destination, cancelled: cancelled) : nil
       func isFile(_ url: URL, size: Int64, md5: String) throws -> Bool {
-        guard let digest else { return try matches(url, size: size, md5: md5, cancelled: cancelled) }
-        return digest.caseInsensitiveCompare(md5) == .orderedSame
+        guard let digest else { return try MD5Hasher.matches(url, size: size, md5: md5, cancelled: cancelled) }
+        return digest.isSameDigest(as: md5)
       }
       // Already the new file (a previous run got this far): nothing to do.
       if try isFile(destination, size: file.size, md5: file.md5) { return true }
@@ -450,7 +444,7 @@ package struct SophonUpdater: Sendable {
         return false
       }
       // After patching: a wrong result is thrown away, never moved over the original.
-      guard try matches(staging, size: file.size, md5: file.md5, cancelled: cancelled) else {
+      guard try MD5Hasher.matches(staging, size: file.size, md5: file.md5, cancelled: cancelled) else {
         try? fileManager.removeItem(at: staging)
         return false
       }

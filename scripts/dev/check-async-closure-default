@@ -4,5 +4,5 @@
 # Matches single-line declarations only; a parameter list split over several lines is not caught.
 set -eu
 cd "$(dirname "$0")/../.."
-hits=$(grep -rnE --include='*.swift' 'async[^=]*->[^=]*= *\{' Sources Tests App Helpers 2>/dev/null | grep -vE '^[^:]+:[0-9]+:[[:space:]]*(let|var) ' || true)
+hits=$(grep -rnE --include='*.swift' 'async[^=]*->[^=]*= *\{' Sources Tests App 2>/dev/null | grep -vE '^[^:]+:[0-9]+:[[:space:]]*(let|var) ' || true)
 [ -z "$hits" ] || { echo "$hits"; echo "closure literal as default of an async closure parameter (#48): use a named function"; exit 1; }

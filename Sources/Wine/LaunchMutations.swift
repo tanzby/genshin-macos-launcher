@@ -7,8 +7,9 @@ private let log = Logger(subsystem: "io.github.tanzby.genshin-launcher", categor
 /// Launch Mutations of a recipe (move-aside files, prefix copies, registry edits) and the journal that
 /// lets `restore()` put everything back, also after a crash (ADR 0002).
 struct LaunchMutations: Sendable {
-  let layout: WineLayout
   let commands: WinePrefixCommands
+
+  private var layout: WineLayout { commands.layout }
 
   /// Journals the originals, then applies the recipe's mutations and lets the registry settle (LCH-009).
   func apply(_ recipe: LaunchRecipe) async throws {

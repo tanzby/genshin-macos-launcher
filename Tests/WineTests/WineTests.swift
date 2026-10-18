@@ -8,7 +8,7 @@ import Testing
   @Test func runtimeLivesInDataDirectory() {
     let root = URL(filePath: "/tmp/genshin-launcher-data", directoryHint: .isDirectory)
     let runtime = WineRuntime(dataDirectory: DataDirectory(root: root))
-    #expect(runtime.runtimeDirectory.path == "/tmp/genshin-launcher-data/wine")
+    #expect(runtime.layout.runtimeDirectory.path == "/tmp/genshin-launcher-data/wine")
     #expect(WineRuntime.pinnedVersion == "11.0-1-crossover-signed-experimental")
   }
 }

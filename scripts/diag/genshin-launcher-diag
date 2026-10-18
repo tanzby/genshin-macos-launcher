@@ -30,7 +30,6 @@ REPO = HERE.parents[1]
 CACHE = Path.home() / "Library/Caches/genshin-launcher-diag"
 DEFAULT_DATA = CACHE / "data"
 GAME_EXES = ("YuanShen.exe", "GenshinImpact.exe")
-BUNDLE_ID = "io.github.tanzby.genshin-launcher"
 GAME_HOST_ID = "io.github.tanzby.genshin-launcher.game"
 HOSTS = Path("/etc/hosts")
 T0 = time.monotonic()
@@ -158,9 +157,10 @@ def is_game(p):
     return exe_name(p) in GAME_EXES
 
 
-def window_info_exe():
-    exe = CACHE / "window-info"
-    src = HERE / "window-info.swift"
+def swift_tool(name):
+    """Compiles scripts/diag/<name>.swift into CACHE when the binary is missing or older than the source."""
+    exe = CACHE / name
+    src = HERE / f"{name}.swift"
     if not exe.exists() or exe.stat().st_mtime < src.stat().st_mtime:
         CACHE.mkdir(parents=True, exist_ok=True)
         r = run(["swiftc", "-O", "-o", str(exe), str(src)])
@@ -172,7 +172,7 @@ def window_info_exe():
 def window_probe(pids, all_spaces=False):
     if not pids:
         return []
-    args = [str(window_info_exe())]
+    args = [str(swift_tool("window-info"))]
     if all_spaces:
         args.append("--all")
     return run([*args, *map(str, pids)]).stdout.splitlines()
@@ -258,13 +258,7 @@ class ScreenCheck:
     captures the display (`screencapture -D`, needs Screen Recording for the calling terminal) and compares."""
 
     def __init__(self, data, a):
-        exe = CACHE / "screen-compare"
-        src = HERE / "screen-compare.swift"
-        if not exe.exists() or exe.stat().st_mtime < src.stat().st_mtime:
-            CACHE.mkdir(parents=True, exist_ok=True)
-            r = run(["swiftc", "-O", "-o", str(exe), str(src)])
-            if r.returncode:
-                sys.exit(f"swiftc failed: {r.stderr}")
+        exe = swift_tool("screen-compare")
         self.exe, self.seen, self.step, self.results, self.data = str(exe), 0, {}, [], data
 
     def other_window(self):
@@ -304,7 +298,7 @@ def prepare_app(a):
     work.parent.mkdir(parents=True, exist_ok=True)
     run(["ditto", str(a.app), str(work)], check=True)
     if a.screen_check or a.autoplay:
-        r = run(["sh", str(REPO / "Helpers/build.sh"), "--dev", str(work / "Contents/Helpers")])
+        r = run(["sh", str(REPO / "Helpers/build.sh"), str(work / "Contents/Helpers")])
         if r.returncode:
             sys.exit(f"building dev helpers failed: {r.stderr}")
     run(["codesign", "-f", "-s", "-", "--deep", str(work)])
@@ -671,14 +665,14 @@ def positive_pid(value):
 
 
 def cmd_windows(a):
-    r = run([str(window_info_exe()), "--all", *map(str, a.pids)])
+    r = run([str(swift_tool("window-info")), "--all", *map(str, a.pids)])
     sys.stdout.write(r.stdout)
     sys.stderr.write(r.stderr)
     sys.exit(r.returncode)
 
 
 def cmd_activate(a):
-    r = run([str(window_info_exe()), "--activate", str(a.pid), "--timeout", str(a.timeout)],
+    r = run([str(swift_tool("window-info")), "--activate", str(a.pid), "--timeout", str(a.timeout)],
             timeout=a.timeout + 5)
     sys.stdout.write(r.stdout)
     sys.stderr.write(r.stderr)

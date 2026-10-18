@@ -10,7 +10,7 @@ import TestSupport
 
 @MainActor
 private func makeModel(
-  status: GameStatus = GameStatus(localVersion: "5.0.0", remoteVersion: "5.0.0"),
+  status: GameStatus = GameStatus.installed,
   hosts: FakeHosts = FakeHosts(.current), gameDirectory: URL? = temporaryURL("LauncherAvailability")
 ) async -> (LauncherModel, FakeGameClient, FakeHosts) {
   let fake = FakeGameClient(status: status)
@@ -53,7 +53,7 @@ private func makeModel(
   }
 
   @Test func WIN_011_aLauncherWithoutAHostsSeamHasNoHostsRule() async {
-    let fake = FakeGameClient(status: GameStatus(localVersion: "5.0.0", remoteVersion: "5.0.0"))
+    let fake = FakeGameClient(status: GameStatus.installed)
     let model = LauncherModel(client: fake, gameDirectory: temporaryURL("LauncherAvailability"))
     await model.refresh()
     #expect(model.refusal(for: .launch) == nil)
@@ -106,7 +106,7 @@ private func makeModel(
     #expect(outdated.refusal(for: .start(.repair)) == .updateRequired)
     #expect(outdated.refusal(for: .start(.update)) == nil)
 
-    let (fresh, _, _) = await makeModel(status: GameStatus(localVersion: nil, remoteVersion: "5.0.0"))
+    let (fresh, _, _) = await makeModel(status: GameStatus.notInstalled)
     #expect(fresh.refusal(for: .launch) == .notInstalled)
     #expect(fresh.refusal(for: .start(.repair)) == .notInstalled)
     #expect(fresh.refusal(for: .start(.install)) == nil)
@@ -122,13 +122,13 @@ private func makeModel(
   }
 
   @Test func APP_015_launchIsRefusedWhileAnUnfinishedJobBlocksIt() async throws {
-    let (model, fake, _) = await makeModel(status: GameStatus(localVersion: nil, remoteVersion: "5.0.0"))
+    let (model, fake, _) = await makeModel(status: GameStatus.notInstalled)
     try await model.start(.install)
     _ = try await fake.nextRun()
     #expect(model.refusal(for: .launch) == .busy)
     #expect(model.refusal(for: .start(.repair)) == .busy)
     await model.pause()
-    fake.setStatus(GameStatus(localVersion: "5.0.0", remoteVersion: "5.0.0"))
+    fake.setStatus(GameStatus.installed)
     await model.refresh()
     #expect(model.refusal(for: .launch) == .pendingJob(.install))
     #expect(model.refusal(for: .start(.repair)) == .pendingJob(.install))
@@ -152,7 +152,7 @@ private func makeModel(
   }
 
   @Test func APP_013_aRefusedStartIsTheLastErrorAndTheNextGoodStartClearsIt() async throws {
-    let (model, fake, _) = await makeModel(status: GameStatus(localVersion: nil, remoteVersion: "5.0.0"))
+    let (model, fake, _) = await makeModel(status: GameStatus.notInstalled)
     await #expect(throws: LauncherError.notInstalled) { try await model.start(.repair) }
     #expect(model.lastError == .notInstalled)
     try await model.start(.install)
@@ -162,7 +162,7 @@ private func makeModel(
   }
 
   @Test func INS_004_aFailedDiskSpacePreflightGoesToTheSameChannel() async {
-    let fake = FakeGameClient(status: GameStatus(localVersion: nil, remoteVersion: "5.0.0"))
+    let fake = FakeGameClient(status: GameStatus.notInstalled)
     fake.setRequiredDiskSpace(10 << 30, for: .install)
     let model = LauncherModel(
       client: fake, gameDirectory: temporaryURL("LauncherAvailability"), availableDiskSpace: { _ in 1 << 30 })

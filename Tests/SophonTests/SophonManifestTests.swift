@@ -101,7 +101,7 @@ import TestSupport
   }
 
   @Test func APP_009_garbageProtobufIsRejected() throws {
-    let framed = try zstdCompress(Data([0xff, 0xff, 0xff, 0xff, 0x0f]))
+    let framed = zstdRawFrame(Data([0xff, 0xff, 0xff, 0xff, 0x0f]))
     #expect(throws: SophonError.self) { _ = try SophonManifest(zstdCompressed: framed) }
   }
 
@@ -169,17 +169,6 @@ import TestSupport
     let ref = SophonManifestRef.stub(id: "m", manifestPrefix: "https://cdn.example.invalid/m")
     #expect(try await api.diffManifest(for: ref).files.count == 3)
   }
-}
-
-/// Compresses with the system `zstd` frame format: a stored (raw) block inside a valid frame.
-private func zstdCompress(_ raw: Data) throws -> Data {
-  var frame = Data([0x28, 0xb5, 0x2f, 0xfd])  // magic
-  frame.append(0x20)  // frame header: single segment, no checksum, no dict
-  frame.append(UInt8(raw.count))  // content size (1 byte)
-  let header = UInt32(raw.count << 3) | 1  // last block, raw type
-  frame.append(contentsOf: [UInt8(header & 0xff), UInt8((header >> 8) & 0xff), UInt8((header >> 16) & 0xff)])
-  frame.append(raw)
-  return frame
 }
 
 extension SophonManifestRef {

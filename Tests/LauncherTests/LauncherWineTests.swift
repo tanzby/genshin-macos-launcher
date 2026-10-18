@@ -8,10 +8,8 @@ import Wine
 
 // Wine preparation is an exclusive job in the launcher state machine (ADR 0002, ticket #23). It has no
 // `job.json`: the state is derived from the `<data>/wine/` version stamp, which the real `WineRuntime`
-// reports through `WinePreparing.status()`. These tests use `FakeWinePreparer` and `FakeGameClient`.
+// reports through `WinePreparing.status(for:)`. These tests use `FakeWinePreparer` and `FakeGameClient`.
 
-private let installed = GameStatus(localVersion: "5.0.0", remoteVersion: "5.0.0")
-private let notInstalled = GameStatus(localVersion: nil, remoteVersion: "5.0.0")
 private let missing = WineStatus.needsInstall(.notInstalled)
 
 @MainActor
@@ -32,7 +30,7 @@ private final class Harness {
 
   var jobFile: URL { directory.appending(path: ".genshin-launcher-tmp").appending(path: "job.json") }
 
-  init(wine wineStatus: WineStatus, game: GameStatus = installed, backend: GraphicsBackend = .gptk4) {
+  init(wine wineStatus: WineStatus, game: GameStatus = .installed, backend: GraphicsBackend = .gptk4) {
     wine = FakeWinePreparer(status: wineStatus)
     fake = FakeGameClient(status: game)
     directory = makeTemporaryDirectory("LauncherWineTests")
@@ -62,7 +60,7 @@ private final class Harness {
     #expect(h.wine.installCount == 0)
     #expect(h.wine.statusCalls == 1)
     #expect(h.fake.statusCalls == 1)
-    #expect(h.model.status == installed)
+    #expect(h.model.status == GameStatus.installed)
     #expect(h.model.wineStatus == .ready)
     #expect(h.model.phase == .idle)
     #expect(h.model.primaryAction == .launch)
@@ -125,7 +123,7 @@ private final class Harness {
     h.wine.finish(install: install)
     await task.value
     #expect(h.fake.statusCalls == 1)
-    #expect(h.model.status == installed)
+    #expect(h.model.status == GameStatus.installed)
     #expect(h.model.wineStatus == .ready)
     #expect(h.model.phase == .idle)
     #expect(try await h.log.next() == .wineReady)
@@ -154,10 +152,10 @@ private final class Harness {
   }
 
   @Test func WIN_005_launcherWithoutWineSeamBehavesAsBefore() async throws {
-    let fake = FakeGameClient(status: installed)
+    let fake = FakeGameClient(status: .installed)
     let model = LauncherModel(client: fake)
     await model.bootstrap()
-    #expect(model.status == installed)
+    #expect(model.status == GameStatus.installed)
     #expect(model.wineStatus == nil)
     #expect(model.primaryAction == .launch)
   }
@@ -193,7 +191,7 @@ private final class Harness {
     watcher.cancel()
     #expect(h.model.phase == .idle)
     #expect(h.fake.statusCalls == 1)
-    #expect(h.model.status == installed)
+    #expect(h.model.status == GameStatus.installed)
   }
 
   @Test func WIN_005_refreshWineTracksTheDisk() async throws {
@@ -227,7 +225,7 @@ private final class Harness {
   }
 
   @Test func WIN_005_notReadyWineBlocksGameJobsAndLaunch() async throws {
-    let h = Harness(wine: missing, game: notInstalled)
+    let h = Harness(wine: missing, game: .notInstalled)
     await h.model.refreshWine()
     await h.model.refresh()
     #expect(h.model.primaryAction == .prepareWine)
@@ -240,7 +238,7 @@ private final class Harness {
   }
 
   @Test func WIN_005_unreadWineStatusBlocksGameJobsToo() async throws {
-    // `bootstrap()` suspends inside `wine.status()`; nothing may slip in during that window.
+    // `bootstrap()` suspends inside `wine.status(for:)`; nothing may slip in during that window.
     let h = Harness(wine: .ready)
     #expect(h.model.wineStatus == nil)
     #expect(h.model.primaryAction == .prepareWine, "the main button must not offer an action that is rejected")
@@ -253,7 +251,7 @@ private final class Harness {
   }
 
   @Test func WIN_005_gameJobsWorkOnceWineIsReady() async throws {
-    let h = Harness(wine: missing, game: notInstalled)
+    let h = Harness(wine: missing, game: .notInstalled)
     let (task, install) = try await h.bootstrapUntilPreparing()
     h.wine.finish(install: install)
     await task.value
@@ -280,7 +278,7 @@ private final class Harness {
   }
 
   @Test func APP_015_wineCannotBePreparedWhileAGameJobRuns() async throws {
-    let h = Harness(wine: .ready, game: notInstalled)
+    let h = Harness(wine: .ready, game: .notInstalled)
     await h.model.bootstrap()
     try await h.model.start(.install)
     _ = try await h.fake.nextRun()
@@ -388,7 +386,7 @@ private final class Harness {
     #expect(h.wine.installCount == 2)
     #expect(h.wine.log.contains("cancelled:\(first)"))
     #expect(h.model.wineStatus == .ready)
-    #expect(h.model.status == installed)
+    #expect(h.model.status == GameStatus.installed)
     #expect(try await h.log.next() == .wineReady)
   }
 
@@ -407,7 +405,7 @@ private final class Harness {
     h.fake.statusGate.push(())
     await pause.value
     await task.value
-    #expect(h.model.status == installed)
+    #expect(h.model.status == GameStatus.installed)
     #expect(h.model.primaryAction == .launch)
     #expect(h.model.phase == .idle)
     #expect(try await h.log.next() == .wineReady)
@@ -461,7 +459,7 @@ private final class Harness {
     h.wine.finish(install: second)
     await h.model.waitUntilIdle()
     #expect(h.model.wineStatus == .ready)
-    #expect(h.model.status == installed)
+    #expect(h.model.status == GameStatus.installed)
     #expect(try await h.log.next() == .wineReady)
   }
 
@@ -512,7 +510,7 @@ private final class Harness {
     await h.model.bootstrap()
     h.wine.setStatus(.needsInstall(.corrupt(missing: "bin/wine")))
     await h.model.refreshWine()
-    #expect(h.model.status == installed, "game status survives a Wine problem")
+    #expect(h.model.status == GameStatus.installed, "game status survives a Wine problem")
     #expect(h.model.primaryAction == .prepareWine)
   }
 }

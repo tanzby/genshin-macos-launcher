@@ -16,19 +16,19 @@ public final class StubURLProtocol: URLProtocol, @unchecked Sendable {
 
   /// A session whose requests are answered by `handler`.
   public static func session(_ handler: @escaping Handler) -> (session: URLSession, id: String) {
-    let id = UUID().uuidString
-    lock.withLock { handlers[id] = handler }
-    let configuration = URLSessionConfiguration.ephemeral
-    configuration.protocolClasses = [StubURLProtocol.self]
-    configuration.httpAdditionalHeaders = [idHeader: id]
-    return (URLSession(configuration: configuration), id)
+    makeSession { id in handlers[id] = handler }
   }
 
   /// A session whose requests are answered by `reply`. Unlike `session(_:)` it can serve partial
   /// bodies, delay, fail, or hold a response until a `StubGate` opens. Also tracks in-flight requests.
   public static func session(reply: @escaping ReplyHandler) -> (session: URLSession, id: String) {
+    makeSession { id in replyHandlers[id] = reply }
+  }
+
+  /// An ephemeral session tagged with a fresh id; `register` stores the handler for that id under the lock.
+  private static func makeSession(register: (String) -> Void) -> (session: URLSession, id: String) {
     let id = UUID().uuidString
-    lock.withLock { replyHandlers[id] = reply }
+    lock.withLock { register(id) }
     let configuration = URLSessionConfiguration.ephemeral
     configuration.protocolClasses = [StubURLProtocol.self]
     configuration.httpAdditionalHeaders = [idHeader: id]

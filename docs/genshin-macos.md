@@ -45,11 +45,11 @@ scripts/diag/genshin-launcher-diag ps; scripts/diag/genshin-launcher-diag kill
 
 Settings can be changed without the UI: `defaults write io.github.tanzby.genshin-launcher gameDirectory <path>` (keys: `Key` in `Sources/Launcher/SettingsModel.swift`), or the `--game-dir` / `GENSHIN_LAUNCHER_GAME_DIR` switch from `Sources/Diagnostics/AutoLaunch.swift`.
 
-Only one game may run at a time: the tool refuses to start when any Wine process exists. It prints `WAITING maintainer: hosts-password | game-login` when a step needs the maintainer (the admin password dialog for `/etc/hosts`, the miHoYo login). `--autoplay` and `--screen-check` load the development companion (`Helpers/build.sh --dev`) into a copy of the app.
+Only one game may run at a time: the tool refuses to start when any Wine process exists. It prints `WAITING maintainer: hosts-password | game-login` when a step needs the maintainer (the admin password dialog for `/etc/hosts`, the miHoYo login). `--autoplay` and `--screen-check` load the development companion (`Helpers/build.sh`) into a copy of the app.
 
 ## Autoplay and screen check
 
-`--autoplay` loads `Helpers/gamehost-dev.m` into the game (`GENSHIN_LAUNCHER_GAMEHOST_DEV`). It clicks into the world, then logs frame-interval statistics for an idle phase and a camera-turn phase (`frames: … p50/p99/max, hitches50`) and saves a PNG of each from the game's own drawable. The turn is driven by `turner.exe` (`SendInput` inside the prefix). Synthetic AppKit events do not turn the camera. These dev pieces are not shipped in the app: `--autoplay` builds them with `Helpers/build.sh --dev` into the data dir's sidecar. `turner.exe` needs llvm-mingw (`LLVM_MINGW=/path`).
+`--autoplay` loads `Helpers/gamehost-dev.m` into the game (`GENSHIN_LAUNCHER_GAMEHOST_DEV`). It clicks into the world, then logs frame-interval statistics for an idle phase and a camera-turn phase (`frames: … p50/p99/max, hitches50`) and saves a PNG of each from the game's own drawable. The turn is driven by `turner.exe` (`SendInput` inside the prefix). Synthetic AppKit events do not turn the camera. These dev pieces are not shipped in the app: `--autoplay` builds them with `Helpers/build.sh` into the data dir's sidecar. `turner.exe` needs llvm-mingw (`LLVM_MINGW=/path`).
 
 ```bash
 scripts/diag/genshin-launcher-diag run --app … --autoplay --timeout 200

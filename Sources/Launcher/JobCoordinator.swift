@@ -23,11 +23,6 @@ final class JobCoordinator {
     exclusive == .idle || exclusive == .launching || exclusive == .running
   }
 
-  /// Whether the chosen slot currently holds a Task.
-  func isHolding(exclusive isExclusive: Bool) -> Bool {
-    (isExclusive ? exclusiveTask : preDownloadTask) != nil
-  }
-
   /// Claims the exclusive slot for `phase` and runs `body` in it. The claim happens before any await, so nothing
   /// else can slip in; the slot is freed when `body` ends.
   func startExclusive(_ phase: LauncherPhase, body: @escaping @MainActor () async -> Void) {
