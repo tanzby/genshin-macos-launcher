@@ -49,7 +49,11 @@
 | 4 | 0 | 1（54 ms） | GPU 利用率 ≥90%，栈上只见游戏自己的代码 |
 
    卡顿数跟本轮新编译的着色器量同升同降：缓存稳定后就几乎没有卡顿。进程内栈采样（见下）在卡顿当下抓到的线程里有 `MTLCompilerScheduler` → `xpc_connection_send_message_with_reply_sync`（等待 Metal 编译服务）和 `libmetalirconverter` 的 LLVM 优化 pass（DXIL → Metal IR 转换）。这是 D3DMetal 自己的运行期编译，和 DXMT 冷缓存时的行为同类。所以先前把「GPTK 暖缓存 14 次卡顿」和「DXMT 暖缓存 0 次」放在一起比，混杂了两个后端缓存覆盖的路线不同。冷缓存对比里两者本来就都卡（GPTK 4 次，DXMT 6 次）。
-3. **GPU 负载更高**：同一路线、同样 60 fps、3024×1964，GPU 利用率 GPTK 92–94%，DXMT 79–84%。GPU 近满载时，渲染线程会在 `D3DMCommandQueueWorker::DoExecute`（等在途命令缓冲的信号量）和 `DXGISwapChain::Present1` 里等 GPU，造成 54–70 ms 的卡顿（上表的「GPU 背压」）。这部分是 GPTK 渲染成本比 DXMT 高，不是 launcher 能修的；降低分辨率或画质可以缓解，没有实测。
+3. **GPU 利用率高约 10 个百分点（2026-10-18 查明：不是 GPTK 多做了活）**：同一路线、60 fps、3024×1964，`ioreg` 的 Device Utilization GPTK 87–94%，DXMT 76–84%，但这个数字不是负载。证据：
+   - **吞吐相同**：解锁到 120 后两边都 GPU 跑满（100%），实际帧率 GPTK 87–99 fps，DXMT 80–92 fps，GPTK 不比 DXMT 慢。
+   - **利用率与负载脱钩**：关 Retina（1512×982，像素数 1/4），GPTK 反而是 91–92%，DXMT 82–87%（高于 Retina 下的 76–81%）。GPU 降频后同样的活占的百分比更高，所以这个指标只能在同频下比，不能当成本。
+   - **xctrace Metal System Trace**（两边各录 40 s，同一路线，导出 `metal-gpu-intervals`）：wine 进程各通道时间之和 GPTK 约 90%（Vertex 8、Fragment 63、Compute 19），DXMT 约 99%（Vertex 10.5、Fragment 62、Compute 27）；每帧 pass 数相近（render encoder 约 154k 对 161k，GPTK 的 compute/blit 更少，没有多出的拷贝或 blit）。区别在重叠：各通道合并后的忙时 GPTK 82%，DXMT 70%，即 DXMT 把 compute 与 fragment 叠在一起跑，D3DMetal 更多串行。这是 D3DMetal 的调度方式，不是多出来的工作。
+   - **旋钮无效**（GPTK，60 fps，同路线，利用率 87–92%）：`D3DM_IGNORE_D3D11_RENDER_BARRIERS=1`、`D3DM_MTL4=1`、`D3DM_BOUNDS_CHECK=1` 都与基线（88–89%）无差别；`D3DM_BOUNDS_CHECK=0` 同样 87–89%，但改变了着色器，这一轮重新编译，卡顿升到 13 次（`compile`），所以不用。GPU 背压卡顿因此仍偶发（每轮 0–2 次），launcher 无可调项；Retina 关闭可降分辨率，但 GPTK 利用率没降，不值得作为建议。
 
 ### 方法与数据来源
 
@@ -62,7 +66,7 @@
 - xctrace「Metal System Trace」可以 attach 到 Wine 进程（`--attach <pid>` 成功，导出 `metal-gpu-intervals`、`ca-client-present-request` 等表）。但录制本身带来每 5 s 一次约 100 ms 的周期性卡顿，所以它只用来确认可用，不用来做归因；这一轮没有得出需要它的结论。
 
 没做或没查到的：
-- GPU 背压卡顿里，具体是哪个 draw 让 GPU 慢，没有往下查（需要 Xcode 的 GPU 帧捕获，Wine 进程下未验证）。
+- GPU 背压卡顿里，具体是哪个 draw 让 GPU 慢，没有往下查（需要 Xcode 的 GPU 帧捕获，Wine 进程下未验证）。xctrace 的 `metal-gpu-counter-intervals`（带宽）表每份 3.7 GB，没有导出；通道忙时对比已足以排除多余工作。
 - 「新着色器何时编译」没有在 `D3DMetal` 里下钩子计时；证据是栈和缓存增长的相关，不是逐次调用计时。
 - 每种情况样本量小（GPTK 4 轮、DXMT 2 轮），数字只作定性判断。
 
