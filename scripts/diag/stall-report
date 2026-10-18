@@ -1,0 +1,83 @@
+#!/usr/bin/env python3
+"""Usage: stall-report [--hitches <file of "hitch:" lines>] <stalls.log>... Classifies every stall captured by the dev companion's stall sampler
+(Helpers/gamehost-dev.m, GENSHIN_LAUNCHER_GAMEHOST_STALLS) from its stack captures and prints one line per stall and a
+count per cause. A stall is >45 ms without the render layer asking for a drawable. Causes, first match wins:
+  shader-convert   some thread is inside libmetalirconverter / Metal compiler code (DXIL -> Metal IR at run time)
+  compiler-xpc     a thread waits on an XPC reply from the Metal compiler service (pipeline compile)
+  gpu-backpressure the game thread waits in DXGISwapChain::Present1 or a queue worker waits for the GPU
+  io               a thread is in a file read/write/open syscall on the game's data
+  windows-code     no host frames explain it: the game's own (PE) code is running
+"""
+import collections
+import re
+import sys
+
+LINE = re.compile(r'stack: stall=(\d+) cap=(\d+) .* thread=(\d+)(\*?) name="([^"]*)" frames:(.*)')
+HEAD = re.compile(r'stall: id=(\d+) wall=([\d.]+) gap=(\d+)ms in_nextDrawable=(\d)')
+IGNORED = ('CoreAudio', 'ANEServices', 'NSEventThread')
+
+
+PRIORITY = ('shader-convert', 'compiler-xpc', 'io', 'gpu-backpressure', 'windows-code')
+
+
+def classify(stacks):
+    text = "\n".join(stacks)
+    if re.search(r'libmetalirconverter|_ZN4llvm', text):
+        return 'shader-convert'
+    if re.search(r'MTLCompilerScheduler|MTLSchedulerRequest|MTLCompilerService', text):
+        return 'compiler-xpc'
+    if re.search(r'DXGISwapChain8Present1|D3DMCommandQueueWorker9DoExecute', text):
+        return 'gpu-backpressure'
+    if re.search(r'!(__open|open|pread|__pread|read_nocancel|__read)\b', text):
+        return 'io'
+    return 'windows-code'
+
+
+def match_hitches(hitches, stalls):
+    """Each present hitch (late frame at wall w after dur ms) takes the stall that began within its interval."""
+    caused = collections.Counter()
+    for line in open(hitches):
+        w = re.search(r'wall=([\d.]+)', line)
+        d = re.search(r'dur=([\d.]+)ms', line)
+        if not (w and d):
+            continue
+        wall, dur = float(w.group(1)), float(d.group(1)) / 1000
+        found = [s for s in stalls if wall - dur - 0.1 <= float(s['wall']) <= wall + 0.05]
+        causes = {s['cause'] for s in found}
+        # A compile is a root cause; back-pressure and the rest only show who waited.
+        cause = next((c for c in PRIORITY if c in causes), 'no-stall-captured')
+        caused[cause] += 1
+        print(f'hitch wall={wall:.3f} dur={dur * 1000:.1f}ms stall-cause={cause}')
+    print('HITCH-STALL ' + ' '.join(f'{k}={v}' for k, v in sorted(caused.items())))
+
+
+def main(args):
+    hitches = None
+    if args and args[0] == '--hitches':
+        hitches, args = args[1], args[2:]
+    paths = args
+    all_stalls = []
+    total = collections.Counter()
+    for path in paths:
+        stalls = collections.OrderedDict()
+        for line in open(path, errors='replace'):
+            h = HEAD.match(line)
+            if h:
+                stalls[h.group(1)] = {'wall': h.group(2), 'gap': h.group(3), 'nd': h.group(4), 'stacks': []}
+                continue
+            m = LINE.match(line)
+            if m and m.group(1) in stalls and not any(i in line for i in IGNORED):
+                stalls[m.group(1)]['stacks'].append(m.group(6))
+        print(f'== {path}')
+        for sid, s in stalls.items():
+            cause = classify(s['stacks'])
+            total[cause] += 1
+            s['cause'] = cause
+            all_stalls.append(s)
+            print(f"stall={sid} wall={s['wall']} gap={s['gap']}ms in_nextDrawable={s['nd']} cause={cause}")
+    if hitches:
+        match_hitches(hitches, all_stalls)
+    print('STALLS ' + ' '.join(f'{k}={v}' for k, v in sorted(total.items())) + f' total={sum(total.values())}')
+
+
+main(sys.argv[1:])
