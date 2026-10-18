@@ -65,7 +65,7 @@ public enum GenshinLaunchRecipe {
     let maxFrameRate = options.unlockFrameRate ? unlockedFrameRate : defaultFrameRate
     if options.unlockFrameRate { environment["GENSHIN_LAUNCHER_FPS_TARGET"] = String(maxFrameRate) }
     if options.graphicsBackend == .dxmt {
-      if options.debugMode { environment["DXMT_LOG_PATH"] = dataDirectory.path } else { environment["DXMT_LOG_LEVEL"] = "none" }
+      environment["DXMT_LOG_PATH"] = dataDirectory.path
       environment["DXMT_CONFIG"] = "d3d11.preferredMaxFrameRate=\(maxFrameRate);"
       environment["DXMT_CONFIG_FILE"] = dataDirectory.appending(path: "dxmt.conf").path
     }

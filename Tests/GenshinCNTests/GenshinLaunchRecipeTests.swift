@@ -50,7 +50,7 @@ private func edits(_ recipe: LaunchRecipe, key: String) -> [RegistryEdit] {
       recipe.environment == [
         "WINE_ENABLE_TIMEOUT_FIX": "1",
         "WINEESYNC": "1",
-        "DXMT_LOG_LEVEL": "none",
+        "DXMT_LOG_PATH": "/Users/test/Library/Application Support/Genshin Launcher",
         "DXMT_CONFIG": "d3d11.preferredMaxFrameRate=60;",
         "DXMT_CONFIG_FILE": "/Users/test/Library/Application Support/Genshin Launcher/dxmt.conf",
         "GST_PLUGIN_FEATURE_RANK": "atdec:MAX,avdec_h264:MAX",
@@ -100,12 +100,8 @@ private func edits(_ recipe: LaunchRecipe, key: String) -> [RegistryEdit] {
 
     #expect(on.environment["GENSHIN_LAUNCHER_DEBUG"] == "1")
     #expect(on.environment["WINEDEBUG"] == "fixme-all,err-unwind,+timestamp")
-    #expect(on.environment["DXMT_LOG_PATH"] == dataDirectory.path)
-    #expect(on.environment["DXMT_LOG_LEVEL"] == nil)
     #expect(off.environment["GENSHIN_LAUNCHER_DEBUG"] == nil)
     #expect(off.environment["WINEDEBUG"] == nil)
-    #expect(off.environment["DXMT_LOG_PATH"] == nil)
-    #expect(off.environment["DXMT_LOG_LEVEL"] == "none")
   }
 
   @Test func LCH_034_proxyHostIsPassedRawToBothProxyVariables() {
