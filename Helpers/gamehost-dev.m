@@ -25,7 +25,14 @@
 #import <Metal/Metal.h>
 #import <QuartzCore/QuartzCore.h>
 #import <objc/runtime.h>
+#import <dlfcn.h>
+#import <mach/mach.h>
+#import <mach/mach_vm.h>
 #import <os/lock.h>
+#import <pthread.h>
+#import <stdatomic.h>
+#import <fcntl.h>
+#import <unistd.h>
 
 void gamehost_say(const char *fmt, ...);
 bool gamehost_debug(void);
@@ -35,6 +42,7 @@ bool gamehost_debug(void);
 #define MAX_FRAMES 20000
 static double frameTimes[MAX_FRAMES];
 static int frameCount;
+static _Atomic bool stallWatch; /* true while a movement key is held (stall sampler) */
 static os_unfair_lock frameLock = OS_UNFAIR_LOCK_INIT;
 static id<CAMetalDrawable> lastDrawable;
 static NSString *pendingShot;
@@ -178,11 +186,129 @@ static void setMeasuring(const char *key, bool on) {
   memcpy(t, presentTimes, sizeof(double) * n);
   CGSize size = mainLayer ? mainLayer.drawableSize : CGSizeZero;
   measuring = on;
+  stallWatch = on;
   presentCount = droppedCount = 0;
   os_unfair_lock_unlock(&frameLock);
   gamehost_trace("measure: %s %s", key, on ? "down" : "up");
   if (!on) summarise(key, t, n, dropped, size);
   free(t);
+}
+
+/* Stall sampler (measure mode). Frame intervals are only known after the fact, too late for `sample` to see
+ * the stall, so a watchdog thread notices while it lasts: when the render thread has not entered nextDrawable
+ * for STALL_GAP seconds it suspends each thread in turn, walks its frame-pointer chain and writes the stack to
+ * GENSHIN_LAUNCHER_GAMEHOST_STALLS (a few captures per stall). `nd:` lines time the nextDrawable call itself,
+ * which separates drawable-acquisition blocking from a stall upstream of it. */
+#define STALL_GAP 0.045
+#define STALL_CAPTURES 8
+#define MAX_THREADS 128
+#define MAX_DEPTH 14
+static int stallFd = -1;
+static _Atomic double lastEnter;
+static _Atomic bool inNextDrawable;
+static _Atomic mach_port_t renderThread;
+static uint64_t stackPCs[MAX_THREADS][MAX_DEPTH];
+static int stackDepth[MAX_THREADS];
+static thread_act_t stackThread[MAX_THREADS];
+
+static bool readWord(uint64_t address, uint64_t *out) {
+  mach_vm_size_t got = 0;
+  return mach_vm_read_overwrite(mach_task_self(), address, 8, (mach_vm_address_t)out, &got) == KERN_SUCCESS && got == 8;
+}
+
+/* Suspends, reads and resumes each thread without allocating: a suspended thread may hold the malloc lock. */
+static int captureStacks(void) {
+  thread_act_array_t list;
+  mach_msg_type_number_t count;
+  if (task_threads(mach_task_self(), &list, &count) != KERN_SUCCESS) return 0;
+  thread_act_t me = mach_thread_self();
+  int m = 0;
+  for (mach_msg_type_number_t i = 0; i < count && m < MAX_THREADS; i++) {
+    if (list[i] == me || thread_suspend(list[i]) != KERN_SUCCESS) continue;
+    x86_thread_state64_t st;
+    mach_msg_type_number_t n = x86_THREAD_STATE64_COUNT;
+    int depth = 0;
+    if (thread_get_state(list[i], x86_THREAD_STATE64, (thread_state_t)&st, &n) == KERN_SUCCESS) {
+      stackPCs[m][depth++] = st.__rip;
+      uint64_t fp = st.__rbp;
+      while (depth < MAX_DEPTH && fp && !(fp & 7)) {
+        uint64_t next, ret;
+        if (!readWord(fp, &next) || !readWord(fp + 8, &ret) || !ret) break;
+        stackPCs[m][depth++] = ret;
+        if (next <= fp) break;
+        fp = next;
+      }
+    }
+    thread_resume(list[i]);
+    stackDepth[m] = depth;
+    stackThread[m++] = list[i];
+  }
+  mach_port_deallocate(mach_task_self(), me);
+  vm_deallocate(mach_task_self(), (vm_address_t)list, count * sizeof(thread_act_t));
+  return m;
+}
+
+static void writeStacks(int stall, int capture, int m, double wall, double gap) {
+  mach_port_t render = renderThread;
+  for (int i = 0; i < m; i++) {
+    char name[64] = "";
+    pthread_t pt = pthread_from_mach_thread_np(stackThread[i]);
+    if (pt) pthread_getname_np(pt, name, sizeof name);
+    NSMutableString *line = [NSMutableString string];
+    for (int d = 0; d < stackDepth[i]; d++) {
+      Dl_info info;
+      uint64_t pc = stackPCs[i][d];
+      if (dladdr((void *)pc, &info) && info.dli_fname) {
+        const char *base = strrchr(info.dli_fname, '/');
+        base = base ? base + 1 : info.dli_fname;
+        if (info.dli_sname) [line appendFormat:@" %s!%s+%llu", base, info.dli_sname, pc - (uint64_t)info.dli_saddr];
+        else [line appendFormat:@" %s+0x%llx", base, pc - (uint64_t)info.dli_fbase];
+      } else {
+        [line appendFormat:@" 0x%llx", pc];
+      }
+    }
+    dprintf(stallFd, "stack: stall=%d cap=%d wall=%.3f gap=%.0fms thread=%u%s name=\"%s\" frames:%s\n", stall,
+            capture, wall, gap * 1000, stackThread[i], stackThread[i] == render ? "*" : "", name, line.UTF8String);
+    mach_port_deallocate(mach_task_self(), stackThread[i]);
+  }
+}
+
+static void *watchdog(void *unused) {
+  pthread_setname_np("gamehost-watchdog");
+  int stall = 0, captures = 0;
+  bool in = false;
+  for (;;) {
+    usleep(3000);
+    double gap = CACurrentMediaTime() - lastEnter;
+    if (!stallWatch || lastEnter == 0 || gap < STALL_GAP) {
+      in = false;
+      continue;
+    }
+    double wall = [NSDate date].timeIntervalSince1970;
+    if (!in) {
+      in = true;
+      captures = 0;
+      stall++;
+      dprintf(stallFd, "stall: id=%d wall=%.3f gap=%.0fms in_nextDrawable=%d\n", stall, wall, gap * 1000,
+              (int)inNextDrawable);
+    }
+    if (captures < STALL_CAPTURES) {
+      int m = captureStacks();
+      writeStacks(stall, captures++, m, wall, gap);
+      usleep(6000);
+    }
+  }
+  return NULL;
+}
+
+static void startStallSampler(void) {
+  const char *path = getenv("GENSHIN_LAUNCHER_GAMEHOST_STALLS");
+  if (!path || !*path) return;
+  stallFd = open(path, O_WRONLY | O_CREAT | O_APPEND, 0644);
+  if (stallFd < 0) return;
+  pthread_t t;
+  pthread_create(&t, NULL, watchdog, NULL);
+  pthread_detach(t);
 }
 
 static IMP origNextDrawable;
@@ -207,7 +333,21 @@ static id hookNextDrawable(CAMetalLayer *self, SEL _cmd) {
   // Drawables are framebuffer-only by default; make them blittable only for a
   // requested screenshot so normal frame timing is unaffected.
   if (makeWritable) self.framebufferOnly = NO;
+  bool main = stallFd >= 0 && self == mainLayer;
+  double entered = CACurrentMediaTime();
+  if (main) {
+    lastEnter = entered;
+    renderThread = mach_thread_self();
+    mach_port_deallocate(mach_task_self(), renderThread);
+    inNextDrawable = true;
+  }
   id<CAMetalDrawable> d = ((id (*)(id, SEL))origNextDrawable)(self, _cmd);
+  if (main) {
+    inNextDrawable = false;
+    double took = CACurrentMediaTime() - entered;
+    if (took > 0.010 && stallWatch)
+      dprintf(stallFd, "nd: wall=%.3f dur=%.1fms\n", [NSDate date].timeIntervalSince1970, took * 1000);
+  }
   if (d && measureMode) trackPresent(self, d);
   os_unfair_lock_lock(&frameLock);
   lastDrawable = d;
@@ -397,5 +537,6 @@ void gamehost_dev_start(void *window) {
   if (mode && !strcmp(mode, "autoplay")) autoplay();
   if (mode && !strcmp(mode, "screen")) screenCheck();
   measureMode = mode && !strcmp(mode, "measure");
+  if (measureMode) startStallSampler();
   if (measureMode) measure();
 }
