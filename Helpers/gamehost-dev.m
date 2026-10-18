@@ -57,6 +57,17 @@ static IntervalStats intervalStats(const double *t, int n) {
   return st;
 }
 
+/* One line per interval > 50 ms: the presented time on the mach clock (CACurrentMediaTime) and on the wall
+ * clock, so scripts/diag/fps-measure can line it up with cache writes and other samples. */
+static void logHitches(const char *phase, const double *t, int n) {
+  double nowMach = CACurrentMediaTime(), nowWall = [NSDate date].timeIntervalSince1970;
+  for (int i = 0; i + 1 < n; i++) {
+    double dur = (t[i + 1] - t[i]) * 1000;
+    if (dur > 50)
+      gamehost_say("hitch: phase=%s t=%.3f wall=%.3f dur=%.1fms", phase, t[i + 1], nowWall - (nowMach - t[i + 1]), dur);
+  }
+}
+
 static void resetFrames(void) {
   os_unfair_lock_lock(&frameLock);
   frameCount = 0;
@@ -129,6 +140,7 @@ static void summarise(const char *phase, double *t, int n, int dropped, CGSize s
   }
   qsort(t, n, sizeof(double), compareDouble); /* handlers may arrive out of order */
   IntervalStats st = intervalStats(t, n);
+  logHitches(phase, t, n);
   gamehost_say("present: phase=%s size=%.0fx%.0f seconds=%.1f presented=%d dropped=%d fps=%.1f p50=%.1fms "
                "p99=%.1fms max=%.1fms hitches50=%d",
                phase, size.width, size.height, t[n - 1] - t[0], n, dropped, st.fps, st.p50, st.p99, st.max,

@@ -34,6 +34,31 @@
 | DXMT | 5 | W | 60.0 | 16.7 ms | 16.7 ms | 16.7 ms | 0 | 0 |
 | DXMT | 5 | S | 60.0 | 16.7 ms | 16.7 ms | 16.7 ms | 0 | 0 |
 
+## 卡顿归因（2026-10-18）
+
+`scripts/diag/fps-measure` 现在给每次 >50 ms 的 present 间隔写一行 `hitch: phase= t= wall= dur=`（mach 与墙钟时间），并与测量期间 0.25 s 轮询的着色器缓存大小（`$DARWIN_USER_CACHE_DIR/{d3dm,dxmt}/YuanShen.exe`）和 0.5 s 的 GPU 利用率对齐，输出 `HITCH backend= cache= cause=shader-cache|gpu|unknown count=`。判定窗口是卡顿前 `dur`+200 ms 到之后 200 ms：窗口内缓存变大记为 shader-cache，否则 GPU 利用率 ≥90% 记为 gpu，其余 unknown。`FPS_MEASURE_COLD=1` 把该后端的缓存目录移开、跑完还原。
+
+| 后端 | 缓存 | W 段 hitch | S 段 hitch | 归因 |
+|---|---|---|---|---|
+| GPTK 4 | 暖 | 11（最长 204 ms） | 3 | 14 次全是 unknown，窗口内缓存没有增长，GPU 利用率均值 75%、最高 88% |
+| DXMT | 暖 | 0 | 0 | — |
+| GPTK 4 | 冷 | 1 | 3 | 3 次 gpu（GPU 利用率 86–96%），1 次 unknown |
+| DXMT | 冷 | 6（最长 162 ms） | 0 | 6 次全是 shader-cache |
+
+每格只有一轮，且位置按上次退出为准（本次开跑前换到了新区域），后端之间不是同一段路，数字只作定性判断。
+
+结论：
+- DXMT 的卡顿是着色器编译：暖缓存零卡顿，冷缓存的卡顿全部伴随缓存增长。
+- GPTK 在暖缓存、新区域下仍有 14 次卡顿，却没有缓存增长，所以「GPTK 卡是因为首次着色器编译」这个推测没有得到支持。冷缓存时 GPTK 反而卡顿少，且多为 GPU 近乎满载。D3DMetal 的缓存很可能不是在运行中增量写入（本次轮询没有看到随运行增长），所以缓存写入这条旁证对它不敏感；这是推测，没有验证。
+- 暖缓存 GPTK 的 unknown 卡顿因此还没有原因。可能是 CPU 侧（D3DMetal 内部的资源或管线创建、流式加载的 IO）。要定位，需要在卡顿发生的当下采样主线程；`hitch:` 行只在该阶段结束后才写出，来不及触发 `sample`，下一步要改成 companion 在进程内实时检测并触发，或整段用 `sample`/`xctrace` 限时录制。
+
+没有做的：`xctrace record --template 'Metal System Trace'` 对 Wine 进程是否可用没有验证；hitch 触发的 `sample`（理由见上）。
+
+建议（按证据强弱）：
+1. 不要为 GPTK 做「预热缓存」：证据不支持。DXMT 则值得做：冷缓存首次在新区域一定卡，缓存目录要在更新、Wine 升级和 launcher 的清理逻辑里保持不失效。
+2. GPTK 先查暖缓存 unknown 卡顿的真正原因（上面的实时采样），再决定优化方向；在此之前不要改帧率上限或垂直同步设置。
+3. 冷缓存 GPTK 的 gpu 类卡顿与 GPU 近乎满载同时出现，降低渲染分辨率或画质可以作为对照实验，但本次没有测。
+
 ## 分发门槛
 
 本项目是开源、仅用于课程学习的工具，维护者决定随 launcher 分发该载荷。Apple 的 DMG 无法在 runner 上下载，所以维护者把 `scripts/prepare-gptk4` 生成的 `build/gptk4` 打成 `gptk4-4.0b3.tar.xz`（`tar -C build -cJf gptk4-4.0b3.tar.xz gptk4`），上传到 prerelease `gptk4-payload-4.0b3`。该 tag 不匹配 semver，不触发 release，也不影响 `releases/latest` 和 appcast。release job 下载这个资源、校验 workflow 里固定的 sha256、解压到 `build/`，再跑 `scripts/dev/check-gptk4`；之后 `check-bundle` 以 `REQUIRE_GPTK4=1` 检查成品。更换载荷时同时更新资源和固定哈希。
