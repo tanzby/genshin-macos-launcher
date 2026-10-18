@@ -128,6 +128,7 @@ static Class wineWindowClass;
 static id policyMonitor;
 static bool policyWatched;
 static void logPolicy(const char *what, id info, const char *key) {
+  if (!gamehost_debug()) return;
   SEL sel = selName(key);
   if (!((signed char (*)(id, SEL, SEL))msgSend)(info, selName("respondsToSelector:"), sel)) return;
   trace("gamepolicy: %s %s=%d", what, key, (int)((signed char (*)(id, SEL))msgSend)(info, sel));

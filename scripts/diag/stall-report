@@ -13,7 +13,7 @@ import re
 import sys
 
 LINE = re.compile(r'stack: stall=(\d+) cap=(\d+) .* thread=(\d+)(\*?) name="([^"]*)" frames:(.*)')
-HEAD = re.compile(r'stall: id=(\d+) wall=([\d.]+) gap=(\d+)ms in_nextDrawable=(\d)')
+HEAD = re.compile(r'stall: id=(\d+) wall=([\d.]+) gap=(\d+)ms')
 IGNORED = ('CoreAudio', 'ANEServices', 'NSEventThread')
 
 
@@ -63,7 +63,7 @@ def main(args):
         for line in open(path, errors='replace'):
             h = HEAD.match(line)
             if h:
-                stalls[h.group(1)] = {'wall': h.group(2), 'gap': h.group(3), 'nd': h.group(4), 'stacks': []}
+                stalls[h.group(1)] = {'wall': h.group(2), 'gap': h.group(3), 'stacks': []}
                 continue
             m = LINE.match(line)
             if m and m.group(1) in stalls and not any(i in line for i in IGNORED):
@@ -74,7 +74,7 @@ def main(args):
             total[cause] += 1
             s['cause'] = cause
             all_stalls.append(s)
-            print(f"stall={sid} wall={s['wall']} gap={s['gap']}ms in_nextDrawable={s['nd']} cause={cause}")
+            print(f"stall={sid} wall={s['wall']} gap={s['gap']}ms cause={cause}")
     if hitches:
         match_hitches(hitches, all_stalls)
     print('STALLS ' + ' '.join(f'{k}={v}' for k, v in sorted(total.items())) + f' total={sum(total.values())}')

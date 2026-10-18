@@ -35,9 +35,6 @@
 #import <unistd.h>
 
 void gamehost_say(const char *fmt, ...);
-bool gamehost_debug(void);
-/* The companion only runs in dev tools: its output is Debug mode output. */
-#define gamehost_trace(...) do { if (gamehost_debug()) gamehost_say(__VA_ARGS__); } while (0)
 
 #define MAX_FRAMES 20000
 static double frameTimes[MAX_FRAMES];
@@ -75,7 +72,7 @@ static void logHitches(const char *phase, const double *t, int n) {
   for (int i = 0; i + 1 < n; i++) {
     double dur = (t[i + 1] - t[i]) * 1000;
     if (dur > 50)
-      gamehost_trace("hitch: phase=%s t=%.3f wall=%.3f dur=%.1fms", phase, t[i + 1], nowWall - (nowMach - t[i + 1]), dur);
+      gamehost_say("hitch: phase=%s t=%.3f wall=%.3f dur=%.1fms", phase, t[i + 1], nowWall - (nowMach - t[i + 1]), dur);
   }
 }
 
@@ -92,12 +89,12 @@ static void reportFrames(const char *phase) {
   memcpy(t, frameTimes, sizeof(double) * n);
   os_unfair_lock_unlock(&frameLock);
   if (n < 3) {
-    gamehost_trace("frames: phase=%s frames=%d (no data)", phase, n);
+    gamehost_say("frames: phase=%s frames=%d (no data)", phase, n);
     free(t);
     return;
   }
   IntervalStats st = intervalStats(t, n);
-  gamehost_trace("frames: phase=%s frames=%d fps=%.1f p50=%.1fms p99=%.1fms max=%.1fms hitches50=%d",
+  gamehost_say("frames: phase=%s frames=%d fps=%.1f p50=%.1fms p99=%.1fms max=%.1fms hitches50=%d",
                phase, n, st.fps, st.p50, st.p99, st.max, st.hitches);
   free(t);
 }
@@ -107,7 +104,7 @@ static void saveShot(id<CAMetalDrawable> drawable, NSString *path) {
   if (!tex) return;
   // Drawables are BGRA8 here; other (e.g. 10-bit) formats are not handled.
   if (tex.pixelFormat != MTLPixelFormatBGRA8Unorm && tex.pixelFormat != MTLPixelFormatBGRA8Unorm_sRGB) {
-    gamehost_trace("shot: unsupported pixel format %lu", (unsigned long)tex.pixelFormat);
+    gamehost_say("shot: unsupported pixel format %lu", (unsigned long)tex.pixelFormat);
     return;
   }
   NSUInteger w = tex.width, h = tex.height, bpr = w * 4;
@@ -134,7 +131,7 @@ static void saveShot(id<CAMetalDrawable> drawable, NSString *path) {
   CGImageRelease(img);
   CGContextRelease(ctx);
   CGColorSpaceRelease(cs);
-  gamehost_trace("shot: %s %lux%lu %s", path.UTF8String, (unsigned long)w, (unsigned long)h, ok ? "ok" : "failed");
+  gamehost_say("shot: %s %lux%lu %s", path.UTF8String, (unsigned long)w, (unsigned long)h, ok ? "ok" : "failed");
 }
 
 /* Measure mode: presented times of the largest layer while a movement key is down. */
@@ -146,7 +143,7 @@ static double mainArea;
 
 static void summarise(const char *phase, double *t, int n, int dropped, CGSize size) {
   if (n < 3) {
-    gamehost_trace("present: phase=%s presented=%d dropped=%d (no data)", phase, n, dropped);
+    gamehost_say("present: phase=%s presented=%d dropped=%d (no data)", phase, n, dropped);
     return;
   }
   qsort(t, n, sizeof(double), compareDouble); /* handlers may arrive out of order */
@@ -158,9 +155,9 @@ static void summarise(const char *phase, double *t, int n, int dropped, CGSize s
     double ms = (t[i + 1] - t[i]) * 1000;
     bucket[ms < 12.5 ? 0 : ms < 20.8 ? 1 : ms < 29.2 ? 2 : ms < 37.5 ? 3 : ms < 50 ? 4 : 5]++;
   }
-  gamehost_trace("pacing: phase=%s ms<12.5=%d <20.8=%d <29.2=%d <37.5=%d <50=%d >=50=%d", phase, bucket[0], bucket[1],
+  gamehost_say("pacing: phase=%s ms<12.5=%d <20.8=%d <29.2=%d <37.5=%d <50=%d >=50=%d", phase, bucket[0], bucket[1],
                  bucket[2], bucket[3], bucket[4], bucket[5]);
-  gamehost_trace("present: phase=%s size=%.0fx%.0f seconds=%.1f presented=%d dropped=%d fps=%.1f p50=%.1fms "
+  gamehost_say("present: phase=%s size=%.0fx%.0f seconds=%.1f presented=%d dropped=%d fps=%.1f p50=%.1fms "
                "p99=%.1fms max=%.1fms hitches50=%d",
                phase, size.width, size.height, t[n - 1] - t[0], n, dropped, st.fps, st.p50, st.p99, st.max,
                st.hitches);
@@ -197,7 +194,7 @@ static void setMeasuring(const char *key, bool on) {
   stallWatch = on;
   presentCount = droppedCount = 0;
   os_unfair_lock_unlock(&frameLock);
-  gamehost_trace("measure: %s %s", key, on ? "down" : "up");
+  gamehost_say("measure: %s %s", key, on ? "down" : "up");
   if (!on) summarise(key, t, n, dropped, size);
   free(t);
 }
@@ -213,7 +210,6 @@ static void setMeasuring(const char *key, bool on) {
 #define MAX_DEPTH 14
 static int stallFd = -1;
 static _Atomic double lastEnter;
-static _Atomic bool inNextDrawable;
 static _Atomic mach_port_t renderThread;
 static uint64_t stackPCs[MAX_THREADS][MAX_DEPTH];
 static int stackDepth[MAX_THREADS];
@@ -286,7 +282,7 @@ static void *watchdog(void *unused) {
   int stall = 0, captures = 0;
   bool in = false;
   for (;;) {
-    usleep(3000);
+    usleep(stallWatch ? 3000 : 50000);
     double gap = CACurrentMediaTime() - lastEnter;
     if (!stallWatch || lastEnter == 0 || gap < STALL_GAP) {
       in = false;
@@ -297,8 +293,7 @@ static void *watchdog(void *unused) {
       in = true;
       captures = 0;
       stall++;
-      dprintf(stallFd, "stall: id=%d wall=%.3f gap=%.0fms in_nextDrawable=%d\n", stall, wall, gap * 1000,
-              (int)inNextDrawable);
+      dprintf(stallFd, "stall: id=%d wall=%.3f gap=%.0fms\n", stall, wall, gap * 1000);
     }
     if (captures < STALL_CAPTURES) {
       int m = captureStacks();
@@ -341,17 +336,17 @@ static id hookNextDrawable(CAMetalLayer *self, SEL _cmd) {
   // Drawables are framebuffer-only by default; make them blittable only for a
   // requested screenshot so normal frame timing is unaffected.
   if (makeWritable) self.framebufferOnly = NO;
-  bool main = stallFd >= 0 && self == mainLayer;
+  bool main = self == mainLayer && stallFd >= 0;
   double entered = CACurrentMediaTime();
   if (main) {
     lastEnter = entered;
-    renderThread = mach_thread_self();
-    mach_port_deallocate(mach_task_self(), renderThread);
-    inNextDrawable = true;
+    if (!renderThread) {
+      renderThread = mach_thread_self();
+      mach_port_deallocate(mach_task_self(), renderThread);
+    }
   }
   id<CAMetalDrawable> d = ((id (*)(id, SEL))origNextDrawable)(self, _cmd);
   if (main) {
-    inNextDrawable = false;
     double took = CACurrentMediaTime() - entered;
     if (took > 0.010 && stallWatch)
       dprintf(stallFd, "nd: wall=%.3f dur=%.1fms\n", [NSDate date].timeIntervalSince1970, took * 1000);
@@ -409,7 +404,7 @@ static void autoplay(void) {
   enterGame();
   double t0 = ENTER_SECONDS + settle;
   after(t0, ^{
-    gamehost_trace("autoplay: idle phase");
+    gamehost_say("autoplay: idle phase");
     resetFrames();
   });
   after(t0 + idle, ^{
@@ -418,7 +413,7 @@ static void autoplay(void) {
   });
   // Start measuring after the screenshot (its GPU readback stalls a frame).
   after(t0 + idle + 1.5, ^{
-    gamehost_trace("autoplay: turn phase");
+    gamehost_say("autoplay: turn phase");
     resetFrames();
   });
   // The camera is turned from inside Wine by turner.exe (SendInput), started
@@ -426,7 +421,7 @@ static void autoplay(void) {
   after(t0 + idle + 1.5 + turn, ^{
     reportFrames("turn");
     requestShot("turn");
-    gamehost_trace("autoplay: done");
+    gamehost_say("autoplay: done");
   });
 }
 
@@ -448,7 +443,7 @@ static void logWindow(const char *step) {
   CGGetActiveDisplayList(16, ids, &n);
   for (uint32_t i = 0; i < n; i++)
     if (ids[i] == screenID) display = i + 1;
-  gamehost_trace("screen: step=%s fullscreen=%d active=%d level=%ld frame=%.0fx%.0f strip=%.0f display=%u", step,
+  gamehost_say("screen: step=%s fullscreen=%d active=%d level=%ld frame=%.0fx%.0f strip=%.0f display=%u", step,
                (int)!!(gameWindow.styleMask & NSWindowStyleMaskFullScreen), (int)NSApp.isActive,
                (long)gameWindow.level, f.size.width, f.size.height,
                screen.safeAreaInsets.top * screen.backingScaleFactor, display);
@@ -508,9 +503,9 @@ static void screenCheck(void) {
    * background may not activate itself): genshin-launcher-diag opens a window of
    * another Wine program at "open-other", checks at the step line that it is
    * on screen and the game below it, then closes it. */
-  after(t, ^{ gamehost_trace("screen: open-other"); });
+  after(t, ^{ gamehost_say("screen: open-other"); });
   after(t + 6, ^{ logWindow("other-window"); });
-  after(t + 7, ^{ gamehost_trace("screen: done"); });
+  after(t + 7, ^{ gamehost_say("screen: done"); });
 }
 
 /* Polls W and S in the combined session state, which includes synthetic events. */
@@ -530,7 +525,7 @@ static void measure(void) {
   });
   dispatch_resume(timer);
   enterGame();
-  after(ENTER_SECONDS, ^{ gamehost_trace("measure: ready"); });
+  after(ENTER_SECONDS, ^{ gamehost_say("measure: ready"); });
 }
 
 void gamehost_dev_start(void *window) {
@@ -540,7 +535,7 @@ void gamehost_dev_start(void *window) {
   gameWindow = (__bridge NSWindow *)window;
   Method m = class_getInstanceMethod([CAMetalLayer class], @selector(nextDrawable));
   if (m) origNextDrawable = method_setImplementation(m, (IMP)hookNextDrawable);
-  gamehost_trace("dev: frame stats %s", m ? "on" : "unavailable");
+  gamehost_say("dev: frame stats %s", m ? "on" : "unavailable");
   const char *mode = getenv("GENSHIN_LAUNCHER_GAMEHOST_DEV");
   if (mode && !strcmp(mode, "autoplay")) autoplay();
   if (mode && !strcmp(mode, "screen")) screenCheck();
