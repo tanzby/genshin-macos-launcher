@@ -57,6 +57,8 @@ public struct LaunchOptions: Sendable, Equatable {
   public var retina: Bool
   public var leftCommandIsControl: Bool
   public var metalHUD: Bool
+  /// Debug mode: diagnostic logging in Wine, DXMT and the game host (off: errors and results only).
+  public var debugMode: Bool
   public var hdr: Bool
   public var metalFX: Bool
   /// Lift the game's 60 FPS cap (to 120 for Genshin).
@@ -70,7 +72,7 @@ public struct LaunchOptions: Sendable, Equatable {
     gameDirectory: URL, graphicsBackend: GraphicsBackend = .gptk4, retina: Bool = false,
     leftCommandIsControl: Bool = false, metalHUD: Bool = false,
     hdr: Bool = false, metalFX: Bool = false, unlockFrameRate: Bool = false, customResolution: Resolution? = nil,
-    proxyHost: String? = nil
+    proxyHost: String? = nil, debugMode: Bool = false
   ) {
     self.gameDirectory = gameDirectory
     self.graphicsBackend = graphicsBackend
@@ -82,6 +84,7 @@ public struct LaunchOptions: Sendable, Equatable {
     self.unlockFrameRate = unlockFrameRate
     self.customResolution = customResolution
     self.proxyHost = proxyHost
+    self.debugMode = debugMode
   }
 }
 

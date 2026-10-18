@@ -82,6 +82,12 @@ private struct GeneralPage: View {
         Toggle("Metal HUD", isOn: $settings.metalHUD)
         Toggle("Map left ⌘ to Control", isOn: $settings.leftCommandIsControl)
       }
+      Section("Advanced") {
+        Toggle("Debug mode", isOn: $settings.debugMode)
+        Text("Writes detailed Wine, DXMT and game host logs. Leave off unless you are chasing a problem.")
+          .font(.caption)
+          .foregroundStyle(.secondary)
+      }
       Section {
         Toggle("Use an HTTP proxy for the game", isOn: $settings.proxyEnabled)
         TextField("Proxy address", text: $proxyDraft, prompt: Text(verbatim: "127.0.0.1:7890"))

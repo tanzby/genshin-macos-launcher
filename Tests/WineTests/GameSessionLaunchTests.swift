@@ -9,7 +9,7 @@ import TestSupport
 // Everything runs against fakes (LaunchTestSupport.swift); the legacy behaviour being pinned is in
 // docs/research/hk4e-rules.md LCH-001..039 and docs/research/wine-launch-contract.md.
 
-private let wineDebug = "fixme-all,err-unwind,+timestamp"
+private let wineDebug = "fixme-all,err-unwind"
 
 private func resolutionEdits(width: UInt32 = 2560, height: UInt32 = 1600) -> [RegistryEdit] {
   [

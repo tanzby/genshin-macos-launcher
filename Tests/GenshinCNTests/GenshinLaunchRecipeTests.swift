@@ -24,12 +24,12 @@ private func settings(
   graphicsBackend: GraphicsBackend = .dxmt,
   retina: Bool = false, leftCommandIsControl: Bool = false, metalHUD: Bool = false, hdr: Bool = false,
   metalFX: Bool = false, unlockFrameRate: Bool = false, customResolution: LaunchOptions.Resolution? = nil,
-  proxyHost: String? = nil
+  proxyHost: String? = nil, debugMode: Bool = false
 ) -> LaunchOptions {
   LaunchOptions(
     gameDirectory: defaultGameDirectory, graphicsBackend: graphicsBackend, retina: retina, leftCommandIsControl: leftCommandIsControl,
     metalHUD: metalHUD, hdr: hdr, metalFX: metalFX, unlockFrameRate: unlockFrameRate, customResolution: customResolution,
-    proxyHost: proxyHost)
+    proxyHost: proxyHost, debugMode: debugMode)
 }
 
 private func make(_ options: LaunchOptions = settings(), gameDirectory: URL = defaultGameDirectory) -> LaunchRecipe {
@@ -50,7 +50,7 @@ private func edits(_ recipe: LaunchRecipe, key: String) -> [RegistryEdit] {
       recipe.environment == [
         "WINE_ENABLE_TIMEOUT_FIX": "1",
         "WINEESYNC": "1",
-        "DXMT_LOG_PATH": "/Users/test/Library/Application Support/Genshin Launcher",
+        "DXMT_LOG_LEVEL": "none",
         "DXMT_CONFIG": "d3d11.preferredMaxFrameRate=60;",
         "DXMT_CONFIG_FILE": "/Users/test/Library/Application Support/Genshin Launcher/dxmt.conf",
         "GST_PLUGIN_FEATURE_RANK": "atdec:MAX,avdec_h264:MAX",
@@ -86,6 +86,20 @@ private func edits(_ recipe: LaunchRecipe, key: String) -> [RegistryEdit] {
     #expect(on.environment["MTL_HUD_ELEMENTS"] == nil)  // a custom list hides D3DMetal's GPTK section
     #expect(off.environment["MTL_HUD_ENABLED"] == nil)
     #expect(on.environment["WINEESYNC"] == "1")  // positive: the rest is still there
+  }
+
+  @Test func debugModeAddsTheDiagnosticLoggingOnly() {
+    let on = make(settings(debugMode: true))
+    let off = make(settings())
+
+    #expect(on.environment["GENSHIN_LAUNCHER_DEBUG"] == "1")
+    #expect(on.environment["WINEDEBUG"] == "fixme-all,err-unwind,+timestamp")
+    #expect(on.environment["DXMT_LOG_PATH"] == dataDirectory.path)
+    #expect(on.environment["DXMT_LOG_LEVEL"] == nil)
+    #expect(off.environment["GENSHIN_LAUNCHER_DEBUG"] == nil)
+    #expect(off.environment["WINEDEBUG"] == nil)
+    #expect(off.environment["DXMT_LOG_PATH"] == nil)
+    #expect(off.environment["DXMT_LOG_LEVEL"] == "none")
   }
 
   @Test func LCH_034_proxyHostIsPassedRawToBothProxyVariables() {
@@ -319,7 +333,7 @@ private func edits(_ recipe: LaunchRecipe, key: String) -> [RegistryEdit] {
 
   @Test func CFG_024_CFG_027_CFG_028_CFG_019_theLaunchSettingsOnlyCarryTheSwitchesThatRemain() {
     let expected = [
-      "graphicsBackend", "retina", "leftCommandIsControl", "metalHUD", "hdr", "metalFX", "unlockFrameRate",
+      "graphicsBackend", "retina", "leftCommandIsControl", "metalHUD", "debugMode", "hdr", "metalFX", "unlockFrameRate",
       "customResolution", "proxyHost",
     ]
     #expect(labels(LaunchOptions(gameDirectory: defaultGameDirectory)) == ["gameDirectory"] + expected)

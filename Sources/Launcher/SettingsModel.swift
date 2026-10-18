@@ -103,6 +103,7 @@ public final class SettingsModel {
     static let resolutionHeight = "resolutionHeight"
     static let proxyEnabled = "proxyEnabled"
     static let proxyHost = "proxyHost"
+    static let debugMode = "debugMode"
   }
 
   @ObservationIgnored private let defaults: UserDefaults
@@ -116,6 +117,8 @@ public final class SettingsModel {
     didSet { defaults.set(leftCommandIsControl, forKey: Key.leftCommandIsControl) }
   }
   public var metalHUD: Bool { didSet { defaults.set(metalHUD, forKey: Key.metalHUD) } }
+  /// Writes the diagnostic logs (Wine channels, DXMT, game host trace); off by default to keep the logs small.
+  public var debugMode: Bool { didSet { defaults.set(debugMode, forKey: Key.debugMode) } }
   public var hdr: Bool { didSet { defaults.set(hdr, forKey: Key.hdr) } }
   public var metalFX: Bool { didSet { defaults.set(metalFX, forKey: Key.metalFX) } }
   public var unlockFrameRate: Bool { didSet { defaults.set(unlockFrameRate, forKey: Key.unlockFrameRate) } }
@@ -136,6 +139,7 @@ public final class SettingsModel {
     retina = defaults.object(forKey: Key.retina) as? Bool ?? true
     leftCommandIsControl = defaults.bool(forKey: Key.leftCommandIsControl)
     metalHUD = defaults.bool(forKey: Key.metalHUD)
+    debugMode = defaults.bool(forKey: Key.debugMode)
     hdr = defaults.bool(forKey: Key.hdr)
     metalFX = defaults.bool(forKey: Key.metalFX)
     unlockFrameRate = defaults.bool(forKey: Key.unlockFrameRate)
@@ -180,7 +184,12 @@ public final class SettingsModel {
       leftCommandIsControl: leftCommandIsControl, metalHUD: metalHUD,
       hdr: hdr, metalFX: metalFX, unlockFrameRate: unlockFrameRate,
       customResolution: customResolution,
-      proxyHost: effectiveProxy)
+      proxyHost: effectiveProxy, debugMode: debugMode || Self.environmentForcesDebug)
+  }
+
+  /// The dev tools (fps-measure, genshin-launcher-diag) start the app with `GENSHIN_LAUNCHER_DEBUG=1`.
+  package static var environmentForcesDebug: Bool {
+    ProcessInfo.processInfo.environment["GENSHIN_LAUNCHER_DEBUG"].map { !$0.isEmpty && $0 != "0" } ?? false
   }
 
   /// The proxy the game process should use, or nil.

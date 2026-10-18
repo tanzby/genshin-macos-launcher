@@ -14,6 +14,7 @@ public enum GenshinLaunchRecipe {
   static let heightValue = "Screenmanager Resolution Height_h2627697771"
   static let displayName = "原神"
   /// The frame-rate cap: the game's own, and the one forced by "Unlock 120 FPS" (CFG-019, LCH-033).
+  static let debugWineChannels = "fixme-all,err-unwind,+timestamp"
   static let defaultFrameRate = 60
   static let unlockedFrameRate = 120
 
@@ -63,9 +64,18 @@ public enum GenshinLaunchRecipe {
     let maxFrameRate = options.unlockFrameRate ? unlockedFrameRate : defaultFrameRate
     if options.unlockFrameRate { environment["GENSHIN_LAUNCHER_FPS_TARGET"] = String(maxFrameRate) }
     if options.graphicsBackend == .dxmt {
-      environment["DXMT_LOG_PATH"] = dataDirectory.path
+      if options.debugMode {
+        environment["DXMT_LOG_PATH"] = dataDirectory.path
+      } else {
+        environment["DXMT_LOG_LEVEL"] = "none"
+      }
       environment["DXMT_CONFIG"] = "d3d11.preferredMaxFrameRate=\(maxFrameRate);"
       environment["DXMT_CONFIG_FILE"] = dataDirectory.appending(path: "dxmt.conf").path
+    }
+    if options.debugMode {
+      // Read by gamehost.dylib; the Wine channels are the ones the default adds `+timestamp` to.
+      environment["GENSHIN_LAUNCHER_DEBUG"] = "1"
+      environment["WINEDEBUG"] = Self.debugWineChannels
     }
     if options.metalHUD {
       // Default layout only: MTL_HUD_ELEMENTS would hide the "Game Porting Toolkit" section D3DMetal adds.

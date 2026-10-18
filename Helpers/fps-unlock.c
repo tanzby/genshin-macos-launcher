@@ -22,6 +22,7 @@
 #include <string.h>
 
 void gamehost_say(const char *fmt, ...);
+bool gamehost_debug(void);
 #define say gamehost_say
 
 /* Where Wine maps the game executable when nothing is in the way. */
@@ -150,7 +151,7 @@ static void tick(void *ctx) {
     lastSeen = target; /* log the game's next write-back too */
     return;
   }
-  if (value != lastSeen) say("fps: game set %d, writing %d", value, target);
+  if (value != lastSeen && gamehost_debug()) say("fps: game set %d, writing %d", value, target);
   lastSeen = value;
   if (mach_vm_write(mach_task_self(), (mach_vm_address_t)fpsVar, (vm_offset_t)&target, sizeof target) != KERN_SUCCESS)
     giveUp("write failed");

@@ -195,7 +195,8 @@ public struct WineLayout: Sendable, Equatable {
   package var wineBootLog: URL { root.appending(path: "wineboot.log", directoryHint: .notDirectory) }
   package var wineCfgLog: URL { root.appending(path: "winecfg.log", directoryHint: .notDirectory) }
 
-  static let wineDebug = "fixme-all,err-unwind,+timestamp"
+  /// Errors only; Debug mode adds timestamps (see `debugWineChannels` in the launch recipe).
+  static let wineDebug = "fixme-all,err-unwind"
   /// What every Wine process gets: the prefix and the debug channels (WIN-016).
   var wineEnvironment: [String: String] { ["WINEPREFIX": prefixDirectory.path, "WINEDEBUG": Self.wineDebug] }
 

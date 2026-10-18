@@ -52,6 +52,7 @@ private func freshDefaults() -> UserDefaults {
     #expect(!SettingsModel(defaults: defaults).retina)
   }
   @Test func CFG_013_leftCommandAsControlPersistsAndDefaultsOff() { toggles(\.leftCommandIsControl) }
+  @Test func debugModePersistsAndDefaultsOff() { toggles(\.debugMode) }
   @Test func CFG_021_hdrPersistsAndDefaultsOff() { toggles(\.hdr) }
   @Test func CFG_029_metalFXPersistsAndDefaultsOff() { toggles(\.metalFX) }
   @Test func CFG_019_unlockFrameRatePersistsAndDefaultsOff() { toggles(\.unlockFrameRate) }

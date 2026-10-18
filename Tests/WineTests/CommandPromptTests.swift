@@ -21,7 +21,7 @@ import Testing
       #expect(call.arguments == ["start", "/wait", "cmd"])
       #expect(call.workingDirectory == f.layout.root.path)
       #expect(call.environment["WINEPREFIX"] == f.layout.prefixDirectory.path)
-      #expect(call.environment["WINEDEBUG"] == "fixme-all,err-unwind,+timestamp")
+      #expect(call.environment["WINEDEBUG"] == "fixme-all,err-unwind")
       #expect(call.environment["DXMT_CONFIG"] == "x=1")
       #expect(call.environment["EMPTY"] == nil)
       #expect(call.environment["WINEPATH"] == #"Z:\Games\Genshin Impact Game"#)
