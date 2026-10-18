@@ -24,6 +24,7 @@ app=${FPS_MEASURE_APP:-"/Applications/Genshin Launcher.app"}
 data="$HOME/Library/Application Support/Genshin Launcher"
 log="$data/logs/gamehost.log"
 work=$(mktemp -d -t fps-measure)
+out=${FPS_MEASURE_OUT:-${TMPDIR:-/tmp}/fps-measure-out}
 domain=io.github.tanzby.genshin-launcher
 previous=$(defaults read $domain graphicsBackend 2>/dev/null || echo gptk4)
 # Closes the game in the shared prefix (whichever runtime runs it) and the launcher copy.
@@ -91,10 +92,10 @@ for backend in "$@"; do
     # FPS_MEASURE_XCTRACE=<template> records the game process with xctrace for the two key phases (limit 40 s).
     xctrace_pid=""
     if [ -n "${FPS_MEASURE_XCTRACE:-}" ]; then
-      mkdir -p "${FPS_MEASURE_OUT:-${TMPDIR:-/tmp}/fps-measure-out}"
-      rm -rf "${FPS_MEASURE_OUT:-${TMPDIR:-/tmp}/fps-measure-out}/xctrace.$backend.trace"
+      mkdir -p "$out"
+      rm -rf "$out/xctrace.$backend.trace"
       xcrun xctrace record --template "$FPS_MEASURE_XCTRACE" --attach $pid --time-limit 40s --no-prompt \
-        --output "${FPS_MEASURE_OUT:-${TMPDIR:-/tmp}/fps-measure-out}/xctrace.$backend.trace" > "$work/xctrace.log" 2>&1 &
+        --output "$out/xctrace.$backend.trace" > "$work/xctrace.log" 2>&1 &
       xctrace_pid=$!
       sleep 5
       cat "$work/xctrace.log"
@@ -133,7 +134,6 @@ for backend in "$@"; do
   newlog | grep 'hitch:' | sed 's/^.*hitch:/hitch:/' > "$work/hitches"
   cat "$work/hitches"
   # Stall sampler output (stall:/stack:/nd: lines, Helpers/gamehost-dev.m), kept for analysis.
-  out=${FPS_MEASURE_OUT:-${TMPDIR:-/tmp}/fps-measure-out}
   mkdir -p "$out"
   if [ -s "$work/stalls.$backend" ]; then
     cp "$work/stalls.$backend" "$out/stalls.$backend.$cache_state.$(date +%H%M%S).log"
