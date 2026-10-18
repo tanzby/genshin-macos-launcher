@@ -13,8 +13,9 @@ public enum GenshinLaunchRecipe {
   static let widthValue = "Screenmanager Resolution Width_h182942802"
   static let heightValue = "Screenmanager Resolution Height_h2627697771"
   static let displayName = "原神"
-  /// The frame-rate cap: the game's own, and the one forced by "Unlock 120 FPS" (CFG-019, LCH-033).
+  /// What Debug mode adds to the default `WINEDEBUG` (`WineLayout.wineDebug`): timestamps.
   static let debugWineChannels = "fixme-all,err-unwind,+timestamp"
+  /// The frame-rate cap: the game's own, and the one forced by "Unlock 120 FPS" (CFG-019, LCH-033).
   static let defaultFrameRate = 60
   static let unlockedFrameRate = 120
 
